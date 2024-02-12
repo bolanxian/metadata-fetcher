@@ -1,0 +1,5 @@
+{
+  "tasks": {
+    "serve": "deno run --allow-net --allow-read=. --allow-run=explorer ./server.js"
+  }
+}
