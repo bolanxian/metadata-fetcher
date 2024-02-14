@@ -9,6 +9,7 @@ lerna-debug.log*
 
 deno.lock
 package-lock.json
+__cache__
 node_modules
 dist
 dist-ssr

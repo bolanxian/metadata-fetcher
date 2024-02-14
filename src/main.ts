@@ -1,5 +1,5 @@
 
-import { createSSRApp } from 'vue'
+import { createApp, createSSRApp } from 'vue'
 import App from './components/app.vue'
 
 let store
@@ -8,6 +8,6 @@ try {
 } catch (error) {
 
 }
-store ??= {}
-const app = createSSRApp(App, { store })
-app.mount('#app')
+const app = store == null ? createApp(App) : createSSRApp(App, { store })
+const vm = app.mount('#app')
+  ; (window as any).vm = vm

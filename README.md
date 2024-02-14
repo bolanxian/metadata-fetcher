@@ -1,2 +1,9 @@
 # Metadata Fetcher
-施工中
+
+```batch
+: 构建
+npm run build
+
+: 运行
+deno task serve
+```

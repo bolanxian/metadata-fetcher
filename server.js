@@ -1,10 +1,26 @@
 
-const port = 5173, base = '/metadata-fetcher/'
+const port = 6702, base = '/metadata-fetcher/'
 
 globalThis.process ??= {}
 globalThis.process.env ??= {}
 globalThis.document ??= { addEventListener() { }, createElement() { } }
-const { render } = await import('./dist/main.ssr.js')
+const { render, parseToStore, renderToHtml } = await import('./dist/main.ssr.js')
+if (Deno.args.length > 0) {
+  const { log, error } = console
+  for (const arg of Deno.args) {
+    try {
+      let store = parseToStore(arg)
+      if (store == null) { continue }
+      store = await store
+      log('输入：', arg)
+      log('解析为：', store.resolved.url)
+      log(render(store.parsed))
+    } catch (e) {
+      error(e)
+    }
+  }
+  Deno.exit(0)
+}
 
 const { apply } = Reflect
 const { bind: _bind, call: _call } = Function.prototype
@@ -54,13 +70,15 @@ Deno.serve({
   const { pathname } = url
   if (pathname.startsWith(base)) {
     const path = pathname.slice(base.length)
-    if (path.startsWith('.assets/')) {
-      const asset = assets[path]
-      if (asset != null) {
-        return asset.clone()
+    if (path[0] === '.') {
+      if (path.startsWith('.assets/')) {
+        const asset = assets[path]
+        if (asset != null) {
+          return asset.clone()
+        }
       }
     } else {
-      const gen = genHtml(render(path, ssrManifest))
+      const gen = genHtml(renderToHtml(path, ssrManifest))
       return new Response(ReadableStream.from(gen), {
         headers: { 'content-type': 'text/html' }
       })
