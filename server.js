@@ -4,7 +4,8 @@ const port = 6702, base = '/metadata-fetcher/'
 globalThis.process ??= {}
 globalThis.process.env ??= {}
 globalThis.document ??= { addEventListener() { }, createElement() { } }
-const { render, parseToStore, renderToHtml } = await import('./dist/main.ssr.js')
+const { render, readTemplate, writeTemplate, parseToStore, renderToHtml } = await import('./dist/main.ssr.js')
+await readTemplate()
 if (Deno.args.length > 0) {
   const { log, error } = console
   for (const arg of Deno.args) {
@@ -76,6 +77,15 @@ Deno.serve({
         if (asset != null) {
           return asset.clone()
         }
+      } else if (path === '.template') {
+        if (request.method === 'POST') {
+          return request.text().then(text => writeTemplate(text)).then(_ => {
+            return new Response('success')
+          })
+        }
+        return readTemplate().then(text => {
+          return new Response(text)
+        })
       }
     } else {
       const gen = genHtml(renderToHtml(path, ssrManifest))

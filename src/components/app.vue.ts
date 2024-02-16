@@ -1,10 +1,10 @@
 
 import { defineComponent, shallowRef as sr, watch, createVNode as h, onMounted, onServerPrefetch } from 'vue'
 import type { Prop } from 'vue'
-import { Row, Col, Input, Button } from 'view-ui-plus'
-import { resolve, parse, render } from '../plugin'
+import { Row, Col, Input, Button, Modal, Message } from 'view-ui-plus'
+import { resolve, parse, render, defaultTemplate } from '../plugin'
 import type { ResolvedInfo, ParsedInfo } from '../plugin'
-import { nextTick } from '../bind'
+import { nextTick, $string } from '../bind'
 import '../plugins/bili'
 import '../plugins/nico'
 import '../plugins/tube'
@@ -13,7 +13,10 @@ export interface Store {
   input: string
   resolved: ResolvedInfo | null
   parsed: ParsedInfo | null
+  template: string | null
 }
+
+const { trim } = $string
 
 export default defineComponent({
   props: { store: null! as Prop<Store> },
@@ -30,6 +33,7 @@ export default defineComponent({
     const $input = sr(store?.input ?? '')
     const $resolved = sr(store?.resolved)
     const $parsed = sr(store?.parsed)
+    const template = store?.template ?? defaultTemplate
     store!.input && onServerPrefetch(async () => {
       const resolved = resolve(store!.input)
       if (resolved == null) { return }
@@ -48,6 +52,9 @@ export default defineComponent({
     })
     const handleSearch = () => {
       location.href = `./${encodeURIComponent($resolved.value!.id)}`
+    }
+    const handleTemplate = () => {
+      modalTemplate(template)
     }
     return () => [
       h('div', { style: 'margin:60px auto 40px auto;text-align:center' }, [
@@ -78,11 +85,51 @@ export default defineComponent({
             style: 'margin-top:20px',
             type: 'textarea',
             autosize: { minRows: 20, maxRows: 1 / 0 },
-            modelValue: $parsed.value != null ? render($parsed.value) : '',
+            modelValue: $parsed.value != null ? render($parsed.value, template) : '',
             readonly: true
-          })
+          }),
+          h(Button, {
+            style: 'margin-top:20px',
+            disabled: $disabled.value,
+            onClick: handleTemplate
+          }, () => '编辑模板')
         ])
       ])
     ]
   }
 })
+
+const modalTemplate = (template: string) => {
+  Modal.confirm({
+    title: '编辑模板',
+    width: 600,
+    loading: true,
+    closable: true,
+    render() {
+      return h(Input, {
+        type: 'textarea',
+        autosize: { minRows: 20, maxRows: 1 / 0 },
+        modelValue: template,
+        'onUpdate:modelValue'(value: string) { template = value }
+      })
+    },
+    async onOk() {
+      let ok = false
+      try {
+        const body = trim(template) ? template : defaultTemplate
+        const resp = await fetch('./.template', {
+          method: 'POST',
+          body,
+          headers: {
+            'content-type': 'text/plain'
+          }
+        })
+        ok = resp.ok
+      } finally {
+        if (ok) { location.href += ''; return }
+        Message.error('失败')
+        Modal.remove()
+      }
+    }
+  })
+}

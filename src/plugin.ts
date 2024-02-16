@@ -1,7 +1,8 @@
 
 import * as cheerio from 'cheerio'
-import { $string } from './bind'
-const { trim } = $string
+import { hasOwn, $string } from './bind'
+const { trim, split } = $string
+const SSR = import.meta.env.SSR
 
 export interface Plugin {
   resolve(id: string): ResolvedInfo | null
@@ -41,17 +42,45 @@ export const parse = (input: string): Promise<ParsedInfo> | null => {
   }
   return null
 }
-export const render = (parsed: ParsedInfo) => {
-  const { title, ownerName, publishDate, url, thumbnailUrl, description } = parsed
-  return `\
-标题：${title}
-UP主：${ownerName}
-日期：${publishDate}
-链接：${url}
-封面：${thumbnailUrl}
-简介：${description}
-`
+export const render = (parsed: ParsedInfo, _template = template) => {
+  let ret = ''
+  for (let line of split(_template, '\n' as any)) {
+    if (line = trim(line)) {
+      const [key, name] = split(line, '=' as any)
+      if (hasOwn(parsed, key)) {
+        const value = parsed[key as keyof ParsedInfo]
+        if (value) { ret += `${name}${value}\n` }
+      }
+    }
+  }
+  return ret
 }
+export const defaultTemplate = `\
+title=标题：
+ownerName=UP主：
+publishDate=日期：
+url=链接：
+thumbnailUrl=封面：
+description=简介：
+`
+export let template = defaultTemplate
+const templatePath = './__cache__/_template.txt'
+export const readTemplate = SSR ? async () => {
+  try {
+    //@ts-expect-error
+    template = await Deno.readTextFile(templatePath)
+  } catch (error) {
+    //@ts-expect-error
+    if (!(error instanceof Deno.errors.NotFound)) { throw error }
+  }
+  return template
+} : null!
+export const writeTemplate = SSR ? async (_template = template) => {
+  //@ts-expect-error
+  await Deno.writeTextFile(templatePath, _template)
+  template = _template
+  return
+} : null!
 
 const _headers = {
   'accept-language': '*',
@@ -64,7 +93,7 @@ const _init: RequestInit = {
   credentials: 'omit'
 }
 
-const $fetch = fetch, SSR = import.meta.env.SSR
+const $fetch = fetch
 if (SSR) {
   try {
     //@ts-expect-error
