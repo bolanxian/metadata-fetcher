@@ -1,27 +1,7 @@
 
-const port = 6702, base = '/metadata-fetcher/'
+import { readTemplate, writeTemplate, renderToHtml } from './dist/main.ssr.js'
 
-globalThis.process ??= {}
-globalThis.process.env ??= {}
-globalThis.document ??= { addEventListener() { }, createElement() { } }
-const { render, readTemplate, writeTemplate, parseToStore, renderToHtml } = await import('./dist/main.ssr.js')
-await readTemplate()
-if (Deno.args.length > 0) {
-  const { log, error } = console
-  for (const arg of Deno.args) {
-    try {
-      let store = parseToStore(arg)
-      if (store == null) { continue }
-      store = await store
-      log('输入：', arg)
-      log('解析为：', store.resolved.url)
-      log(render(store.parsed))
-    } catch (e) {
-      error(e)
-    }
-  }
-  Deno.exit(0)
-}
+const port = 6702, base = '/metadata-fetcher/'
 
 const { apply } = Reflect
 const { bind: _bind, call: _call } = Function.prototype
@@ -64,7 +44,9 @@ Deno.serve({
   onListen({ hostname, port }) {
     const url = `http://${hostname}:${port}${base}`
     console.log(`Listening on ${url}`)
-    new Deno.Command('explorer', { args: [url] }).output()
+    if (Deno.build.os === 'windows') {
+      new Deno.Command('explorer', { args: [url] }).output()
+    }
   }
 }, (request) => {
   const url = new URL(request.url)

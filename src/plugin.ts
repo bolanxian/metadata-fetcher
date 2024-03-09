@@ -10,12 +10,14 @@ export interface Plugin {
 }
 export interface ResolvedInfo {
   id: string
+  shortUrl: string
   url: string
 }
 export interface ParsedInfo {
   title: string
   ownerName: string
   publishDate: string
+  shortUrl: string
   url: string
   thumbnailUrl: string
   description: string
@@ -59,7 +61,7 @@ export const defaultTemplate = `\
 title=标题：
 ownerName=UP主：
 publishDate=日期：
-url=链接：
+shortUrl=链接：
 thumbnailUrl=封面：
 description=简介：
 `

@@ -67,18 +67,24 @@ export default defineComponent({
             disabled: $disabled.value,
             modelValue: $input.value,
             'onUpdate:modelValue'(value: string) { $input.value = value }
-          }),
-          h(Input, {
-            style: 'margin-top:20px',
-            modelValue: $resolved.value?.url ?? '',
-            readonly: true
           }, {
-            prepend: () => h('span', null, ['解析为：']),
             append: () => h(Button, {
               icon: 'ios-search',
               disabled: $disabled.value || $resolved.value == null,
               onClick: handleSearch
             })
+          }),
+          h(Input, {
+            modelValue: $resolved.value?.url ?? '',
+            readonly: true
+          }, {
+            prepend: () => h('span', null, ['解析为：']),
+          }),
+          h(Input, {
+            modelValue: $resolved.value?.shortUrl ?? '',
+            readonly: true
+          }, {
+            prepend: () => h('span', null, ['短链接：']),
           }),
           h(Input, {
             ref: $parsedVm,

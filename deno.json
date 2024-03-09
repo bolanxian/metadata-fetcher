@@ -1,5 +1,7 @@
 {
   "tasks": {
-    "serve": "deno run --allow-net --allow-read=. --allow-write=./__cache__ --allow-run=explorer ./server.js"
+    "serve": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ --allow-run=explorer ./main.js serve",
+    "fetch": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./main.js fetch",
+    "list": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./main.js list"
   }
 }
