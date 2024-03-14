@@ -1,5 +1,8 @@
+
+import process from 'node:process'
 import { defineConfig, createFilter } from 'vite'
 import vue from '@vitejs/plugin-vue'
+const PAGES = process.env.VITE_PAGES == 'true'
 
 const externalAssets = (() => {
   const reg = /\/(ionicons)-[-\w]{8}\.((?!woff2)\S+)$/
@@ -33,10 +36,13 @@ export default defineConfig({
   resolve: {
     extensions: ['.js', '.ts', '.json', '.vue']
   },
+  define: {
+    'import.meta.env.PAGES': PAGES ? 'true' : 'false'
+  },
   experimental: { renderBuiltUrl: externalAssets.renderBuiltUrl },
   build: {
     outDir: '../dist',
-    assetsDir: '.assets',
+    assetsDir: PAGES ? 'assets' : '.assets',
     emptyOutDir: false,
     target: 'esnext',
     modulePreload: { polyfill: true },
@@ -57,9 +63,6 @@ export default defineConfig({
       name: 'view-ui-plus',
       enforce: 'pre',
       apply: 'build',
-      // apply(config, { command }) {
-      //   return command === 'build' && !config.build.ssr
-      // },
       resolveId(source, importer, options) {
         if (source === 'view-ui-plus') { return source }
       },

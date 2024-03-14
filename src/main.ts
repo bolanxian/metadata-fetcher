@@ -1,12 +1,17 @@
 
 import { createApp, createSSRApp } from 'vue'
 import App from './components/app.vue'
+import { ready } from './plugin'
 
 let store
-try {
-  store = JSON.parse(document.querySelector('#store')?.textContent ?? 'null')
-} catch (error) {
-
+if (import.meta.env.PAGES) {
+  await ready
+} else {
+  try {
+    store = JSON.parse(document.querySelector('#store')?.textContent ?? 'null')
+  } catch (error) {
+    reportError(error)
+  }
 }
 const app = store == null ? createApp(App) : createSSRApp(App, { store })
 const vm = app.mount('#app')

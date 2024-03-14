@@ -1,30 +1,26 @@
 
-import { $string, match, dateToLocale } from '../bind'
+import { $string, dateToLocale } from '../bind'
 import { definePlugin, html } from '../plugin'
 const { startsWith, slice, indexOf, lastIndexOf } = $string
 
-const REG_0 = /youtube!([-\w]+)/
-const regs = [
-  REG_0,
-  /^(?:https?:\/\/)?youtu\.be\/([-\w]+)/,
-  /^(?:https?:\/\/)?www\.youtube\.com\/watch\?v=([-\w]+)/
-]
-const toShortUrl = (id: string) => `https://youtu.be/${match(REG_0, id)![1]}`
-const toUrl = (id: string) => `https://www.youtube.com/watch?v=${match(REG_0, id)![1]}`
-
+const name = 'youtube'
 export default definePlugin({
-  resolve(input) {
-    for (const reg of regs) {
-      const m = match(reg, input)
-      if (m != null) {
-        const id = `youtube!${m[1]}`
-        return { id, shortUrl: toShortUrl(id), url: toUrl(id) }
-      }
+  include: [
+    /^youtube[!:]([-\w]+)/,
+    /^(?:https?:\/\/)?youtu\.be\/([-\w]+)/,
+    /^(?:https?:\/\/)?www\.youtube\.com\/watch\?v=([-\w]+)/
+  ],
+  resolve({ 1: m1 }) {
+    return {
+      id: `${name}!${m1}`,
+      rawId: `${name}:${m1}`,
+      shortUrl: `https://youtu.be/${m1}`,
+      url: `https://www.${name}.com/watch?v=${m1}`
     }
-    return null
   },
-  async parse({ id, url }) {
-    const { $ } = await html(url)
+  async parse(info) {
+    const { shortUrl, url } = info
+    const { $ } = await html(info)
     let _
     for (const script of $('script')) {
       const text = $(script).text()
@@ -40,7 +36,7 @@ export default definePlugin({
       title: init.title.simpleText,
       ownerName: init.ownerChannelName,
       publishDate: date,
-      shortUrl: toShortUrl(id), url: toUrl(id),
+      shortUrl, url,
       thumbnailUrl: $('meta[property="og:image"]').attr('content') ?? '',
       description: init.description.simpleText,
       _

@@ -1,15 +1,20 @@
 
 import * as cheerio from 'cheerio'
-import { hasOwn, $string } from './bind'
+import { $string, hasOwn, on, off, match } from './bind'
+import { ready as ready1, getCache, setCache } from './cache'
+const { freeze } = Object
 const { trim, split } = $string
 const SSR = import.meta.env.SSR
+const PAGES = import.meta.env.PAGES
 
 export interface Plugin {
-  resolve(id: string): ResolvedInfo | null
+  include: RegExp[]
+  resolve(m: RegExpMatchArray): ResolvedInfo | null
   parse(info: ResolvedInfo): Promise<ParsedInfo>
 }
 export interface ResolvedInfo {
   id: string
+  rawId: string
   shortUrl: string
   url: string
 }
@@ -25,22 +30,38 @@ export interface ParsedInfo {
 
 const plugins: Plugin[] = []
 export const definePlugin = (plugin: Plugin) => {
+  freeze(plugin)
+  freeze(plugin.include)
   plugins[plugins.length] = plugin
   return plugin
 }
 export const resolve = (input: string): ResolvedInfo | null => {
   input = trim(input)
   for (const plugin of plugins) {
-    const resolved = plugin.resolve(input)
-    if (resolved != null) { return resolved }
+    for (const reg of plugin.include) {
+      const m = match(reg, input)
+      if (m != null) {
+        const info = plugin.resolve(m)
+        if (info != null) {
+          return info
+        }
+      }
+    }
   }
   return null
 }
 export const parse = (input: string): Promise<ParsedInfo> | null => {
   input = trim(input)
   for (const plugin of plugins) {
-    const resolved = plugin.resolve(input)
-    if (resolved != null) { return plugin.parse(resolved) }
+    for (const reg of plugin.include) {
+      const m = match(reg, input)
+      if (m != null) {
+        const info = plugin.resolve(m)
+        if (info != null) {
+          return plugin.parse(info)
+        }
+      }
+    }
   }
   return null
 }
@@ -57,7 +78,29 @@ export const render = (parsed: ParsedInfo, _template = template) => {
   }
   return ret
 }
+export async function* renderList(args: string[], _template = template) {
+  let _ = '\uFF0F'
+  for (let line of split(_template, '\n' as any)) {
+    if (line = trim(line)) {
+      const [key, name] = split(line, '=' as any)
+      if (key === 'separator') { _ = name; break }
+    }
+  }
+  for (const arg of args) {
+    const resolved = resolve(arg)
+    if (resolved != null) {
+      const parsed = await parse(arg)
+      if (parsed != null) {
+        const { rawId } = resolved, { title, ownerName } = parsed
+        yield `${title}${_}${rawId}${_}${ownerName}`
+        continue
+      }
+    }
+    yield ''
+  }
+}
 export const defaultTemplate = `\
+separator=\uFF0F
 title=标题：
 ownerName=UP主：
 publishDate=日期：
@@ -67,22 +110,45 @@ description=简介：
 `
 export let template = defaultTemplate
 const templatePath = './__cache__/_template.txt'
-export const readTemplate = SSR ? async () => {
-  try {
-    //@ts-expect-error
-    template = await Deno.readTextFile(templatePath)
-  } catch (error) {
-    //@ts-expect-error
-    if (!(error instanceof Deno.errors.NotFound)) { throw error }
-  }
+export const readTemplate = SSR || PAGES ? async () => {
+  template = await getCache(templatePath) ?? template
   return template
 } : null!
-export const writeTemplate = SSR ? async (_template = template) => {
-  //@ts-expect-error
-  await Deno.writeTextFile(templatePath, _template)
+export const writeTemplate = SSR || PAGES ? async (_template = template) => {
+  await setCache(templatePath, _template)
   template = _template
-  return
 } : null!
+
+export let $fetch = SSR ? fetch : null!
+export const ready = SSR || PAGES ? (async () => {
+  if (PAGES) {
+    const $grant = new Promise<CustomEvent | void>(ok => {
+      const type = 'external:tampermonkey:grant'
+      if (document.readyState === 'complete') { return ok() }
+      const target = window, done = (e: any) => {
+        ok(e.type === type ? e : null)
+        off(target, type, done)
+        off(target, 'load', done)
+      }
+      on(target, type, done)
+      on(target, 'load', done)
+    })
+    await ready1
+    $fetch = (await $grant)?.detail?.GM_fetch
+  }
+  if (SSR) {
+    try {
+      //@ts-expect-error
+      await Deno.mkdir(`./__cache__`)
+    } catch (error) {
+      //@ts-expect-error
+      if (!(error instanceof Deno.errors.AlreadyExists)) { throw error }
+    }
+  }
+  if (SSR || PAGES) {
+    await readTemplate()
+  }
+})() : null!
 
 const _headers = {
   'accept-language': '*',
@@ -94,61 +160,51 @@ const _init: RequestInit = {
   referrerPolicy: 'no-referrer',
   credentials: 'omit'
 }
-
-const $fetch = fetch
-if (SSR) {
-  try {
-    //@ts-expect-error
-    Deno.mkdirSync(`./__cache__`)
-  } catch (error) {
-    //@ts-expect-error
-    if (!(error instanceof Deno.errors.AlreadyExists)) { throw error }
+const htmlInit = {
+  ..._init,
+  headers: {
+    ..._headers,
+    'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
+  }
+}
+const jsonInit = {
+  ..._init,
+  headers: {
+    ..._headers,
+    'accept': 'application/json, text/plain, */*'
   }
 }
 
-export const html = SSR ? async (url: string) => {
-  const info = resolve(url)
-  let path = info != null ? `./__cache__/${info.id}.html` : null
-  if (path != null) {
-    try {
-      //@ts-expect-error
-      const text = await Deno.readTextFile(path)
-      const $ = cheerio.load(text)
-      return { text, $ }
-    } catch (error) {
-      //@ts-expect-error
-      if (!(error instanceof Deno.errors.NotFound)) { throw error }
-    }
+export const html = SSR || PAGES ? async (info: ResolvedInfo) => {
+  const path = `./__cache__/${info.id}.html`
+  let text = await getCache(path)
+  if (text != null) {
+    const $ = cheerio.load(text)
+    return { text, $ }
   }
-  const resp = await $fetch(url, {
-    ..._init,
-    headers: {
-      ..._headers,
-      'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
-    }
-  })
+  const resp = await $fetch(info.url, htmlInit)
   const { status } = resp
   if (status !== 200) {
     throw new TypeError(`Request failed with status code ${status}`)
   }
-  const text = await resp.text()
-  //@ts-expect-error
-  path != null ? await Deno.writeTextFile(path, text) : null
+  text = await resp.text()
+  await setCache(path, text)
   const $ = cheerio.load(text)
   return { text, $ }
 } : null!
 
-export const json = SSR ? async (url: string) => {
-  const resp = await $fetch(url, {
-    ..._init,
-    headers: {
-      ..._headers,
-      'accept': 'application/json, text/plain, */*'
-    }
-  })
+export const json = SSR || PAGES ? async (info: ResolvedInfo) => {
+  const path = `./__cache__/${info.id}.json`
+  let text = await getCache(path)
+  if (text != null) {
+    return JSON.parse(text)
+  }
+  const resp = await $fetch(info.url, jsonInit)
   const { status } = resp
   if (status !== 200) {
     throw new TypeError(`Request failed with status code ${status}`)
   }
-  return await resp.json()
+  text = await resp.text()
+  await setCache(path, text)
+  return JSON.parse(text)
 } : null!

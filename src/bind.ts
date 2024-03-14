@@ -64,12 +64,12 @@ export const dateToLocale = (date: string) => call(toLocaleString, new Date(date
 export const test = bindCall(RegExp.prototype.test)
 export const match = bindCall(RegExp.prototype[Symbol.match])
 export const replace = bindCall(RegExp.prototype[Symbol.replace])
+export const split = bindCall(RegExp.prototype[Symbol.split])
 
 const EventTargetProto = EventTarget.prototype
 export const on = bindCall(EventTargetProto.addEventListener)
 export const off = bindCall(EventTargetProto.removeEventListener)
 
-const { replaceAll } = $string
 export const htmlToText = ($el: Cheerio<Element>, html: string) => {
-  return $el.html(replaceAll(html, '<br>', '\n' as any)).text()
+  return $el.html(replace(/<br\s*\/?>/g, html, '\n' as any)).text()
 }

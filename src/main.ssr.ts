@@ -1,11 +1,11 @@
 
 import { renderToWebStream } from 'vue/server-renderer'
 import { createSSRApp } from 'vue'
-import { resolve, parse, render, template, readTemplate, writeTemplate } from './plugin'
+import { resolve, parse, render, renderList, template, readTemplate, writeTemplate, ready } from './plugin'
 import App from './components/app.vue'
 import type { Store } from './components/app.vue'
 
-export { resolve, parse, render, readTemplate, writeTemplate }
+export { resolve, parse, render, renderList, readTemplate, writeTemplate, ready }
 
 const _parseToStore = async (store: Store) => {
   store.parsed = await parse(store.input)
