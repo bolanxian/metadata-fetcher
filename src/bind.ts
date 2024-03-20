@@ -1,5 +1,5 @@
 
-import type { Cheerio, Element } from "cheerio"
+import * as cheerio from "cheerio"
 
 export const noop = () => { }
 export const nextTick = queueMicrotask
@@ -59,7 +59,8 @@ export const isPlainObject = (o: any) => {
 }
 
 const { toLocaleString } = Date.prototype
-export const dateToLocale = (date: string) => call(toLocaleString, new Date(date))
+export const dateToLocale = <T extends string | null | undefined>(date: T) =>
+  date != null ? call(toLocaleString, new Date(date)) : date
 
 export const test = bindCall(RegExp.prototype.test)
 export const match = bindCall(RegExp.prototype[Symbol.match])
@@ -70,6 +71,9 @@ const EventTargetProto = EventTarget.prototype
 export const on = bindCall(EventTargetProto.addEventListener)
 export const off = bindCall(EventTargetProto.removeEventListener)
 
-export const htmlToText = ($el: Cheerio<Element>, html: string) => {
-  return $el.html(replace(/<br\s*\/?>/g, html, '\n' as any)).text()
+export const htmlToText = (html: string) => {
+  html = replace(/\r?\n/g, html, '' as any)
+  const $ = cheerio.load(`<div>${html}</div>`, null, false)
+  $('div,p,br', ':root').after('\n')
+  return $(':root').text()
 }

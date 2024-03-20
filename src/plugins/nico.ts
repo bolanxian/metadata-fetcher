@@ -1,6 +1,6 @@
 
 import { match, dateToLocale, htmlToText } from '../bind'
-import { definePlugin, resolve, html } from '../plugin'
+import { definePlugin, resolve, parse, html } from '../plugin'
 
 const toShortUrl = (id: string) => `https://nico.ms/${id}`
 
@@ -23,7 +23,7 @@ definePlugin({
       publishDate: dateToLocale(_.video.registeredAt),
       shortUrl, url,
       thumbnailUrl: _.video.thumbnail.url,
-      description: htmlToText($data, _.video.description),
+      description: htmlToText(_.video.description),
       _
     }
   }
@@ -99,5 +99,5 @@ definePlugin({
 definePlugin({
   include: [/^(?:https?:\/\/)?nico\.ms\/([a-z]{2}\d+)/],
   resolve: (m) => resolve(m[1]),
-  parse: null!
+  parse: ({ id }) => parse(id)!
 })
