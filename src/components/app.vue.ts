@@ -89,6 +89,9 @@ export default defineComponent({
       location.href = `./${encodeURIComponent($resolved.value!.id)}`
     }
 
+    const handleFocus = (e: FocusEvent) => {
+      (e.target as HTMLInputElement).select()
+    }
     const handleTemplate = () => {
       modalTemplate(template, _ => {
         template = _
@@ -115,6 +118,7 @@ export default defineComponent({
           }),
           h(Input, {
             modelValue: $resolved.value?.url ?? '',
+            onOnFocus: handleFocus,
             readonly: true
           }, {
             prepend: () => h('span', null, ['解析为：']),
@@ -122,6 +126,7 @@ export default defineComponent({
           h(Input, {
             style: $resolved.value?.shortUrl ? null : 'display:none',
             modelValue: $resolved.value?.shortUrl ?? '',
+            onOnFocus: handleFocus,
             readonly: true
           }, {
             prepend: () => h('span', null, ['短链接：']),

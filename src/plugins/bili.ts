@@ -1,33 +1,31 @@
 
 import { $string, test, match } from '../bind'
 import { definePlugin, html } from '../plugin'
-import { encode, decode } from '../utils/bv-encode'
+import * as BV from '../utils/bv-encode'
 const { trim, slice, indexOf } = $string
 
-const REG_AV = /^([aA][vV]\d+)/
-const REG_BV = /^([bB][vV]1\w{9})/
 const toShortUrl = (id: string) => `https://b23.tv/${id}`
 const toUrl = (id: string) => `https://www.bilibili.com/video/${id}/`
 
 export const main = definePlugin({
   include: [
-    REG_AV, REG_BV,
+    BV.REG_AV, BV.REG_BV,
     /^(?:https?:\/\/)?b23\.tv\/([aA][vV]\d+|[bB][vV]1\w{9})/,
-    /^(?:https?:\/\/)?www\.bilibili\.com\/video\/([aA][vV]\d+|[bB][vV]1\w{9})/
+    /^(?:https?:\/\/)?(?:m|www)\.bilibili\.com\/video\/([aA][vV]\d+|[bB][vV]1\w{9})/
   ],
   resolve(m) {
     let id = m[1]
-    if (test(REG_AV, id)) {
+    if (test(BV.REG_AV, id)) {
       id = `av${slice(id, 2)}`
-    } else if (test(REG_BV, id)) {
-      id = decode(id) ?? `BV1${slice(id, 3)}`
+    } else if (test(BV.REG_BV, id)) {
+      id = BV.decode(id) ?? `BV1${slice(id, 3)}`
     }
     return { id, rawId: id, shortUrl: toShortUrl(id), url: toUrl(id) }
   },
   async parse(info) {
     let { rawId: id, shortUrl, url } = info
     const { text, $ } = await html(info)
-    if (test(REG_BV, id)) {
+    if (test(BV.REG_BV, id)) {
       let aid = match(RegExp(`"videoData":\\{"bvid":"[bB][vV]1${slice(id, 3)}","aid":(\\d+),`), text)?.[1]
       if (aid != null) {
         id = `av${aid}`
@@ -43,8 +41,14 @@ export const main = definePlugin({
     }
     return {
       title: trim($('.video-title').text()),
-      ownerName: trim($('.up-name').text()),
-      publishDate: trim($('.pubdate-text').text()),
+      ownerName: trim(
+        $('meta[itemprop="author"]').attr('content') ||
+        $('.up-name').text()
+      ),
+      publishDate: trim(
+        $('meta[itemprop="uploadDate"]').attr('content') ||
+        $('meta[itemprop="datePublished"]').attr('content') || ''
+      ),
       shortUrl, url, thumbnailUrl: thumb,
       description: trim($('.basic-desc-info').text())
     }
@@ -53,8 +57,8 @@ export const main = definePlugin({
 
 definePlugin({
   include: [
-    /^bv!([aA][vV]\d+)/,
-    /^raw!([bB][vV]1\w{9})/
+    /^bv!([aA][vV]\d+)$/,
+    /^raw!([bB][vV]1\w{9})$/
   ],
   resolve(m) {
     let i = indexOf(m[0], '!')
@@ -62,8 +66,12 @@ definePlugin({
     let rawId, id
     switch (type) {
       case 'bv': {
-        let aid = slice(m[1], 2)
-        id = rawId = encode(aid) ?? `av${aid}`
+        rawId = BV.encode(m[1])
+        if (rawId != null) {
+          id = `raw!${rawId}`
+        } else {
+          id = rawId = `av${slice(m[1], 2)}`
+        }
       } break
       case 'raw': {
         rawId = `BV1${slice(m[1], 3)}`

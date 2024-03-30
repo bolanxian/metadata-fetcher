@@ -5,7 +5,9 @@ const PAGES = import.meta.env.PAGES
 
 let cache: Cache = null!
 export const ready = SSR || PAGES ? (async () => {
-  cache = await caches.open('metadata-fetcher')
+  if (PAGES) {
+    cache = await caches.open('metadata-fetcher')
+  }
 })() : null!
 
 export const getCache = SSR || PAGES ? async (path: string): Promise<string | undefined> => {
