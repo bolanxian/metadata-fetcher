@@ -1,25 +1,43 @@
 
-import { defineComponent, shallowRef as sr, watch, createVNode as h, onMounted, onServerPrefetch } from 'vue'
+import { defineComponent, shallowRef as sr, shallowReactive, watch, createVNode as h, onMounted, onServerPrefetch } from 'vue'
 import type { Prop } from 'vue'
 import { Row, Col, Input, Button, Modal, Message } from 'view-ui-plus'
-import { resolve, parse, render as _render, renderList, template as _template, defaultTemplate, writeTemplate, $fetch } from '../plugin'
+import {
+  resolve, parse, xparse, render as _render,
+  renderIds, renderList, renderListNameRender,
+  template as _template, defaultTemplate, writeTemplate, $fetch
+} from '../plugin'
 import type { ResolvedInfo, ParsedInfo } from '../plugin'
-import { nextTick, $string, test, split } from '../bind'
+import { nextTick, $string, split } from '../bind'
 import.meta.glob('../plugins/*', { eager: true })
-const { trim } = $string
+const { trim, slice, indexOf } = $string
 const SSR = import.meta.env.SSR
 const PAGES = import.meta.env.PAGES
+const S = /\s+/
 
 export interface Store {
   input: string
   resolved: ResolvedInfo | null
   parsed: ParsedInfo | null
-  template: string | null
+  output: string
+  template: string
+}
+
+const renderName = (args: string[], _template?: string) => renderList(args, _template, renderListNameRender)
+const getRender = (id: string): {
+  (args: string[], _template?: string): Generator<string, void, unknown> | AsyncGenerator<string, void, unknown>
+} => {
+  switch (id) {
+    case '.id': return renderIds
+    case '.list': return renderList
+    case '.name': return renderName
+  }
+  return null!
 }
 
 export default defineComponent({
-  props: { store: null! as Prop<Store> },
-  setup(props) {
+  props: PAGES ? (void 0)! : { store: null! as Prop<Store> },
+  setup(props, { expose }) {
     const $loading = sr(false)
     const $disabled = sr(true)
     const $outputVm = sr<InstanceType<typeof Input> | null>(null)
@@ -30,72 +48,96 @@ export default defineComponent({
     }) : null
 
     const store = PAGES ? null : props.store
-    let template = store?.template ?? _template
-    const $input = sr(store?.input ?? '')
-    const $resolved = sr(store?.resolved)
-    const $parsed = sr(store?.parsed)
-    const $output = sr('')
-    const render = () => {
-      $output.value = $parsed.value != null ? _render($parsed.value, template) : ''
-    }
-    SSR && store!.input && onServerPrefetch(async () => {
-      const resolved = resolve(store!.input)
-      if (resolved == null) { return }
-      $resolved.value = resolved
-      store!.resolved = resolved
-      const parsed = await parse(store!.input)
-      $parsed.value = parsed
-      store!.parsed = parsed
-      render()
+    const data = SSR ? store! : shallowReactive(store ?? {
+      input: '',
+      resolved: null,
+      parsed: null,
+      output: '',
+      template: _template
     })
-    !SSR && watch($input, input => {
+    expose({ data })
+
+    SSR && data.input && onServerPrefetch(async () => {
+      if (data.resolved != null) {
+        data.output = ''
+        const { id, url } = data.resolved
+        for await (const line of getRender(id)(split(S, url), data.template)) {
+          data.output += `${line}\n`
+        }
+        return
+      }
+      const [resolved, parsedPromise] = xparse(data.input)
+      if (resolved == null) { return }
+      data.resolved = resolved
+      data.parsed = await parsedPromise!
+      data.output = _render(data.parsed, data.template)
+    })
+    !SSR && watch(() => data.input, input => {
       try {
         input = trim(input)
-        if (PAGES && test(/^(?:!|list)\s+/, input)) {
-          const id = 'list', [, ...args] = split(/\s+/, input)
+        let id: string | null = null
+        switch (slice(input, 0, indexOf(input, ' '))) {
+          case 'id': case '!': id = '.id'; break
+          case 'list': case '!!': id = '.list'; break
+          case 'name': case '=': id = '.name'; break
+        }
+        if (id != null) {
+          const [, ...args] = split(S, input)
           let ret = ''
           for (const arg of args) {
-            ret += `${resolve(arg)?.rawId ?? '!'} `
+            ret += `${resolve(arg)?.id ?? '!'} `
           }
-          $resolved.value = { id, rawId: id, shortUrl: '', url: ret }
+          data.resolved = { id, rawId: id, shortUrl: '', url: trim(ret) }
         } else {
-          $resolved.value = resolve(input)
+          data.resolved = resolve(input)
         }
       } catch (error) {
-        $resolved.value = null
+        data.resolved = null
       }
     })
-    SSR || PAGES ? null : render()
+
     const handleSearch = PAGES ? async () => {
+      if ($disabled.value || data.resolved == null) { return }
       try {
         $loading.value = true
-        $output.value = ''
-        if (PAGES && $resolved.value!.id === 'list') {
-          const [, ...args] = split(/\s+/, $input.value)
-          for await (const line of renderList(args, template)) {
-            $output.value += `${line}\n`
+        data.output = ''
+        const { id, url } = data.resolved
+        if (id[0] === '.') {
+          for await (const line of getRender(id)(split(S, url), data.template)) {
+            data.output += `${line}\n`
           }
         } else {
-          $parsed.value = await parse($input.value)
-          render()
+          data.parsed = await parse(data.input)!
+          data.output = _render(data.parsed, data.template)
         }
       } catch (error) {
-        $parsed.value = null
-        $output.value = ''
+        data.parsed = null
+        data.output = ''
+        throw error
       } finally {
         $loading.value = false
       }
     } : () => {
-      location.href = `./${encodeURIComponent($resolved.value!.id)}`
+      if ($disabled.value || data.resolved == null) { return }
+      const { id, url } = data.resolved
+      if (id[0] === '.') {
+        const params = new URLSearchParams()
+        for (const arg of split(S, url)) {
+          params.append('id', arg)
+        }
+        location.href = `./${encodeURIComponent(id)}?${params}`
+      } else {
+        location.href = `./${encodeURIComponent(id)}`
+      }
     }
 
     const handleFocus = (e: FocusEvent) => {
       (e.target as HTMLInputElement).select()
     }
     const handleTemplate = () => {
-      modalTemplate(template, _ => {
-        template = _
-        render()
+      modalTemplate(data.template, _ => {
+        data.template = _
+        data.output = data.parsed != null ? _render(data.parsed, data.template) : ''
       })
     }
     return () => [
@@ -106,26 +148,27 @@ export default defineComponent({
         h(Col, { xs: 0, sm: 2, md: 4, lg: 6 }),
         h(Col, { xs: 24, sm: 20, md: 16, lg: 12 }, () => [
           h(Input, {
-            modelValue: $input.value,
-            'onUpdate:modelValue'(value: string) { $input.value = value }
+            modelValue: data.input,
+            'onUpdate:modelValue'(value: string) { data.input = value },
+            onOnEnter: handleSearch
           }, {
             append: () => h(Button, {
               icon: 'ios-search',
               loading: $loading.value,
-              disabled: $disabled.value || $resolved.value == null,
+              disabled: $disabled.value || data.resolved == null,
               onClick: handleSearch
             })
           }),
           h(Input, {
-            modelValue: $resolved.value?.url ?? '',
+            modelValue: data.resolved?.url ?? '',
             onOnFocus: handleFocus,
             readonly: true
           }, {
             prepend: () => h('span', null, ['解析为：']),
           }),
           h(Input, {
-            style: $resolved.value?.shortUrl ? null : 'display:none',
-            modelValue: $resolved.value?.shortUrl ?? '',
+            style: data.resolved?.shortUrl ? null : 'display:none',
+            modelValue: data.resolved?.shortUrl ?? '',
             onOnFocus: handleFocus,
             readonly: true
           }, {
@@ -136,7 +179,7 @@ export default defineComponent({
             style: 'margin-top:20px',
             type: 'textarea',
             autosize: { minRows: 20, maxRows: 1 / 0 },
-            modelValue: $output.value,
+            modelValue: data.output,
             readonly: true
           }) : null,
           !PAGES || $fetch != null ? h(Button, {

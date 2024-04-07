@@ -1,25 +1,28 @@
 
 import { renderToWebStream } from 'vue/server-renderer'
 import { createSSRApp } from 'vue'
-import { resolve, parse, render, renderList, template, readTemplate, writeTemplate, ready } from './plugin'
+import { $string, $array } from './bind'
+import { template } from './plugin'
 import App from './components/app.vue'
 import type { Store } from './components/app.vue'
+const { slice } = $string
+const { join } = $array
 
-export { resolve, parse, render, renderList, readTemplate, writeTemplate, ready }
+export { bindCall, $string, $array } from './bind'
+export {
+  resolve, parse, xparse,
+  render, renderIds, renderList,
+  renderListDefaultRender, renderListNameRender,
+  getSeparator, readTemplate, writeTemplate, ready
+} from './plugin'
 
-const _parseToStore = async (store: Store) => {
-  store.parsed = await parse(store.input)
-  return store
-}
-export const parseToStore = (input: string) => {
-  const resolved = resolve(input)
-  if (resolved == null) { return }
-  return _parseToStore({ input, resolved, parsed: null, template })
-}
-
-export const renderToHtml = (path: string, ssrManifest: {}) => {
-  const input = decodeURIComponent(path)
-  const store: Store = { input: input, resolved: null, parsed: null, template }
+export const renderToHtml = (input: string, ids?: string[]) => {
+  const store: Store = { input: input, resolved: null, parsed: null, output: '', template }
+  if (input[0] === '.') {
+    const args = join(ids!, ' ')
+    store.input = `${slice(input, 1)} ${args}`
+    store.resolved = { id: input, rawId: input, shortUrl: '', url: args }
+  }
   const app = createSSRApp(App, { store })
   const context = {}
   const stream = renderToWebStream(app, context)

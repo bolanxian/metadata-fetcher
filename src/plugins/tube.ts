@@ -8,6 +8,7 @@ export default definePlugin({
   include: [
     /^youtube[!:]([-\w]+)/,
     /^(?:https?:\/\/)?youtu\.be\/([-\w]+)/,
+    /^(?:https?:\/\/)?www\.youtube\.com\/shorts\/([-\w]+)/,
     /^(?:https?:\/\/)?www\.youtube\.com\/watch\?v=([-\w]+)/
   ],
   resolve({ 1: m1 }) {
@@ -38,7 +39,7 @@ export default definePlugin({
       publishDate: date,
       shortUrl, url,
       thumbnailUrl: $('meta[property="og:image"]').attr('content') ?? '',
-      description: init.description.simpleText,
+      description: init.description?.simpleText ?? '',
       _
     }
   }

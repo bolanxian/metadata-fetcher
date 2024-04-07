@@ -1,6 +1,6 @@
 
 import { match, dateToLocale, htmlToText } from '../bind'
-import { definePlugin, resolve, parse, html } from '../plugin'
+import { definePlugin, defineRecursionPlugin, html } from '../plugin'
 
 const toShortUrl = (id: string) => `https://nico.ms/${id}`
 
@@ -41,7 +41,7 @@ definePlugin({
     const { shortUrl } = info
     const { $ } = await html(info)
     return {
-      title: $('.lg_ttl_illust h1').text(),
+      title: $('#link_thumbnail_main img').attr('alt') || $('.lg_ttl_illust h1').text(),
       ownerName: $('.lg_txt_illust strong').text(),
       publishDate: $('.lg_txt_date').text(),
       shortUrl, url: $('meta[property="og:url"]').attr('content') ?? '',
@@ -96,8 +96,4 @@ definePlugin({
   }
 })
 
-definePlugin({
-  include: [/^(?:https?:\/\/)?nico\.ms\/([a-z]{2}\d+)/],
-  resolve: (m) => resolve(m[1]),
-  parse: ({ id }) => parse(id)!
-})
+defineRecursionPlugin([/^(?:https?:\/\/)?nico\.ms\/([a-z]{2}\d+)/])

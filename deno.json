@@ -9,6 +9,9 @@
     "serve": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ --allow-run=explorer ./main.js serve",
     "fetch": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./main.js fetch",
     "id": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./main.js id",
-    "list": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./main.js list"
+    "list": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./main.js list",
+    "name": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./main.js name",
+    "test": "deno test --allow-read=. --allow-write=./__cache__ ./main.test.js --",
+    "bench": "deno bench --allow-read=. --allow-write=./__cache__ ./main.js --"
   }
 }

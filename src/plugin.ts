@@ -35,22 +35,26 @@ export const definePlugin = (plugin: Plugin) => {
   plugins[plugins.length] = plugin
   return plugin
 }
+
+const recursionResolve = (m: RegExpMatchArray) => resolve(m[1])
+const recursionParse = ({ id }: ResolvedInfo) => parse(id)!
+export const defineRecursionPlugin = (include: RegExp[]) => {
+  return definePlugin({
+    include, resolve: recursionResolve, parse: recursionParse
+  })
+}
+
 export const resolve = (input: string): ResolvedInfo | null => {
-  input = trim(input)
-  for (const plugin of plugins) {
-    for (const reg of plugin.include) {
-      const m = match(reg, input)
-      if (m != null) {
-        const info = plugin.resolve(m)
-        if (info != null) {
-          return info
-        }
-      }
-    }
-  }
-  return null
+  const [_] = xparse(input)
+  return _ ?? null
 }
 export const parse = (input: string): Promise<ParsedInfo> | null => {
+  const [, _] = xparse(input)
+  return _ ?? null
+}
+export const xparse: {
+  (input: string): [] | [ResolvedInfo, Promise<ParsedInfo>]
+} = function* (input: string) {
   input = trim(input)
   for (const plugin of plugins) {
     for (const reg of plugin.include) {
@@ -58,13 +62,14 @@ export const parse = (input: string): Promise<ParsedInfo> | null => {
       if (m != null) {
         const info = plugin.resolve(m)
         if (info != null) {
-          return plugin.parse(info)
+          yield info
+          yield plugin.parse(info)
+          return
         }
       }
     }
   }
-  return null
-}
+} as any
 export const render = (parsed: ParsedInfo, _template = template) => {
   let ret = ''
   for (let line of split(_template, '\n' as any)) {
@@ -78,26 +83,38 @@ export const render = (parsed: ParsedInfo, _template = template) => {
   }
   return ret
 }
-export async function* renderList(args: string[], _template = template) {
-  let _ = '\uFF0F'
-  for (let line of split(_template, '\n' as any)) {
-    if (line = trim(line)) {
-      const [key, name] = split(line, '=' as any)
-      if (key === 'separator') { _ = name; break }
-    }
-  }
+export function* renderIds(args: string[], _template = template) {
+  const _ = getSeparator(_template)
   for (const arg of args) {
     const resolved = resolve(arg)
-    if (resolved != null) {
-      const parsed = await parse(arg)
-      if (parsed != null) {
-        const { rawId } = resolved, { title, ownerName } = parsed
-        yield `${title}${_}${rawId}${_}${ownerName}`
-        continue
-      }
+    if (resolved == null) {
+      yield `Unknown Input : ${arg}`
+      continue
     }
-    yield ''
+    const { rawId, url } = resolved
+    yield `${rawId}${_}${url}`
   }
+}
+export async function* renderList(args: string[], _template = template, render = renderListDefaultRender) {
+  const _ = getSeparator(_template)
+  for (const arg of args) {
+    const [resolved, parsedPromise] = xparse(arg)
+    if (resolved == null) {
+      yield `Unknown Input : ${arg}`
+      continue
+    }
+    yield render(_, resolved, await parsedPromise!)
+  }
+}
+export const renderListDefaultRender = (
+  _: string, { rawId }: ResolvedInfo, { title, ownerName }: ParsedInfo
+) => `${title}${_}${rawId}${_}${ownerName}`
+export const renderListNameRender = (
+  _: string, { rawId }: ResolvedInfo, { title, ownerName }: ParsedInfo
+) => `[${ownerName}][${rawId}]${title}`
+
+export const getSeparator = (_template = template) => {
+  return match(/^\s*separator=(.*?)\s*$/m, _template)?.[1] ?? '\uFF0F'
 }
 export const defaultTemplate = `\
 separator=\uFF0F
@@ -188,8 +205,8 @@ export const html = SSR || PAGES ? async (info: ResolvedInfo) => {
     throw new TypeError(`Request failed with status code ${status}`)
   }
   text = await resp.text()
-  await setCache(path, text)
   const $ = cheerio.load(text)
+  await setCache(path, text)
   return { text, $ }
 } : null!
 
@@ -205,6 +222,7 @@ export const json = SSR || PAGES ? async (info: ResolvedInfo) => {
     throw new TypeError(`Request failed with status code ${status}`)
   }
   text = await resp.text()
+  const data = JSON.parse(text)
   await setCache(path, text)
-  return JSON.parse(text)
+  return data
 } : null!
