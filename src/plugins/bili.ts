@@ -1,8 +1,10 @@
 
-import { $string, test, match } from '../bind'
+import { $string, test, dateToLocale } from '../bind'
 import { definePlugin, html } from '../plugin'
 import * as BV from '../utils/bv-encode'
-const { trim, slice, indexOf } = $string
+import { fromHTML } from '../utils/find-json-object'
+const { slice, indexOf } = $string
+const RE_INIT = /^window\.__INITIAL_STATE__\s*=\s*(?={)/
 
 const toShortUrl = (id: string) => `https://b23.tv/${id}`
 const toUrl = (id: string) => `https://www.bilibili.com/video/${id}/`
@@ -10,8 +12,8 @@ const toUrl = (id: string) => `https://www.bilibili.com/video/${id}/`
 export const main = definePlugin({
   include: [
     BV.REG_AV, BV.REG_BV,
-    /^(?:https?:\/\/)?b23\.tv\/([aA][vV]\d+|[bB][vV]1\w{9})/,
-    /^(?:https?:\/\/)?(?:m|www)\.bilibili\.com\/video\/([aA][vV]\d+|[bB][vV]1\w{9})/
+    /^(?:https?:\/\/)?b23\.tv\/(\w+)/,
+    /^(?:https?:\/\/)?(?:m|www)\.bilibili\.com\/video\/(\w+)/
   ],
   resolve(m) {
     let id = m[1]
@@ -19,45 +21,41 @@ export const main = definePlugin({
       id = `av${slice(id, 2)}`
     } else if (test(BV.REG_BV, id)) {
       id = BV.decode(id) ?? `BV1${slice(id, 3)}`
+    } else {
+      return null
     }
     return { id, rawId: id, shortUrl: toShortUrl(id), url: toUrl(id) }
   },
   async parse(info) {
     let { rawId: id, shortUrl, url } = info
-    const { text, $ } = await html(info)
-    if (test(BV.REG_BV, id)) {
-      let aid = match(RegExp(`"videoData":\\{"bvid":"[bB][vV]1${slice(id, 3)}","aid":(\\d+),`), text)?.[1]
-      if (aid != null) {
-        id = `av${aid}`
-        shortUrl = toShortUrl(id)
-        url = toUrl(id)
-      }
+    const { $ } = await html(info)
+    const _ = fromHTML($, RE_INIT)
+    const { videoData } = _
+    const { aid } = videoData
+    if (aid != null) {
+      id = `av${aid}`
+      shortUrl = toShortUrl(id)
+      url = toUrl(id)
     }
-
-    let thumb = $('meta[property="og:image"]').attr('content'), index = 0
-    thumb = thumb ? new URL(thumb, url).href : ''
-    if ((index = indexOf(thumb, '@')) > 0) {
+    let thumb = $('meta[property="og:image"]').attr('content') ?? '', index = 0
+    if ((index = indexOf(thumb, '@')) >= 0) {
       thumb = slice(thumb, 0, index)
     }
+    thumb = thumb ? new URL(thumb, url).href : ''
     return {
-      title: trim($('.video-title').text()),
-      ownerName: trim(
-        $('meta[itemprop="author"]').attr('content') ||
-        $('.up-name').text()
-      ),
-      publishDate: trim(
-        $('meta[itemprop="uploadDate"]').attr('content') ||
-        $('meta[itemprop="datePublished"]').attr('content') || ''
-      ),
+      title: videoData.title,
+      ownerName: videoData.owner.name,
+      publishDate: dateToLocale(videoData.pubdate * 1000),
       shortUrl, url, thumbnailUrl: thumb,
-      description: trim($('.basic-desc-info').text())
+      description: videoData.desc,
+      _
     }
   }
 })
 
 definePlugin({
   include: [
-    /^bv!([aA][vV]\d+)$/,
+    /^bv!([aA][vV](?!0(?!$))\d+)$/,
     /^raw!([bB][vV]1\w{9})$/
   ],
   resolve(m) {
@@ -82,4 +80,29 @@ definePlugin({
     return { id, rawId, shortUrl: toShortUrl(rawId), url: toUrl(rawId) }
   },
   parse: main.parse
+})
+
+definePlugin({
+  include: [
+    /^(cv\d+)/,
+    /^(?:https?:\/\/)?www\.bilibili\.com\/read\/(cv\d+)/
+  ],
+  resolve({ 1: id }) {
+    return { id, rawId: id, shortUrl: '', url: `https://www.bilibili.com/read/${id}/` }
+  },
+  async parse(info) {
+    let { shortUrl, url } = info
+    const { $ } = await html(info)
+    const _ = fromHTML($, RE_INIT)
+    const { readInfo } = _
+    return {
+      title: readInfo.title,
+      ownerName: readInfo.author.name,
+      publishDate: dateToLocale(readInfo.publish_time * 1000),
+      shortUrl, url,
+      thumbnailUrl: readInfo.banner_url,
+      description: readInfo.summary,
+      _
+    }
+  }
 })

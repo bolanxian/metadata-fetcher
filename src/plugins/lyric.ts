@@ -1,12 +1,12 @@
 
-import { $string, dateToLocale, htmlToText } from '../bind'
+import { $string, htmlToText } from '../bind'
 import { definePlugin, html } from '../plugin'
 const { trim } = $string
 
 definePlugin({
   include: [
     /^lyrical-nonsense!([-\w]+)!([-\w]+)/,
-    /^(?:https?:\/\/)?www\.lyrical-nonsense\.com\/global\/lyrics\/([-\w]+)\/([-\w]+)\//
+    /^(?:https?:\/\/)?www\.lyrical-nonsense\.com\/(?:global\/)?lyrics\/([-\w]+)\/([-\w]+)\//
   ],
   resolve(m) {
     const id = `lyrical-nonsense!${m[1]}!${m[2]}`
@@ -23,7 +23,7 @@ definePlugin({
     return {
       title: $('input[type="hidden"][name="pagetitle"]').attr('value') ?? '',
       ownerName: '',
-      publishDate: dateToLocale($('meta[property="article:modified_time"]').attr('content')) ?? '',
+      publishDate: $('meta[property="article:modified_time"]').attr('content') ?? '',
       shortUrl, url,
       thumbnailUrl: $('meta[property="og:image"]').attr('content') ?? '',
       description: desc

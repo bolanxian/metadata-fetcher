@@ -1,7 +1,9 @@
 
-import { $string } from '../bind'
+import { $string, replace } from '../bind'
 import { definePlugin, json, resolve } from '../plugin'
 const { slice } = $string
+const DATE_REG = /^(\d\d\d\d)-(\d\d)-(\d\d)\s+(\d\d:\d\d:\d\d)$/
+const DATE_STR: any = '$1-$2-$3T$4+08:00'
 
 definePlugin({
   include: [
@@ -25,7 +27,7 @@ definePlugin({
     return {
       title: data.music_name,
       ownerName: data.p_name,
-      publishDate: data.up_time,
+      publishDate: replace(DATE_REG, data.up_time, DATE_STR),
       shortUrl, url,
       thumbnailUrl: `https://vsqx-cover.vsqx.top/${data.vsqx_uid}.jpg`,
       description: data.music_desc

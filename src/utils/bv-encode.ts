@@ -5,12 +5,11 @@ import { $string, test } from '../bind'
 const { indexOf, slice } = $string
 const int = BigInt, { asUintN } = int
 
-export const REG_AV = /^([aA][vV]\d+)$/
-export const REG_BV = /^([bB][vV]1\w{9})$/
+export const REG_AV = /^([aA][vV](?!0(?!$))\d{1,16})$/
+export const REG_BV = /^([bB][vV]1(?:(?![_0OIl])\w){9})$/
 
 const BASE = 58n
 const MAX = 1n << 51n
-const MASK = MAX - 1n
 const XOR = 0x1552356C4CDBn
 const table = 'FcwAPNKTMug3GV5Lj7EJnHpWsx4tb8haYeviqBz6rkCy12mUSDQX9RdoZf'
 
@@ -20,8 +19,8 @@ export const encode = (input: string | number | bigint) => {
     input = slice(input, 2)
   }
   let aid = int(input)
-  if (!(aid > 0n && aid < MAX)) { return }
-  let tmp = asUintN(52, aid | MAX) ^ XOR
+  if (!(aid >= 0n && aid < MAX)) { return }
+  let tmp = (aid | MAX) ^ XOR
   let x = ['0', '0', '0', '0', '0', '0', '0', '0', '0'], i = 0
   while (i < x.length) {
     x[i++] = table[(tmp % BASE) as any]
@@ -40,10 +39,8 @@ export const decode = (x: string) => {
     tmp = tmp * BASE + int(i)
   }
   if (tmp >> 51n == 1n) {
-    let aid = (tmp & MASK) ^ XOR
-    if (aid > 0n) {
-      return `av${aid}`
-    }
+    let aid = asUintN(51, tmp) ^ XOR
+    return `av${aid}`
   }
   return null
 }

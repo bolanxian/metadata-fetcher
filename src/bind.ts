@@ -1,5 +1,5 @@
 
-import * as cheerio from "cheerio"
+import * as cheerio from 'cheerio'
 
 export const noop = () => { }
 export const nextTick = queueMicrotask
@@ -58,10 +58,6 @@ export const isPlainObject = (o: any) => {
   return o === '[object Object]' || o === '[object Array]'
 }
 
-const { toLocaleString } = Date.prototype
-export const dateToLocale = <T extends string | null | undefined>(date: T) =>
-  date != null ? call(toLocaleString, new Date(date)) : date
-
 export const test = bindCall(RegExp.prototype.test)
 export const match = bindCall(RegExp.prototype[Symbol.match])
 export const replace = bindCall(RegExp.prototype[Symbol.replace])
@@ -71,9 +67,19 @@ const EventTargetProto = EventTarget.prototype
 export const on = bindCall(EventTargetProto.addEventListener)
 export const off = bindCall(EventTargetProto.removeEventListener)
 
-export const htmlToText = (html: string) => {
-  html = replace(/\r?\n/g, html, '' as any)
-  const $ = cheerio.load(`<div>${html}</div>`, null, false)
-  $('div,p,br', ':root').after('\n')
-  return $(':root').text()
+const REG_DATE = /^\w+\s+\w+\s+(\d\d)\s+(\d\d\d\d)\s+(\d\d:\d\d)(?::00|(:\d\d))?\s+(?:GMT|UTC)([-+]\d\d)(\d\d)/
+const { getMonth, toString } = Date.prototype, { padStart } = $string
+export const dateToLocale = (date: string | number | Date | null | undefined): string => {
+  if (date == null) { return '' }
+  date = new Date(date)
+  const m = match(REG_DATE, call(toString, date))!
+  const month = padStart((call(getMonth, date) + 1) as any, 2, '0')
+  return `${m[2]}-${month}-${m[1]}T${m[3]}${m[4] ?? ''}${m[5]}:${m[6]}`
 }
+
+export const htmlToText = import.meta.env.SSR || import.meta.env.PAGES ? (html: string) => {
+  html = replace(/\r?\n/g, html, '' as any)
+  const $ = cheerio.load(`<div>${html}</div>`, null, false)(':root')
+  $.find('div,p,br').after('\n')
+  return $.text()
+} : null!

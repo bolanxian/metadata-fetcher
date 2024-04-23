@@ -110,8 +110,8 @@ export const renderListDefaultRender = (
   _: string, { rawId }: ResolvedInfo, { title, ownerName }: ParsedInfo
 ) => `${title}${_}${rawId}${_}${ownerName}`
 export const renderListNameRender = (
-  _: string, { rawId }: ResolvedInfo, { title, ownerName }: ParsedInfo
-) => `[${ownerName}][${rawId}]${title}`
+  _: string, { id }: ResolvedInfo, { title, ownerName }: ParsedInfo
+) => `${ownerName ? `[${ownerName}]` : ''}[${id}]${title}`
 
 export const getSeparator = (_template = template) => {
   return match(/^\s*separator=(.*?)\s*$/m, _template)?.[1] ?? '\uFF0F'
