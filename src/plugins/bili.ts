@@ -1,10 +1,10 @@
 
-import { $string, test, dateToLocale } from '../bind'
+import { $string, $array, test, dateToLocale, htmlToText } from '../bind'
 import { definePlugin, html } from '../plugin'
 import * as BV from '../utils/bv-encode'
 import { fromHTML } from '../utils/find-json-object'
-const { slice, indexOf } = $string
-const RE_INIT = /^window\.__INITIAL_STATE__\s*=\s*(?={)/
+const { slice, indexOf } = $string, { join } = $array
+const REG_INIT = /^\s*window\.__INITIAL_STATE__\s*=\s*(?={)/
 
 const toShortUrl = (id: string) => `https://b23.tv/${id}`
 const toUrl = (id: string) => `https://www.bilibili.com/video/${id}/`
@@ -29,7 +29,8 @@ export const main = definePlugin({
   async parse(info) {
     let { rawId: id, shortUrl, url } = info
     const { $ } = await html(info)
-    const _ = fromHTML($, RE_INIT)
+    const _ = fromHTML($, REG_INIT)
+    if (_.error.code === 404) { return null }
     const { videoData } = _
     const { aid } = videoData
     if (aid != null) {
@@ -42,12 +43,20 @@ export const main = definePlugin({
       thumb = slice(thumb, 0, index)
     }
     thumb = thumb ? new URL(thumb, url).href : ''
+    const keywords = []
+    for (const tag of _.tags) {
+      if (tag.tag_type === 'old_channel') {
+        keywords[keywords.length] = tag.tag_name
+      }
+    }
+
     return {
       title: videoData.title,
       ownerName: videoData.owner.name,
       publishDate: dateToLocale(videoData.pubdate * 1000),
       shortUrl, url, thumbnailUrl: thumb,
-      description: videoData.desc,
+      keywords: join(keywords, ','),
+      description: htmlToText(videoData.desc, true),
       _
     }
   }
@@ -84,16 +93,17 @@ definePlugin({
 
 definePlugin({
   include: [
-    /^(cv\d+)/,
-    /^(?:https?:\/\/)?www\.bilibili\.com\/read\/(cv\d+)/
+    /^cv(\d+)/,
+    /^(?:https?:\/\/)?www\.bilibili\.com\/(?:read\/cv|mobile\?id=)(\d+)/
   ],
-  resolve({ 1: id }) {
+  resolve(m) {
+    const id = `cv${m[1]}`
     return { id, rawId: id, shortUrl: '', url: `https://www.bilibili.com/read/${id}/` }
   },
   async parse(info) {
     let { shortUrl, url } = info
     const { $ } = await html(info)
-    const _ = fromHTML($, RE_INIT)
+    const _ = fromHTML($, REG_INIT)
     const { readInfo } = _
     return {
       title: readInfo.title,

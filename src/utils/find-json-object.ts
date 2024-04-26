@@ -1,7 +1,7 @@
 
 import { CheerioAPI } from 'cheerio'
 import { $string, match, replace } from '../bind'
-const { trim, indexOf, slice, repeat } = $string
+const { indexOf, slice, repeat } = $string
 
 const REG1 = /".*?(?<!\\)"/sg
 const REG2 = /(?<!^){[^{}]*?}/g
@@ -28,7 +28,7 @@ export const find = (text: string) => {
 const $parse = JSON.parse
 export const fromHTML = ($: CheerioAPI, reg: RegExp) => {
   for (const el of $('script:not([src])')) {
-    let text = trim($(el).text()), m, json
+    let text = $(el).text(), m, json
     if ((m = match(reg, text)) != null) {
       text = slice(text, m.index! + m[0].length)
       if ((json = find(text)) != null) {

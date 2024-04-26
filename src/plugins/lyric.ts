@@ -14,17 +14,17 @@ definePlugin({
     return { id, rawId: id, shortUrl: '', url }
   },
   async parse(info) {
-    const { shortUrl, url } = info
+    const { url } = info
     const { $ } = await html(info)
     let desc = ''
-    for (const el of Array.from($('.olyrictext#prilyr')).reverse()) {
+    for (const el of Array.from($('.olyrictext')).reverse()) {
       desc += `\n${htmlToText(trim($(el).html()!))}`
     }
     return {
       title: $('input[type="hidden"][name="pagetitle"]').attr('value') ?? '',
       ownerName: '',
       publishDate: $('meta[property="article:modified_time"]').attr('content') ?? '',
-      shortUrl, url,
+      shortUrl: url, url,
       thumbnailUrl: $('meta[property="og:image"]').attr('content') ?? '',
       description: desc
     }

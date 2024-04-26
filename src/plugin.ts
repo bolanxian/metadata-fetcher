@@ -10,7 +10,7 @@ const PAGES = import.meta.env.PAGES
 export interface Plugin {
   include: RegExp[]
   resolve(m: RegExpMatchArray): ResolvedInfo | null
-  parse(info: ResolvedInfo): Promise<ParsedInfo>
+  parse(info: ResolvedInfo): Promise<ParsedInfo | null>
 }
 export interface ResolvedInfo {
   id: string
@@ -25,6 +25,7 @@ export interface ParsedInfo {
   shortUrl: string
   url: string
   thumbnailUrl: string
+  keywords?: string
   description: string
 }
 
@@ -48,12 +49,12 @@ export const resolve = (input: string): ResolvedInfo | null => {
   const [_] = xparse(input)
   return _ ?? null
 }
-export const parse = (input: string): Promise<ParsedInfo> | null => {
+export const parse = (input: string): Promise<ParsedInfo | null> | null => {
   const [, _] = xparse(input)
   return _ ?? null
 }
 export const xparse: {
-  (input: string): [] | [ResolvedInfo, Promise<ParsedInfo>]
+  (input: string): [] | [ResolvedInfo, Promise<ParsedInfo | null>]
 } = function* (input: string) {
   input = trim(input)
   for (const plugin of plugins) {
@@ -103,7 +104,12 @@ export async function* renderList(args: string[], _template = template, render =
       yield `Unknown Input : ${arg}`
       continue
     }
-    yield render(_, resolved, await parsedPromise!)
+    const parsed = await parsedPromise
+    if (parsed == null) {
+      yield `Not Found : ${resolved.id}`
+      continue
+    }
+    yield render(_, resolved, parsed)
   }
 }
 export const renderListDefaultRender = (
@@ -196,7 +202,7 @@ export const html = SSR || PAGES ? async (info: ResolvedInfo) => {
   const path = `./__cache__/${info.id}.html`
   let text = await getCache(path)
   if (text != null) {
-    const $ = cheerio.load(text)
+    const $ = cheerio.load(text, { baseURI: info.url })
     return { text, $ }
   }
   const resp = await $fetch(info.url, htmlInit)
@@ -205,7 +211,7 @@ export const html = SSR || PAGES ? async (info: ResolvedInfo) => {
     throw new TypeError(`Request failed with status code ${status}`)
   }
   text = await resp.text()
-  const $ = cheerio.load(text)
+  const $ = cheerio.load(text, { baseURI: info.url })
   await setCache(path, text)
   return { text, $ }
 } : null!

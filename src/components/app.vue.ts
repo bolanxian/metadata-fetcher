@@ -69,8 +69,9 @@ export default defineComponent({
       const [resolved, parsedPromise] = xparse(data.input)
       if (resolved == null) { return }
       data.resolved = resolved
-      data.parsed = await parsedPromise!
-      data.output = _render(data.parsed, data.template)
+      if ((data.parsed = await parsedPromise!) != null) {
+        data.output = _render(data.parsed, data.template)
+      }
     })
     !SSR && watch(() => data.input, input => {
       try {
@@ -107,8 +108,9 @@ export default defineComponent({
             data.output += `${line}\n`
           }
         } else {
-          data.parsed = await parse(data.input)!
-          data.output = _render(data.parsed, data.template)
+          if ((data.parsed = await parse(data.input)!) != null) {
+            data.output = _render(data.parsed, data.template)
+          }
         }
       } catch (error) {
         data.parsed = null

@@ -72,14 +72,15 @@ const { getMonth, toString } = Date.prototype, { padStart } = $string
 export const dateToLocale = (date: string | number | Date | null | undefined): string => {
   if (date == null) { return '' }
   date = new Date(date)
-  const m = match(REG_DATE, call(toString, date))!
+  const m = match(REG_DATE, call(toString, date))
+  if (m == null) { return '' }
   const month = padStart((call(getMonth, date) + 1) as any, 2, '0')
   return `${m[2]}-${month}-${m[1]}T${m[3]}${m[4] ?? ''}${m[5]}:${m[6]}`
 }
 
-export const htmlToText = import.meta.env.SSR || import.meta.env.PAGES ? (html: string) => {
-  html = replace(/\r?\n/g, html, '' as any)
-  const $ = cheerio.load(`<div>${html}</div>`, null, false)(':root')
-  $.find('div,p,br').after('\n')
-  return $.text()
+export const htmlToText = import.meta.env.SSR || import.meta.env.PAGES ? (html: string, pre = false) => {
+  if (!pre) { html = replace(/\r?\n/g, html, '' as any) }
+  const _ = cheerio.load(`<div>${html}</div>`, null, false)(':root')
+  _.find('div,p,br').after('\n')
+  return _.text()
 } : null!

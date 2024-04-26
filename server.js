@@ -6,7 +6,7 @@ const bind = bindCall(Function.prototype.bind)
 const encode = bind(TextEncoder.prototype.encode, new TextEncoder())
 
 const template = await Deno.readTextFile('./dist/index.html')
-const [html0, html1, html2] = template.split('<!--#app-->').map(html => encode(html))
+const [html0, html1, html2, html3] = template.split(/<title>.*?<\/title>|<!--#app-->/).map(html => encode(html))
 const ssrManifest = await Deno.readTextFile('./dist/manifest.ssr.json').then(null, e => null)
 
 const types = {
@@ -26,12 +26,15 @@ for await (let { isFile, name } of Deno.readDir('./dist/.assets/')) {
   })
 }
 
-async function* genHtml({ store, stream }) {
+async function* html(promise) {
   yield html0
-  yield* stream
+  const { head, app, store } = await promise
+  yield encode(head)
   yield html1
-  yield encode(replaceAll(JSON.stringify(store), '</script>', '<\\/script>'))
+  yield encode(app)
   yield html2
+  yield encode(replaceAll(JSON.stringify(store), '</script>', '<\\/script>'))
+  yield html3
 }
 
 export const main = (port = 6702, hostname = '0.0.0.0', base = '/metadata-fetcher/') => Deno.serve({
@@ -65,14 +68,14 @@ export const main = (port = 6702, hostname = '0.0.0.0', base = '/metadata-fetche
             return new Response(text)
           })
         case '.id': case '.list': case '.name': {
-          const gen = genHtml(renderToHtml(path, url.searchParams.getAll('id')))
+          const gen = html(renderToHtml(path, url.searchParams.getAll('id')))
           return new Response(ReadableStream.from(gen), {
             headers: { 'content-type': 'text/html' }
           })
         }
       }
     } else {
-      const gen = genHtml(renderToHtml(decodeURIComponent(path)))
+      const gen = html(renderToHtml(decodeURIComponent(path)))
       return new Response(ReadableStream.from(gen), {
         headers: { 'content-type': 'text/html' }
       })
