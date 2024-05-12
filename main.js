@@ -1,4 +1,6 @@
 
+const NAME = 'Metadata-Fetcher'
+
 globalThis.process ??= {}
 globalThis.process.env ??= {}
 globalThis.document ??= { addEventListener() { }, createElement() { } }
@@ -30,6 +32,12 @@ if (task === 'fetch') {
 } else if (task === 'serve' || task == null) {
   const { main } = await import('./server.js')
   main()
+} else if (task === 'start') {
+  const { main, open } = await import('./server.js')
+  const { hideConsole, init } = await import('./tray.js')
+  let url = await new Promise((onListen) => { main({ open: false, onListen }) })
+  await init(NAME, './dist/favicon.ico', () => { open(url) })
+  hideConsole()
 } else if (task !== import.meta) {
   reportError(new RangeError(`unrecognized subcommand '${task}'`))
   Deno.exit(1)

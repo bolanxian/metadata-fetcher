@@ -1,9 +1,10 @@
 
 import { $string, $array, test, dateToLocale, htmlToText } from '../bind'
-import { definePlugin, html } from '../plugin'
+import { definePlugin, redirect, html } from '../plugin'
 import * as BV from '../utils/bv-encode'
 import { fromHTML } from '../utils/find-json-object'
 const { slice, indexOf } = $string, { join } = $array
+const REG_B23 = /^(?:https?:\/\/)?b23\.tv\/(\w+)/
 const REG_INIT = /^\s*window\.__INITIAL_STATE__\s*=\s*(?={)/
 
 const toShortUrl = (id: string) => `https://b23.tv/${id}`
@@ -11,8 +12,7 @@ const toUrl = (id: string) => `https://www.bilibili.com/video/${id}/`
 
 export const main = definePlugin({
   include: [
-    BV.REG_AV, BV.REG_BV,
-    /^(?:https?:\/\/)?b23\.tv\/(\w+)/,
+    BV.REG_AV, BV.REG_BV, REG_B23,
     /^(?:https?:\/\/)?(?:m|www)\.bilibili\.com\/video\/(\w+)/
   ],
   resolve(m) {
@@ -113,6 +113,25 @@ definePlugin({
       thumbnailUrl: readInfo.banner_url,
       description: readInfo.summary,
       _
+    }
+  }
+})
+
+definePlugin({
+  include: [REG_B23],
+  resolve(m) {
+    const id = toShortUrl(m[1])
+    return { id, rawId: id, shortUrl: '', url: id }
+  },
+  async parse(info) {
+    const url = (await redirect(info)) ?? ''
+    return {
+      title: '',
+      ownerName: '',
+      publishDate: '',
+      shortUrl: url, url: url,
+      thumbnailUrl: '',
+      description: ''
     }
   }
 })

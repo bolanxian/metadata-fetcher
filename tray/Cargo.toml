@@ -1,0 +1,11 @@
+[package]
+name = "tray"
+version = "0.0.0"
+
+[lib]
+name = "tray"
+crate-type = ["cdylib"]
+
+[dependencies]
+nwg = {version = "^1.0.13", package = "native-windows-gui"}
+nwd = {version = "^1.0.5", package = "native-windows-derive"}

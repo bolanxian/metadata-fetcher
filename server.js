@@ -37,14 +37,22 @@ async function* html(promise) {
   yield html3
 }
 
-export const main = (port = 6702, hostname = '0.0.0.0', base = '/metadata-fetcher/') => Deno.serve({
+export const open = Deno.build.os === 'windows' ? (url) => {
+  new Deno.Command('explorer', { args: [url] }).output()
+} : () => { }
+
+export const main = ({
+  port = 6702, hostname = '0.0.0.0',
+  base = '/metadata-fetcher/',
+  open: _open = true,
+  onListen
+} = {}) => Deno.serve({
   port, hostname,
   onListen({ hostname, port }) {
     const url = `http://${hostname}:${port}${base}`
     console.log(`Listening on ${url}`)
-    if (Deno.build.os === 'windows') {
-      new Deno.Command('explorer', { args: [url] }).output()
-    }
+    onListen?.(url)
+    if (_open) { open(url) }
   }
 }, (request) => {
   const url = new URL(request.url)

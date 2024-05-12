@@ -198,6 +198,15 @@ const jsonInit = {
   }
 }
 
+export const redirect = SSR || PAGES ? async (info: ResolvedInfo) => {
+  const resp = await $fetch(info.url, { ...htmlInit, redirect: 'manual' })
+  const { status, headers } = resp
+  if (!(status >= 300 && status < 400)) {
+    throw new TypeError(`Request failed with status code ${status}`)
+  }
+  return headers.get('location')
+} : null!
+
 export const html = SSR || PAGES ? async (info: ResolvedInfo) => {
   const path = `./__cache__/${info.id}.html`
   let text = await getCache(path)
