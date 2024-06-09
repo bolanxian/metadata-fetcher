@@ -12,8 +12,9 @@
     "extra":"npm run extra:tray && npm run extra:console && npm run extra:move",
     "extra:tray":"cd tray && cargo build --release",
     "extra:console":"cd tray && zig build-lib -dynamic -O ReleaseSafe ./src/console.zig -femit-bin=./target/release/console.dll",
-    "extra:move":"move /Y tray\\target\\release\\tray.dll dist\\ && move /Y tray\\target\\release\\console.dll dist\\",    
-    "extra:icon":"curl https://www.bilibili.com/favicon.ico -o ./dist/favicon.ico"    
+    "extra:move":"move /Y tray\\target\\release\\tray.dll dist\\ && move /Y tray\\target\\release\\console.dll dist\\",
+    "extra:icon":"curl https://www.bilibili.com/favicon.ico -o ./dist/favicon.ico",
+    "tar":"tar cf metadata-fetcher.tar package.json deno.json *.md run.bat *.js dist/*"
   },
   "dependencies": {
     "cheerio": "^1.0.0-rc.12",

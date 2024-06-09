@@ -17,21 +17,24 @@ static mut UI: Option<SystemTrayUi> = None;
 #[no_mangle]
 pub extern "C" fn init(
     func: extern "C" fn(i32),
-    _name: *const u8,
-    _name_length: usize,
-    _path: *const u8,
-    _path_length: usize,
+    name_ptr: *const u8,
+    name_len: usize,
+    path_ptr: *const u8,
+    path_len: usize,
 ) -> i32 {
     if unsafe { UI.is_some() } {
+        func(-1);
         return -1;
     }
     if nwg::init().is_err() {
+        func(-2);
         return -2;
     }
-    let name = unsafe { from_pointer(_name, _name_length) };
-    let path = unsafe { from_pointer(_path, _path_length) };
+    let name = unsafe { from_pointer(name_ptr, name_len) };
+    let path = unsafe { from_pointer(path_ptr, path_len) };
     let ui = SystemTray::build_ui(SystemTray::new(func, name, path)).ok();
     if ui.is_none() {
+        func(-3);
         return -3;
     }
     unsafe { UI = ui };
@@ -48,15 +51,15 @@ pub extern "C" fn deinit() {
 
 #[no_mangle]
 pub extern "C" fn notification(
-    _text: *const u8,
-    _text_length: usize,
-    _title: *const u8,
-    _title_length: usize,
+    text_ptr: *const u8,
+    text_len: usize,
+    title_ptr: *const u8,
+    title_len: usize,
 ) {
     if let Some(ui) = unsafe { &*addr_of!(UI) } {
-        let text = unsafe { from_pointer(_text, _text_length) };
-        let title = if _title_length > 0 {
-            Some(unsafe { from_pointer(_title, _title_length) })
+        let text = unsafe { from_pointer(text_ptr, text_len) };
+        let title = if title_len > 0 {
+            Some(unsafe { from_pointer(title_ptr, title_len) })
         } else {
             None
         };

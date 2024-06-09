@@ -34,10 +34,17 @@ if (task === 'fetch') {
   main()
 } else if (task === 'start') {
   const { main, open } = await import('./server.js')
-  const { hideConsole, init } = await import('./tray.js')
-  let url = await new Promise((onListen) => { main({ open: false, onListen }) })
-  await init(NAME, './dist/favicon.ico', () => { open(url) })
-  hideConsole()
+  const TRAY = import('./tray.js')
+  const urlPromise = new Promise((onListen) => { main({ open: false, onListen }) })
+  try {
+    const { hideConsole, init } = await TRAY
+    const url = await urlPromise
+    await init(NAME, './dist/favicon.ico', () => { open(url) })
+    hideConsole()
+  } catch (err) {
+    error(err)
+    open(await urlPromise)
+  }
 } else if (task !== import.meta) {
   reportError(new RangeError(`unrecognized subcommand '${task}'`))
   Deno.exit(1)

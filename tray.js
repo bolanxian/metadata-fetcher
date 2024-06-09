@@ -28,12 +28,20 @@ const encode = bind(TextEncoder.prototype.encode, new TextEncoder())
 
 const { init: _init, deinit: _deinit, notification: _notification } = tray.symbols
 const { exit } = Deno, timeout = setTimeout
-let ready, resolve, name
+let ready, resolve, reject, name
 let closed, onClick
 const fn = new Deno.UnsafeCallback({
   parameters: ['i32'],
   result: 'void'
 }, (i) => {
+  if (i < 0) {
+    switch (-i) {
+      case 1: reject('Already inited'); break
+      case 2: reject('Nwg init error'); break
+      case 3: reject('Tray build error'); break
+    }
+    return
+  }
   switch (i) {
     case 0:
       timeout(notification, 0, '已启动', name)
@@ -51,7 +59,7 @@ export const init = (__name, path, _onClick) => {
   const _path = encode(path)
   name = __name
   onClick = _onClick
-  ready = new Promise((_) => { resolve = _ })
+  ready = new Promise((_, __) => { resolve = _; reject = __ })
   closed = _init(fn.pointer, _name, _name.length, _path, _path.length)
   return ready
 }
