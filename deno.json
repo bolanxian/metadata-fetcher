@@ -6,12 +6,12 @@
     "build:server": "exit",
     "build:pages": "export VITE_PAGES=true && npm run build:client -- --outDir ../dist-pages",
     "build:pages:min": "deno task build:pages --minify",
-    "serve": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ --allow-run=explorer ./main.js serve",
-    "fetch": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./main.js fetch",
-    "id": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./main.js id",
-    "list": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./main.js list",
-    "name": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./main.js name",
-    "test": "deno test --allow-read=. --allow-write=./__cache__ ./main.test.js --",
-    "bench": "deno bench --allow-read=. --allow-write=./__cache__ ./main.js --"
+    "serve": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ --allow-run=explorer ./lib/main.js serve",
+    "fetch": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./lib/main.js fetch",
+    "id": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./lib/main.js id",
+    "list": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./lib/main.js list",
+    "name": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./lib/main.js name",
+    "test": "deno test --allow-read=. --allow-write=./__cache__ ./lib/main.test.js --",
+    "bench": "deno bench --allow-read=. --allow-write=./__cache__ ./lib/main.js --"
   }
 }

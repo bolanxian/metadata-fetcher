@@ -20,4 +20,4 @@ if not exist ".\__cache__" (
   fsutil.exe file setCaseSensitiveInfo ".\__cache__" enable
 )
 
-start %EXEC_DENO% run --quiet --allow-net --allow-read=. --allow-write=./__cache__ --allow-run=explorer --unstable-ffi --allow-ffi ./main.js start
+start %EXEC_DENO% run --quiet --allow-net --allow-read=. --allow-write=./__cache__ --allow-run=explorer --unstable-ffi --allow-ffi ./lib/main.js start
