@@ -11,8 +11,9 @@ import type { ResolvedInfo, ParsedInfo } from '../plugin'
 import { nextTick, $string, split } from '../bind'
 import.meta.glob('../plugins/*', { eager: true })
 const { trim, slice, indexOf } = $string
-const SSR = import.meta.env.SSR
-const PAGES = import.meta.env.PAGES
+const TARGET = import.meta.env.TARGET
+const SSR = TARGET == 'server'
+const PAGES = TARGET == 'pages'
 const S = /\s+/
 
 export interface Store {
@@ -213,20 +214,7 @@ const modalTemplate = (template: string, onOk: (template: string) => void) => {
       let ok = false
       try {
         template = trim(template) ? template : defaultTemplate
-        if (PAGES) {
-          await writeTemplate(template)
-          ok = true
-        } else {
-          const body = template
-          const resp = await fetch('./.template', {
-            method: 'POST',
-            body,
-            headers: {
-              'content-type': 'text/plain'
-            }
-          })
-          ok = resp.ok
-        }
+        ok = await writeTemplate(template)
       } finally {
         if (ok) {
           if (!PAGES) { location.href += ''; return }

@@ -1,8 +1,8 @@
 
 import process from 'node:process'
+import type { Plugin } from 'vite'
 import { defineConfig, createFilter } from 'vite'
 import vue from '@vitejs/plugin-vue'
-const PAGES = process.env.VITE_PAGES == 'true'
 
 const externalAssets = (() => {
   const reg = /\/(ionicons)-[-\w]{8}\.((?!woff2)\S+)$/
@@ -26,6 +26,43 @@ const externalAssets = (() => {
   }
 })()
 
+const buildTarget = (): Plugin => {
+  const map = new Map()
+  return {
+    name: 'target',
+    enforce: 'pre',
+    apply: 'build',
+    config(config, { isSsrBuild }) {
+      const target = !isSsrBuild ? process.env.VITE_TARGET ?? 'client' : 'server'
+      let outDir = config.build?.outDir
+      let assetsDir = '.assets'
+      if (target == 'client') {
+        map.set('cheerio', 'export let load')
+      } else if (target == 'pages') {
+        outDir = '../dist-pages'
+        assetsDir = 'assets'
+      }
+      return {
+        define: {
+          'import.meta.env.TARGET': JSON.stringify(target),
+          'import.meta.env.PAGES': target == 'pages' ? 'true' : 'false'
+
+        },
+        build: {
+          outDir,
+          assetsDir
+        }
+      }
+    },
+    resolveId(source) {
+      if (map.has(source)) { return source }
+    },
+    load(id) {
+      return map.get(id)
+    }
+  }
+}
+
 // https://vitejs.dev/config/
 export default defineConfig({
   appType: 'spa',
@@ -36,13 +73,9 @@ export default defineConfig({
   resolve: {
     extensions: ['.js', '.ts', '.json', '.vue']
   },
-  define: {
-    'import.meta.env.PAGES': PAGES ? 'true' : 'false'
-  },
   experimental: { renderBuiltUrl: externalAssets.renderBuiltUrl },
   build: {
     outDir: '../dist',
-    assetsDir: PAGES ? 'assets' : '.assets',
     emptyOutDir: false,
     target: 'esnext',
     modulePreload: { polyfill: true },
@@ -50,6 +83,7 @@ export default defineConfig({
     minify: false,
     //ssrManifest:'manifest.ssr.json',
     rollupOptions: {
+      external: [/^(?=node:)/],
       output: {
         minifyInternalExports: false
       }
@@ -63,7 +97,7 @@ export default defineConfig({
       name: 'view-ui-plus',
       enforce: 'pre',
       apply: 'build',
-      resolveId(source, importer, options) {
+      resolveId(source) {
         if (source === 'view-ui-plus') { return source }
       },
       load(id) {
@@ -75,5 +109,6 @@ export const version = pkg.version`
         }
       }
     },
+    buildTarget()
   ]
 })

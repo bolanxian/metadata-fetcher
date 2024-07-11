@@ -7,5 +7,5 @@ declare module '*.vue' {
 }
 
 interface ImportMetaEnv {
-  readonly PAGES: boolean
+  readonly TARGET: 'client' | 'server' | 'pages' | 'koishi'
 }

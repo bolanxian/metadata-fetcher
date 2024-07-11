@@ -1,5 +1,5 @@
 
-const name = 'Metadata Fetcher'
+export const name = 'Metadata Fetcher'
 
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'

@@ -4,8 +4,9 @@ import { $string, hasOwn, on, off, match } from './bind'
 import { ready as ready1, getCache, setCache } from './cache'
 const { freeze } = Object
 const { trim, split } = $string
-const SSR = import.meta.env.SSR
-const PAGES = import.meta.env.PAGES
+const TARGET = import.meta.env.TARGET
+const SSR = TARGET == 'server'
+const PAGES = TARGET == 'pages'
 
 export interface Plugin {
   include: RegExp[]
@@ -132,15 +133,33 @@ thumbnailUrl=封面：
 description=简介：
 `
 export let template = defaultTemplate
-const templatePath = './__cache__/_template.txt'
+const templateName = '_template.txt'
 export const readTemplate = SSR || PAGES ? async () => {
-  template = await getCache(templatePath) ?? template
+  template = await getCache(templateName) ?? template
   return template
 } : null!
-export const writeTemplate = SSR || PAGES ? async (_template = template) => {
-  await setCache(templatePath, _template)
-  template = _template
-} : null!
+export const writeTemplate = async (_template = template): Promise<boolean> => {
+  if (SSR || PAGES) {
+    await setCache(templateName, _template)
+    template = _template
+    return true
+  }
+  if (TARGET == 'client') {
+    const resp = await fetch('./.template', {
+      method: 'POST',
+      body: _template,
+      headers: {
+        'content-type': 'text/plain'
+      }
+    })
+    if (resp.ok) {
+      template = _template
+      return true
+    }
+    return false
+  }
+  return null!
+}
 
 export let $fetch = SSR ? fetch : null!
 export const ready = SSR || PAGES ? (async () => {
@@ -156,19 +175,10 @@ export const ready = SSR || PAGES ? (async () => {
       on(target, type, done)
       on(target, 'load', done)
     })
-    await ready1
     $fetch = (await $grant)?.detail?.GM_fetch
   }
-  if (SSR) {
-    try {
-      //@ts-expect-error
-      await Deno.mkdir(`./__cache__`)
-    } catch (error) {
-      //@ts-expect-error
-      if (!(error instanceof Deno.errors.AlreadyExists)) { throw error }
-    }
-  }
   if (SSR || PAGES) {
+    await ready1
     await readTemplate()
   }
 })() : null!
@@ -208,8 +218,8 @@ export const redirect = SSR || PAGES ? async (info: ResolvedInfo) => {
 } : null!
 
 export const html = SSR || PAGES ? async (info: ResolvedInfo) => {
-  const path = `./__cache__/${info.id}.html`
-  let text = await getCache(path)
+  const name = `${info.id}.html`
+  let text = await getCache(name)
   if (text != null) {
     const $ = cheerio.load(text, { baseURI: info.url })
     return { text, $ }
@@ -221,13 +231,13 @@ export const html = SSR || PAGES ? async (info: ResolvedInfo) => {
   }
   text = await resp.text()
   const $ = cheerio.load(text, { baseURI: info.url })
-  await setCache(path, text)
+  await setCache(name, text)
   return { text, $ }
 } : null!
 
 export const json = SSR || PAGES ? async (info: ResolvedInfo) => {
-  const path = `./__cache__/${info.id}.json`
-  let text = await getCache(path)
+  const name = `${info.id}.json`
+  let text = await getCache(name)
   if (text != null) {
     return JSON.parse(text)
   }
@@ -238,6 +248,6 @@ export const json = SSR || PAGES ? async (info: ResolvedInfo) => {
   }
   text = await resp.text()
   const data = JSON.parse(text)
-  await setCache(path, text)
+  await setCache(name, text)
   return data
 } : null!
