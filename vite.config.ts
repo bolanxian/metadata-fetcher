@@ -41,14 +41,22 @@ const buildTarget = (): Plugin => {
       } else if (target == 'pages') {
         outDir = '../dist-pages'
         assetsDir = 'assets'
+      } else if (target == 'koishi') {
+        outDir = '../koishi-plugin'
       }
       return {
         define: {
-          'import.meta.env.TARGET': JSON.stringify(target),
-          'import.meta.env.PAGES': target == 'pages' ? 'true' : 'false'
-
+          'import.meta.env.TARGET': JSON.stringify(target)
         },
         build: {
+          rollupOptions: {
+            external: target == 'koishi' ? ['koishi', 'cheerio'] : [],
+          },
+          lib: target == 'koishi' ? {
+            entry: 'main.koishi.ts',
+            formats: ['cjs'],
+            fileName: () => 'index.js'
+          } : void 0,
           outDir,
           assetsDir
         }

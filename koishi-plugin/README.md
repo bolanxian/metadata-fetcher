@@ -1,0 +1,2 @@
+# Koishi Plugin Metadata Fetcher
+

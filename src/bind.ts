@@ -78,7 +78,7 @@ export const dateToLocale = (date: string | number | Date | null | undefined): s
   return `${m[2]}-${month}-${m[1]}T${m[3]}${m[4] ?? ''}${m[5]}:${m[6]}`
 }
 
-export const htmlToText = import.meta.env.SSR || import.meta.env.PAGES ? (html: string, pre = false) => {
+export const htmlToText = import.meta.env.TARGET != 'client' ? (html: string, pre = false) => {
   if (!pre) { html = replace(/\r?\n/g, html, '' as any) }
   const _ = cheerio.load(`<div>${html}</div>`, null, false)(':root')
   _.find('div,p,br').after('\n')

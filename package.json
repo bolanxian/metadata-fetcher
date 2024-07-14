@@ -1,7 +1,7 @@
 {
   "name": "metadata-fetcher",
   "private": true,
-  "version": "0.0.5",
+  "version": "0.0.6",
   "type": "module",
   "scripts": {
     "start": "start deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ --allow-run=explorer --unstable-ffi --allow-ffi ./lib/main.js start",
@@ -25,8 +25,12 @@
   "devDependencies": {
     "@types/node": "^20.12.5",
     "@vitejs/plugin-vue": "^4.6.2",
+    "koishi": "^4.17.9",
     "typescript": "^5.4.4",
     "vite": "^5.2.8",
     "vue-tsc": "^1.8.27"
-  }
+  },
+  "workspaces": [
+    "koishi-plugin"
+  ]
 }

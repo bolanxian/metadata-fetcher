@@ -139,11 +139,6 @@ export const readTemplate = SSR || PAGES ? async () => {
   return template
 } : null!
 export const writeTemplate = async (_template = template): Promise<boolean> => {
-  if (SSR || PAGES) {
-    await setCache(templateName, _template)
-    template = _template
-    return true
-  }
   if (TARGET == 'client') {
     const resp = await fetch('./.template', {
       method: 'POST',
@@ -158,10 +153,14 @@ export const writeTemplate = async (_template = template): Promise<boolean> => {
     }
     return false
   }
-  return null!
+  if (SSR || PAGES) {
+    await setCache(templateName, _template)
+  }
+  template = _template
+  return true
 }
 
-export let $fetch = SSR ? fetch : null!
+export let $fetch = SSR || TARGET == 'koishi' ? fetch : null!
 export const ready = SSR || PAGES ? (async () => {
   if (PAGES) {
     const $grant = new Promise<CustomEvent | void>(ok => {
@@ -208,7 +207,7 @@ const jsonInit = {
   }
 }
 
-export const redirect = SSR || PAGES ? async (info: ResolvedInfo) => {
+export const redirect = TARGET != 'client' ? async (info: ResolvedInfo) => {
   const resp = await $fetch(info.url, { ...htmlInit, redirect: 'manual' })
   const { status, headers } = resp
   if (!(status >= 300 && status < 400)) {
@@ -217,9 +216,9 @@ export const redirect = SSR || PAGES ? async (info: ResolvedInfo) => {
   return headers.get('location')
 } : null!
 
-export const html = SSR || PAGES ? async (info: ResolvedInfo) => {
+export const html = TARGET != 'client' ? async (info: ResolvedInfo) => {
   const name = `${info.id}.html`
-  let text = await getCache(name)
+  let text = SSR || PAGES ? await getCache(name) : null
   if (text != null) {
     const $ = cheerio.load(text, { baseURI: info.url })
     return { text, $ }
@@ -231,13 +230,13 @@ export const html = SSR || PAGES ? async (info: ResolvedInfo) => {
   }
   text = await resp.text()
   const $ = cheerio.load(text, { baseURI: info.url })
-  await setCache(name, text)
+  SSR || PAGES ? await setCache(name, text) : null
   return { text, $ }
 } : null!
 
-export const json = SSR || PAGES ? async (info: ResolvedInfo) => {
+export const json = TARGET != 'client' ? async (info: ResolvedInfo) => {
   const name = `${info.id}.json`
-  let text = await getCache(name)
+  let text = SSR || PAGES ? await getCache(name) : null
   if (text != null) {
     return JSON.parse(text)
   }
@@ -248,6 +247,6 @@ export const json = SSR || PAGES ? async (info: ResolvedInfo) => {
   }
   text = await resp.text()
   const data = JSON.parse(text)
-  await setCache(name, text)
+  SSR || PAGES ? await setCache(name, text) : null
   return data
 } : null!

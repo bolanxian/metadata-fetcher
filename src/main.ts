@@ -4,7 +4,7 @@ import App from './components/app.vue'
 import { ready } from './plugin'
 
 let store
-if (import.meta.env.PAGES) {
+if (import.meta.env.TARGET == 'pages') {
   await ready
 } else {
   try {

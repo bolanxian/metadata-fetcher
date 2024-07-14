@@ -7,8 +7,10 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+koishi-plugin/*.js
 *.7z
 *.tar
+*.tgz
 deno.lock
 package-lock.json
 __cache__

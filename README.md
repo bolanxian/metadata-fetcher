@@ -1,11 +1,11 @@
 # Metadata Fetcher
 
-### CLI / SSR
+### CLI / WebUI
 ```batch
 : 构建
 npm run build
 
-: 运行 SSR
+: 运行 WebUI
 deno task serve
 
 : 获取元数据
@@ -16,4 +16,14 @@ deno task id ...
 deno task list ...
 : 文件名
 deno task list ...
+```
+
+### Koishi 插件
+```batch
+: 构建
+deno task build:koishi
+npm pack -w koishi-plugin-metadata-fetcher
+
+cd <koishi-app>
+npm install koishi-plugin-metadata-fetcher-<version>.tgz
 ```
