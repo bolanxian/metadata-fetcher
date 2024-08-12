@@ -18,8 +18,15 @@ definePlugin({
   async parse(info) {
     const { shortUrl, url } = info
     const { $ } = await html(info)
-    const $data = $('#js-initial-watch-data[data-api-data]')
-    const _ = JSON.parse($data.attr('data-api-data')!)
+    let $data: string | undefined, _: any
+
+    if (($data = $('meta[name="server-response"]').attr('content')) != null) {
+      _ = JSON.parse($data).data.response
+    }
+    //2024-08-05 以前   
+    else if (($data = $('#js-initial-watch-data[data-api-data]').attr('data-api-data')) != null) {
+      _ = JSON.parse($data)
+    }
     return {
       title: _.video.title,
       ownerName: _.owner.nickname,
