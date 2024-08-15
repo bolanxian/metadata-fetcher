@@ -216,7 +216,7 @@ export const redirect = TARGET != 'client' ? async (info: ResolvedInfo) => {
   return headers.get('location')
 } : null!
 
-export const html = TARGET != 'client' ? async (info: ResolvedInfo) => {
+export const html = TARGET != 'client' ? async (info: { id: string, url: string }) => {
   const name = `${info.id}.html`
   let text = SSR || PAGES ? await getCache(name) : null
   if (text != null) {
@@ -234,7 +234,9 @@ export const html = TARGET != 'client' ? async (info: ResolvedInfo) => {
   return { text, $ }
 } : null!
 
-export const json = TARGET != 'client' ? async (info: ResolvedInfo) => {
+export const json = TARGET != 'client' ? async <T = any>(
+  info: { id: string, url: string }, transform?: (json: any) => Promise<T> | T
+): Promise<T> => {
   const name = `${info.id}.json`
   let text = SSR || PAGES ? await getCache(name) : null
   if (text != null) {
@@ -246,7 +248,8 @@ export const json = TARGET != 'client' ? async (info: ResolvedInfo) => {
     throw new TypeError(`Request failed with status code ${status}`)
   }
   text = await resp.text()
-  const data = JSON.parse(text)
-  SSR || PAGES ? await setCache(name, text) : null
+  let data = JSON.parse(text)
+  data = await transform?.(data) ?? data
+  SSR || PAGES ? await setCache(name, JSON.stringify(data)) : null
   return data
 } : null!

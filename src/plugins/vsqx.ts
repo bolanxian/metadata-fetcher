@@ -16,9 +16,11 @@ definePlugin({
   },
   async parse(info) {
     let { shortUrl, url } = info
-    const resp = await json({ ...info, url: `https://www.vsqx.top/api/app/project_msg/${slice(info.id, 2)}` })
-    if (!resp.success) { throw new TypeError(resp.message || 'Unknown Error') }
-    const { data } = resp
+    const data = await json({ id: info.id, url: `https://www.vsqx.top/api/app/project_msg/${slice(info.id, 2)}` }, $ => {
+      if (!$.success) { throw new TypeError($.message || 'Unknown Error') }
+      return $.data
+    })
+
     const id = data.b_av
     if (id != null) {
       const info = resolve(id)

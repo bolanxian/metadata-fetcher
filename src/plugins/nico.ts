@@ -1,11 +1,39 @@
 
-import { replace, htmlToText } from '../bind'
-import { definePlugin, defineRecursionPlugin, html } from '../plugin'
-import { fromHTML } from '../utils/find-json-object'
-const DATE_REG = /^(\d\d\d\d)[-/年](\d\d)[-/月](\d\d)[日]?\s+(\d\d:\d\d(?::\d\d)?)(?:\s+投稿)?$/
-const DATE_STR: any = '$1-$2-$3T$4+09:00'
+import { htmlToText } from '../bind'
+import type { ResolvedInfo, ParsedInfo } from '../plugin'
+import { definePlugin, defineRecursionPlugin, json } from '../plugin'
 
 const toShortUrl = (id: string) => `https://nico.ms/${id}`
+const getUser = async (userId: string) => {
+  const id = `nico!user!${userId}`
+  return await json({ id, url: `https://account.nicovideo.jp/api/public/v1/users.json?userIds=${userId}` }, $user => {
+    if ($user.meta.status !== 200) {
+      throw new TypeError(`Request json<${id}> failed.`, { cause: $user })
+    }
+    return $user.data[0]
+  })
+}
+const getWorks = async (id: string) => {
+  return await json({ id, url: `https://public-api.commons.nicovideo.jp/v1/works/${id}?with_meta=1` }, $work => {
+    if ($work.meta.status !== 200) {
+      throw new TypeError(`Request json<${id}> failed.`, { cause: $work })
+    }
+    return $work.data.node
+  })
+}
+const parse = async (info: ResolvedInfo): Promise<ParsedInfo> => {
+  const { id, shortUrl, url } = info
+  const { title, userId, updated, thumbnailURL, contentKind, description } = await getWorks(id)
+  const { nickname } = await getUser(userId)
+  return {
+    title,
+    ownerName: nickname,
+    publishDate: updated,
+    shortUrl, url,
+    thumbnailUrl: thumbnailURL,
+    description: contentKind !== 'commons' ? htmlToText(description) : description
+  }
+}
 
 definePlugin({
   include: [
@@ -15,28 +43,7 @@ definePlugin({
   resolve({ 1: id }) {
     return { id, rawId: id, shortUrl: toShortUrl(id), url: `https://www.nicovideo.jp/watch/${id}` }
   },
-  async parse(info) {
-    const { shortUrl, url } = info
-    const { $ } = await html(info)
-    let $data: string | undefined, _: any
-
-    if (($data = $('meta[name="server-response"]').attr('content')) != null) {
-      _ = JSON.parse($data).data.response
-    }
-    //2024-08-05 以前   
-    else if (($data = $('#js-initial-watch-data[data-api-data]').attr('data-api-data')) != null) {
-      _ = JSON.parse($data)
-    }
-    return {
-      title: _.video.title,
-      ownerName: _.owner.nickname,
-      publishDate: _.video.registeredAt,
-      shortUrl, url,
-      thumbnailUrl: _.video.thumbnail.url,
-      description: htmlToText(_.video.description),
-      _
-    }
-  }
+  parse
 })
 
 definePlugin({
@@ -47,18 +54,7 @@ definePlugin({
   resolve({ 1: id }) {
     return { id, rawId: id, shortUrl: toShortUrl(id), url: `https://seiga.nicovideo.jp/seiga/${id}` }
   },
-  async parse(info) {
-    const { shortUrl, url } = info
-    const { $ } = await html(info)
-    return {
-      title: $('#link_thumbnail_main img').attr('alt') || $('.lg_ttl_illust h1').text(),
-      ownerName: $('.lg_txt_illust strong').text(),
-      publishDate: replace(DATE_REG, $('.lg_txt_date').text(), DATE_STR),
-      shortUrl, url,
-      thumbnailUrl: $('meta[property="og:image"]').attr('content') ?? '',
-      description: $('.lg_txt_illust:nth-child(3)').text()
-    }
-  }
+  parse
 })
 
 definePlugin({
@@ -69,21 +65,7 @@ definePlugin({
   resolve({ 1: id }) {
     return { id, rawId: id, shortUrl: toShortUrl(id), url: `https://3d.nicovideo.jp/works/${id}` }
   },
-  async parse(info) {
-    const { shortUrl, url } = info
-    const { $ } = await html(info)
-    const _ = JSON.parse($('[data-state]').attr('data-state')!)
-    const { work } = _
-    return {
-      title: work.title,
-      ownerName: work.user.nickname,
-      publishDate: replace(DATE_REG, $('.work-info-meta-item:nth-child(1)').text(), DATE_STR),
-      shortUrl, url,
-      thumbnailUrl: new URL(work.thumbnail_url, url).href,
-      description: $('.work-info .description').text(),
-      _
-    }
-  }
+  parse
 })
 
 definePlugin({
@@ -94,21 +76,7 @@ definePlugin({
   resolve({ 1: id }) {
     return { id, rawId: id, shortUrl: toShortUrl(id), url: `https://commons.nicovideo.jp/works/${id}` }
   },
-  async parse(info) {
-    const { shortUrl, url } = info
-    const { $ } = await html(info)
-    const _ = fromHTML($, /^\s*var\s+app\s*=\s*(?={)/)
-    const { ncCommons } = _
-    return {
-      title: ncCommons.name,
-      ownerName: ncCommons.nickname,
-      publishDate: replace(DATE_REG, ncCommons.created, DATE_STR),
-      shortUrl, url,
-      thumbnailUrl: $('meta[property="og:image"]').attr('content') ?? '',
-      description: ncCommons.description,
-      _
-    }
-  }
+  parse
 })
 
 defineRecursionPlugin([
