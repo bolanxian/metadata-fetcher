@@ -3,14 +3,14 @@ import * as cheerio from 'cheerio'
 import { $string, hasOwn, on, off, match } from './bind'
 import { ready as ready1, getCache, setCache } from './cache'
 const { freeze } = Object
-const { trim, split } = $string
+const { trim, split, startsWith } = $string
 const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
 const PAGES = TARGET == 'pages'
 
 export interface Plugin {
   include: RegExp[]
-  resolve(m: RegExpMatchArray): ResolvedInfo | null
+  resolve(m: RegExpMatchArray, reg: RegExp): ResolvedInfo | null
   parse(info: ResolvedInfo): Promise<ParsedInfo | null>
 }
 export interface ResolvedInfo {
@@ -62,10 +62,14 @@ export const xparse: {
     for (const reg of plugin.include) {
       const m = match(reg, input)
       if (m != null) {
-        const info = plugin.resolve(m)
+        const info = plugin.resolve(m, reg)
         if (info != null) {
           yield info
-          yield plugin.parse(info)
+          if (startsWith(info.id, '@redirect!')) {
+            yield redirect(info.url).then(url => url != null ? parse(url) : null)
+          } else {
+            yield plugin.parse(info)
+          }
           return
         }
       }
@@ -86,7 +90,6 @@ export const render = (parsed: ParsedInfo, _template = template) => {
   return ret
 }
 export function* renderIds(args: string[], _template = template) {
-  const _ = getSeparator(_template)
   for (const arg of args) {
     const resolved = resolve(arg)
     if (resolved == null) {
@@ -94,7 +97,7 @@ export function* renderIds(args: string[], _template = template) {
       continue
     }
     const { rawId, url } = resolved
-    yield `${rawId}${_}${url}`
+    yield `[${rawId}]${url}`
   }
 }
 export async function* renderList(args: string[], _template = template, render = renderListDefaultRender) {
@@ -207,12 +210,9 @@ const jsonInit = {
   }
 }
 
-export const redirect = TARGET != 'client' ? async (info: ResolvedInfo) => {
-  const resp = await $fetch(info.url, { ...htmlInit, redirect: 'manual' })
-  const { status, headers } = resp
-  if (!(status >= 300 && status < 400)) {
-    throw new TypeError(`Request failed with status code ${status}`)
-  }
+export const redirect = TARGET != 'client' ? async (url: string) => {
+  const resp = await $fetch(url, { ...htmlInit, redirect: 'manual' })
+  const { headers } = resp
   return headers.get('location')
 } : null!
 

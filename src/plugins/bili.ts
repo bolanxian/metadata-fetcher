@@ -1,11 +1,12 @@
 
-import { $string, $array, test, dateToLocale, htmlToText } from '../bind'
-import { definePlugin, redirect, html } from '../plugin'
+import { $string, $array, hasOwn, test, dateToLocale, htmlToText } from '../bind'
+import { definePlugin, html } from '../plugin'
 import * as BV from '../utils/bv-encode'
 import { fromHTML } from '../utils/find-json-object'
-const { slice, indexOf } = $string, { join } = $array
-const REG_B23 = /^(?:https?:\/\/)?b23\.tv\/(\w+)/
+export { REG_AV, REG_BV } from '../utils/bv-encode'
+export const REG_B23 = /^(?:https?:\/\/)?b23\.tv\/(\w+)/
 const REG_INIT = /^\s*window\.__INITIAL_STATE__\s*=\s*(?={)/
+const { slice, indexOf } = $string, { join } = $array
 
 const toShortUrl = (id: string) => `https://b23.tv/${id}`
 const toUrl = (id: string) => `https://www.bilibili.com/video/${id}/`
@@ -15,12 +16,16 @@ export const main = definePlugin({
     BV.REG_AV, BV.REG_BV, REG_B23,
     /^(?:https?:\/\/)?(?:m|www)\.bilibili\.com\/video\/(\w+)/
   ],
-  resolve(m) {
+  resolve(m, reg) {
     let id = m[1]
     if (test(BV.REG_AV, id)) {
       id = `av${slice(id, 2)}`
     } else if (test(BV.REG_BV, id)) {
       id = BV.decode(id) ?? `BV1${slice(id, 3)}`
+    } else if (reg === REG_B23) {
+      const url = toShortUrl(id)
+      id = '@redirect!'
+      return { id, rawId: id, shortUrl: '', url }
     } else {
       return null
     }
@@ -50,9 +55,17 @@ export const main = definePlugin({
       }
     }
 
+    let ownerName = videoData.owner.name
+    if (hasOwn(videoData, 'staff')) {
+      ownerName = ''
+      for (const { name } of videoData.staff) {
+        ownerName += `${name}；`
+      }
+    }
+
     return {
       title: videoData.title,
-      ownerName: videoData.owner.name,
+      ownerName,
       publishDate: dateToLocale(videoData.pubdate * 1000),
       shortUrl, url, thumbnailUrl: thumb,
       keywords: join(keywords, ','),
@@ -113,25 +126,6 @@ definePlugin({
       thumbnailUrl: readInfo.banner_url,
       description: readInfo.summary,
       _
-    }
-  }
-})
-
-definePlugin({
-  include: [REG_B23],
-  resolve(m) {
-    const id = toShortUrl(m[1])
-    return { id, rawId: id, shortUrl: '', url: id }
-  },
-  async parse(info) {
-    const url = (await redirect(info)) ?? ''
-    return {
-      title: '',
-      ownerName: '',
-      publishDate: '',
-      shortUrl: url, url: url,
-      thumbnailUrl: '',
-      description: ''
     }
   }
 })

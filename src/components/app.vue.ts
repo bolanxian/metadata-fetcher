@@ -10,7 +10,7 @@ import {
 import type { ResolvedInfo, ParsedInfo } from '../plugin'
 import { nextTick, $string, split } from '../bind'
 import.meta.glob('../plugins/*', { eager: true })
-const { trim, slice, indexOf } = $string
+const { trim, slice, indexOf, startsWith } = $string
 const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
 const PAGES = TARGET == 'pages'
@@ -109,7 +109,8 @@ export default defineComponent({
             data.output += `${line}\n`
           }
         } else {
-          if ((data.parsed = await parse(data.input)!) != null) {
+          if (startsWith(id, '@redirect!')) { return }
+          if ((data.parsed = await parse(data.input)) != null) {
             data.output = _render(data.parsed, data.template)
           }
         }
@@ -129,6 +130,8 @@ export default defineComponent({
           params.append('id', arg)
         }
         location.href = `./${encodeURIComponent(id)}?${params}`
+      } else if (startsWith(id, '@redirect!')) {
+        location.href = `./.redirect?url=${encodeURIComponent(url)}`
       } else {
         location.href = `./${encodeURIComponent(id)}`
       }

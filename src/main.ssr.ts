@@ -16,7 +16,8 @@ export {
   resolve, parse, xparse,
   render, renderIds, renderList,
   renderListDefaultRender, renderListNameRender,
-  getSeparator, readTemplate, writeTemplate, ready
+  getSeparator, readTemplate, writeTemplate, ready,
+  redirect, html, json
 } from './plugin'
 
 const $ = cheerio.load('<container><title></title></container>', null, false)
