@@ -4,7 +4,7 @@ export const name = 'Metadata Fetcher'
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import * as cheerio from 'cheerio'
-import { $string, $array } from './bind'
+import { $string, $array, replace } from './bind'
 import { template } from './plugin'
 import App from './components/app.vue'
 import type { Store } from './components/app.vue'
@@ -15,27 +15,28 @@ export { bindCall, $string, $array } from './bind'
 export {
   resolve, parse, xparse,
   render, renderIds, renderList,
-  renderListDefaultRender, renderListNameRender,
+  renderListDefaultRender, renderListNameRender, renderListEscapeRender,
   getSeparator, readTemplate, writeTemplate, ready,
   redirect, html, json
 } from './plugin'
 
-const $ = cheerio.load('<container><title></title></container>', null, false)
-const _ = $(':root'), $meta = $('<meta>'), $title = $('title')
-const createInjecter = (node: cheerio.Cheerio<cheerio.AnyNode>, name: string, content = 'content') => {
-  return (record: Record<string, string | null | undefined>) => {
+type Creater = ($: cheerio.CheerioAPI, record: Record<string, string | null | undefined>) => Generator<cheerio.Cheerio<cheerio.AnyNode>, void, unknown>
+const createCreater = (name: string, content = 'content'): Creater => {
+  return function* ($, record) {
     for (const key of keys(record)) {
       const value = record[key]
       if (value == null) { continue }
-      _.append(node.clone().attr(name, key).attr(content, value))
+      yield $('<meta>').attr(name, key).attr(content, value)
     }
   }
 }
-const injectMetaName = createInjecter($meta, 'name')
-const injectMetaProperty = createInjecter($meta, 'property')
 
-export const renderToHtml = async (input: string, ids?: string[]) => {
-  const store: Store = { input: input, resolved: null, parsed: null, output: '', template }
+const createMetaName = createCreater('name')
+const createMetaItemprop = createCreater('itemprop')
+const createMetaProperty = createCreater('property')
+
+export const renderToHtml = async (html: string, input: string, ids?: string[]) => {
+  const store: Store = { input: input, resolved: null, data: null, parsed: null, output: '', template }
   if (input[0] === '.') {
     const args = join(ids!, ' ')
     store.input = `${slice(input, 1)} ${args}`
@@ -45,27 +46,36 @@ export const renderToHtml = async (input: string, ids?: string[]) => {
   const context = {}
   const appHTML = await renderToString(app, context)
 
+  const $ = cheerio.load(html)
+  const $title = $('title')
   if (store.parsed != null) {
     const { parsed } = store
-    const description = replaceAll(slice(parsed.description, 0, 32), '\n', ' ' as any)
+    let description = replace(/(?<=^.{32}).+$/su, parsed.description, '...' as any)
+    description = replaceAll(description, '\n', ' ' as any)
     $title.text(`${parsed.title} - ${name}`)
-    injectMetaName({
-      author: parsed.ownerName,
-      description,
-      keywords: parsed.keywords
-    })
-    injectMetaProperty({
-      'og:title': parsed.title,
-      'og:type': 'website',
-      'og:url': parsed.url,
-      'og:image': parsed.thumbnailUrl,
-      'og:description': description
-    })
-  } else {
-    $title.text(name)
+    $title.after(
+      '\n<!--[-->',
+      ...createMetaName($, {
+        title: parsed.title,
+        author: parsed.ownerName,
+        description,
+        keywords: parsed.keywords
+      }),
+      ...createMetaItemprop($, {
+        name: parsed.title,
+        description,
+        image: parsed.thumbnailUrl,
+      }),
+      ...createMetaProperty($, {
+        'og:title': parsed.title,
+        'og:type': 'website',
+        'og:url': parsed.url,
+        'og:image': parsed.thumbnailUrl,
+        'og:description': description
+      }),
+      '<!--]-->'
+    )
   }
-  const head = _.html()
-  $('meta').remove()
-
-  return { head, app: appHTML, store, context }
+  $('#store').text(replaceAll(JSON.stringify(store), '</script>', '<\\/script>' as any))
+  return replaceAll($.html(), '<!--#app-->', appHTML as any)
 }

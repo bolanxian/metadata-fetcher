@@ -1,10 +1,10 @@
 
 import { defineComponent, shallowRef as sr, shallowReactive, watch, createVNode as h, onMounted, onServerPrefetch } from 'vue'
-import type { Prop } from 'vue'
-import { Row, Col, Input, Button, Modal, Message } from 'view-ui-plus'
+import type { Component, Prop } from 'vue'
+import { Row, Col, Icon, Input, Button, Modal, Message } from 'view-ui-plus'
 import {
-  resolve, parse, xparse, render as _render,
-  renderIds, renderList, renderListNameRender,
+  resolve, xparse, render as _render,
+  renderIds, renderList, renderListNameRender, renderListEscapeRender,
   template as _template, defaultTemplate, writeTemplate, $fetch
 } from '../plugin'
 import type { ResolvedInfo, ParsedInfo } from '../plugin'
@@ -19,12 +19,14 @@ const S = /\s+/
 export interface Store {
   input: string
   resolved: ResolvedInfo | null
+  data: {} | null
   parsed: ParsedInfo | null
   output: string
   template: string
 }
 
 const renderName = (args: string[], _template?: string) => renderList(args, _template, renderListNameRender)
+const renderEscape = (args: string[], _template?: string) => renderList(args, _template, renderListEscapeRender)
 const getRender = (id: string): {
   (args: string[], _template?: string): Generator<string, void, unknown> | AsyncGenerator<string, void, unknown>
 } => {
@@ -32,6 +34,7 @@ const getRender = (id: string): {
     case '.id': return renderIds
     case '.list': return renderList
     case '.name': return renderName
+    case '.escape': return renderEscape
   }
   return null!
 }
@@ -48,33 +51,43 @@ export default defineComponent({
       nextTick($outputVm.value.resizeTextarea)
     }) : null
 
-    const store = PAGES ? null : props.store
-    const data = SSR ? store! : shallowReactive(store ?? {
+    let component: Component | undefined
+    const $store = PAGES ? null : props.store
+    const store = SSR ? $store! : shallowReactive($store ?? {
       input: '',
       resolved: null,
+      data: null,
       parsed: null,
       output: '',
       template: _template
     })
-    expose({ data })
 
-    SSR && data.input && onServerPrefetch(async () => {
-      if (data.resolved != null) {
-        data.output = ''
-        const { id, url } = data.resolved
-        for await (const line of getRender(id)(split(S, url), data.template)) {
-          data.output += `${line}\n`
+    SSR && store.input && onServerPrefetch(async () => {
+      if (store.resolved != null) {
+        store.output = ''
+        const { id, url } = store.resolved
+        for await (const line of getRender(id)(split(S, url), store.template)) {
+          store.output += `${line}\n`
         }
         return
       }
-      const [resolved, parsedPromise] = xparse(data.input)
+      const [plugin, resolved, redirected, dataPromise, parsedPromise] = xparse(store.input)
       if (resolved == null) { return }
-      data.resolved = resolved
-      if ((data.parsed = await parsedPromise!) != null) {
-        data.output = _render(data.parsed, data.template)
+      component = plugin!.component
+      store.resolved = redirected != null ? await redirected : resolved
+      store.data = await dataPromise!
+      if ((store.parsed = await parsedPromise!) != null) {
+        store.output = _render(store.parsed, store.template)
       }
     })
-    !SSR && watch(() => data.input, input => {
+    if (!SSR) {
+      const id = store.resolved?.id
+      if (id != null && id[0] !== '.') {
+        const [plugin] = xparse(id)
+        component = plugin?.component
+      }
+    }
+    !SSR && watch(() => store.input, input => {
       try {
         input = trim(input)
         let id: string | null = null
@@ -82,6 +95,7 @@ export default defineComponent({
           case 'id': case '!': id = '.id'; break
           case 'list': case '!!': id = '.list'; break
           case 'name': case '=': id = '.name'; break
+          case 'escape': case '==': id = '.escape'; break
         }
         if (id != null) {
           const [, ...args] = split(S, input)
@@ -89,41 +103,47 @@ export default defineComponent({
           for (const arg of args) {
             ret += `${resolve(arg)?.id ?? '!'} `
           }
-          data.resolved = { id, rawId: id, shortUrl: '', url: trim(ret) }
+          store.resolved = { id, rawId: id, shortUrl: '', url: trim(ret) }
         } else {
-          data.resolved = resolve(input)
+          store.resolved = resolve(input)
         }
       } catch (error) {
-        data.resolved = null
+        store.resolved = null
       }
     })
 
     const handleSearch = PAGES ? async () => {
-      if ($disabled.value || data.resolved == null) { return }
+      if ($disabled.value || store.resolved == null) { return }
       try {
         $loading.value = true
-        data.output = ''
-        const { id, url } = data.resolved
+        store.output = ''
+        const { id, url } = store.resolved
         if (id[0] === '.') {
-          for await (const line of getRender(id)(split(S, url), data.template)) {
-            data.output += `${line}\n`
+          for await (const line of getRender(id)(split(S, url), store.template)) {
+            store.output += `${line}\n`
           }
         } else {
           if (startsWith(id, '@redirect!')) { return }
-          if ((data.parsed = await parse(data.input)) != null) {
-            data.output = _render(data.parsed, data.template)
+          const [plugin, resolved, , dataPromise, parsedPromise] = xparse(store.input)
+          component = plugin!.component
+          store.resolved = resolved!
+          store.data = await dataPromise!
+          if ((store.parsed = await parsedPromise!) != null) {
+            store.output = _render(store.parsed, store.template)
           }
         }
       } catch (error) {
-        data.parsed = null
-        data.output = ''
+        component = void 0
+        store.data = null
+        store.parsed = null
+        store.output = ''
         throw error
       } finally {
         $loading.value = false
       }
     } : () => {
-      if ($disabled.value || data.resolved == null) { return }
-      const { id, url } = data.resolved
+      if ($disabled.value || store.resolved == null) { return }
+      const { id, url } = store.resolved
       if (id[0] === '.') {
         const params = new URLSearchParams()
         for (const arg of split(S, url)) {
@@ -141,9 +161,9 @@ export default defineComponent({
       (e.target as HTMLInputElement).select()
     }
     const handleTemplate = () => {
-      modalTemplate(data.template, _ => {
-        data.template = _
-        data.output = data.parsed != null ? _render(data.parsed, data.template) : ''
+      modalTemplate(store.template, _ => {
+        store.template = _
+        store.output = store.parsed != null ? _render(store.parsed, store.template) : ''
       })
     }
     return () => [
@@ -151,49 +171,52 @@ export default defineComponent({
         h('h2', null, ['\u3000'])
       ]),
       h(Row, {}, () => [
-        h(Col, { xs: 0, sm: 2, md: 4, lg: 6 }),
-        h(Col, { xs: 24, sm: 20, md: 16, lg: 12 }, () => [
+        h(Col, (store.data, component != null) ? { xs: 0, sm: 0, md: 1, lg: 2 } : { xs: 0, sm: 2, md: 4, lg: 6 }),
+        h(Col, component != null ? { xs: 24, sm: 12, md: 11, lg: 10 } : { xs: 24, sm: 20, md: 16, lg: 12 }, () => [
           h(Input, {
-            modelValue: data.input,
-            'onUpdate:modelValue'(value: string) { data.input = value },
+            modelValue: store.input,
+            'onUpdate:modelValue'(value: string) { store.input = value },
             onOnEnter: handleSearch
           }, {
             append: () => h(Button, {
-              icon: 'ios-search',
+              icon: 'md-arrow-forward',
               loading: $loading.value,
-              disabled: $disabled.value || data.resolved == null,
+              disabled: $disabled.value || store.resolved == null,
               onClick: handleSearch
             })
           }),
           h(Input, {
-            modelValue: data.resolved?.url ?? '',
+            modelValue: store.resolved?.url ?? '',
             onOnFocus: handleFocus,
             readonly: true
           }, {
-            prepend: () => h('span', null, ['解析为：']),
+            prepend: () => h(Icon, { type: 'md-link' }),
           }),
           h(Input, {
-            style: data.resolved?.shortUrl ? null : 'display:none',
-            modelValue: data.resolved?.shortUrl ?? '',
+            style: store.resolved?.shortUrl ? null : 'display:none',
+            modelValue: store.resolved?.shortUrl ?? '',
             onOnFocus: handleFocus,
             readonly: true
           }, {
-            prepend: () => h('span', null, ['短链接：']),
+            prepend: () => h(Icon, { type: 'md-share' }),
           }),
           !PAGES || $fetch != null ? h(Input, {
             ref: $outputVm,
             style: 'margin-top:20px',
             type: 'textarea',
             autosize: { minRows: 20, maxRows: 1 / 0 },
-            modelValue: data.output,
+            modelValue: store.output,
             readonly: true
           }) : null,
           !PAGES || $fetch != null ? h(Button, {
-            style: 'margin-top:20px',
+            style: 'margin:20px 0',
             disabled: $disabled.value,
             onClick: handleTemplate
           }, () => '编辑模板') : null
-        ])
+        ]),
+        component != null ? h(Col, { xs: 24, sm: 12, md: 11, lg: 10 }, () => [
+          h(component!, { data: store.data })
+        ]) : null
       ])
     ]
   }

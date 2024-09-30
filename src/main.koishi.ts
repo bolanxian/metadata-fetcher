@@ -3,7 +3,7 @@ export const name = 'metadata-fetcher'
 export const inject = ['database']
 
 import { Context, Field, Schema, Session, Tables, h } from 'koishi'
-import type { ResolvedInfo, ParsedInfo } from './plugin'
+import type { ResolvedInfo, ParsedInfo, Render } from './plugin'
 import { xparse, defaultTemplate, render, getSeparator, renderListNameRender, renderListDefaultRender } from './plugin'
 import.meta.glob('./plugins/*', { eager: true })
 
@@ -51,7 +51,7 @@ const request = async (ctx: Context, id: string, resolved: ResolvedInfo): Promis
   try {
     let [parsed]: ParsedInfo[] = await ctx.database.get(name, { id })
     if (parsed == null) {
-      const [, parsedPromise] = xparse(id)
+      const [, , , , parsedPromise] = xparse(id)
       parsed = (await parsedPromise)!
       if (parsed != null) {
         const { title, ownerName, publishDate, shortUrl, url, thumbnailUrl, keywords = '', description } = parsed
@@ -66,7 +66,7 @@ const request = async (ctx: Context, id: string, resolved: ResolvedInfo): Promis
   }
 }
 const parse = (ctx: Context, input: string): Promise<readonly [ResolvedInfo?, ParsedInfo?]> => {
-  const [resolved] = xparse(input)
+  const [, resolved] = xparse(input)
   if (resolved == null) { return empty }
   const { id } = resolved
   if (map.has(id)) { return map.get(id)! }
@@ -108,7 +108,7 @@ export const apply = (ctx: Context, config: Config) => {
   for (const [command, render] of [
     ['list', renderListDefaultRender],
     ['name', renderListNameRender]
-  ] as [string, typeof renderListDefaultRender][]) {
+  ] as [string, Render][]) {
     ctx.command(`meta.${command} [...args]`).action(async ({ session }, ...args) => {
       let ret = ''
       for await (const arg of renderList(ctx, config.template, session!, args, render)) { ret += `${arg}\n` }

@@ -1,6 +1,9 @@
 
+
+import { $string, $array, hasOwn, replace } from '../bind'
 import { definePlugin, html } from '../plugin'
 import { fromHTML } from '../utils/find-json-object'
+const { slice, indexOf, } = $string, { find, map, join } = $array
 
 const name = 'youtube'
 export default definePlugin({
@@ -18,19 +21,38 @@ export default definePlugin({
       url: `https://www.${name}.com/watch?v=${m1}`
     }
   },
-  async parse(info) {
-    const { shortUrl, url } = info
+  async load(info) {
     const { $ } = await html(info)
-    const _ = fromHTML($, /^\s*var\s+ytInitialPlayerResponse\s*=\s*(?={)/)
-    const init = _.microformat.playerMicroformatRenderer
+    return fromHTML($, /^\s*var\s+ytInitialData\s*=\s*(?={)/)
+  },
+  async parse(data, info) {
+    const { id, shortUrl, url } = info
+
+    const videoDesc = ((contents) => {
+      return map([
+        'videoPrimaryInfoRenderer',
+        'videoSecondaryInfoRenderer'
+      ], name => find(contents, $ => hasOwn($, name))[name]) as any[]
+    })(data.contents.twoColumnWatchNextResults.results.results.contents)
+
+    const description = (({ content, commandRuns }) => {
+      return replace(RegExp(
+        join(map(commandRuns, $ => `(?<=^.{${+$.startIndex}}).{${+$.length}}`), '|'), 'sg'
+      ), content, (_, index) => {
+        const command = find(commandRuns, $ => $.startIndex === index)
+        const ep = command.onTap.innertubeCommand.urlEndpoint
+        if (ep == null) { return _ }
+        return new URL(ep.url).searchParams.get('q') ?? _
+      })
+    })(videoDesc[1].attributedDescription)
+
     return {
-      title: init.title.simpleText,
-      ownerName: init.ownerChannelName,
-      publishDate: init.publishDate,
+      title: videoDesc[0].title.runs[0].text,
+      ownerName: videoDesc[1].owner.videoOwnerRenderer.title.runs[0].text,
+      publishDate: videoDesc[0].dateText.simpleText,
       shortUrl, url,
-      thumbnailUrl: $('meta[property="og:image"]').attr('content') ?? '',
-      description: init.description?.simpleText ?? '',
-      _
+      thumbnailUrl: `https://i.ytimg.com/vi/${slice(id, indexOf(id, '!') + 1)}/hqdefault.jpg`,
+      description
     }
   }
 })

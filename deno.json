@@ -12,6 +12,7 @@
     "id": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./lib/main.js id",
     "list": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./lib/main.js list",
     "name": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./lib/main.js name",
+    "escape": "deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ ./lib/main.js escape",
     "test": "deno test --allow-read=. --allow-write=./__cache__ ./lib/main.test.js --",
     "bench": "deno bench --allow-read=. --allow-write=./__cache__ ./lib/main.js --"
   }

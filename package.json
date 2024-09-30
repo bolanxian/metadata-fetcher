@@ -1,7 +1,7 @@
 {
   "name": "metadata-fetcher",
   "private": true,
-  "version": "0.0.6",
+  "version": "0.0.8",
   "type": "module",
   "scripts": {
     "start": "start deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ --allow-run=explorer --unstable-ffi --allow-ffi ./lib/main.js start",
@@ -9,10 +9,11 @@
     "build": "vue-tsc --noEmit && npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:server": "vite build --ssr main.ssr.ts --outDir ../dist",
-    "extra": "npm run extra:tray && npm run extra:console && npm run extra:move",
+    "extra": "npm run extra:tray && npm run extra:move:tray",
     "extra:tray": "cd tray && cargo build --release",
     "extra:console": "cd tray && zig build-lib -dynamic -O ReleaseSafe ./src/console.zig -femit-bin=./target/release/console.dll",
-    "extra:move": "move /Y tray\\target\\release\\tray.dll dist\\ && move /Y tray\\target\\release\\console.dll dist\\",
+    "extra:move:tray": "move /Y tray\\target\\release\\tray.dll dist\\",
+    "extra:move:console": "move /Y tray\\target\\release\\console.dll dist\\",
     "extra:icon": "curl https://www.bilibili.com/favicon.ico -o ./dist/favicon.ico",
     "tar": "tar cf metadata-fetcher.tar package.json deno.json *.md run.bat lib/* dist/*",
     "7z": "7z a metadata-fetcher.7z -m0=LZMA2 -mx=9 -mhc=off -ms=on -mqs=on -- package.json deno.json *.md run.bat lib/* dist/*"

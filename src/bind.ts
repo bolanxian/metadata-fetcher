@@ -67,15 +67,26 @@ const EventTargetProto = EventTarget.prototype
 export const on = bindCall(EventTargetProto.addEventListener)
 export const off = bindCall(EventTargetProto.removeEventListener)
 
-const REG_DATE = /^\w+\s+\w+\s+(\d\d)\s+(\d\d\d\d)\s+(\d\d:\d\d)(?::00|(:\d\d))?\s+(?:GMT|UTC)([-+]\d\d)(\d\d)/
-const { getMonth, toString } = Date.prototype, { padStart } = $string
-export const dateToLocale = (date: string | number | Date | null | undefined): string => {
+export const getAsync = async<
+  T extends { [_ in K]: any }, K extends number | string | symbol
+>($: Promise<T>, key: K): Promise<Awaited<T[K]>> => (await $)[key]
+
+const REG_DATE = /^\w+\s+\w+\s+(\d\d)\s+(\d{4,6})\s+(\d\d):(\d\d)(?::00|(:\d\d))?\s+(?:GMT|UTC)([-+]\d\d)(\d\d)/
+const { getMonth, getDate, getHours, setDate, toString } = Date.prototype, { padStart } = $string
+export const dateToLocale = (date: string | number | Date | null | undefined, hour30 = false): string => {
   if (date == null) { return '' }
   date = new Date(date)
+  let hours = call(getHours, date)
+  if (hour30 && hours < 6) {
+    call(setDate, date, call(getDate, date) - 1)
+    hours += 24
+  }
   const m = match(REG_DATE, call(toString, date))
   if (m == null) { return '' }
+  const year = m[2].length > 4 ? `+${padStart(m[2], 6, '0')}` : m[2]
   const month = padStart((call(getMonth, date) + 1) as any, 2, '0')
-  return `${m[2]}-${month}-${m[1]}T${m[3]}${m[4] ?? ''}${m[5]}:${m[6]}`
+  hours = padStart(hours as any, 2, '0') as any
+  return `${year}-${month}-${m[1]}T${hours}:${m[4]}${m[5] ?? ''}${m[6]}:${m[7]}`
 }
 
 export const htmlToText = import.meta.env.TARGET != 'client' ? (html: string, pre = false) => {

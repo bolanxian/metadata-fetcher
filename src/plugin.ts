@@ -1,17 +1,20 @@
 
+import type { Component } from 'vue'
 import * as cheerio from 'cheerio'
-import { $string, hasOwn, on, off, match } from './bind'
+import { $string, hasOwn, on, off, match, replace, getAsync } from './bind'
 import { ready as ready1, getCache, setCache } from './cache'
-const { freeze } = Object
-const { trim, split, startsWith } = $string
+const { freeze } = Object, { fromCharCode } = String
+const { trim, split, startsWith, charCodeAt } = $string
 const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
 const PAGES = TARGET == 'pages'
 
-export interface Plugin {
+export interface Plugin<T extends {}> {
   include: RegExp[]
   resolve(m: RegExpMatchArray, reg: RegExp): ResolvedInfo | null
-  parse(info: ResolvedInfo): Promise<ParsedInfo | null>
+  load(info: ResolvedInfo): Promise<T | null>
+  parse(data: T, info: ResolvedInfo): Promise<ParsedInfo | null>
+  component?: Component<{ data: T }>
 }
 export interface ResolvedInfo {
   id: string
@@ -30,32 +33,52 @@ export interface ParsedInfo {
   description: string
 }
 
-const plugins: Plugin[] = []
-export const definePlugin = (plugin: Plugin) => {
+export const plugins: Plugin<{}>[] = []
+export const definePlugin = <T extends {}>(plugin: Plugin<T>) => {
   freeze(plugin)
   freeze(plugin.include)
-  plugins[plugins.length] = plugin
+  plugins[plugins.length] = plugin as any
   return plugin
 }
 
 const recursionResolve = (m: RegExpMatchArray) => resolve(m[1])
-const recursionParse = ({ id }: ResolvedInfo) => parse(id)!
+const recursionLoad = () => null!
+const recursionParse = (_: any, { id }: ResolvedInfo) => parse(id)!
 export const defineRecursionPlugin = (include: RegExp[]) => {
   return definePlugin({
-    include, resolve: recursionResolve, parse: recursionParse
+    include, resolve: recursionResolve, load: recursionLoad, parse: recursionParse
   })
 }
 
 export const resolve = (input: string): ResolvedInfo | null => {
-  const [_] = xparse(input)
-  return _ ?? null
-}
-export const parse = (input: string): Promise<ParsedInfo | null> | null => {
   const [, _] = xparse(input)
   return _ ?? null
 }
+export const parse = (input: string): Promise<ParsedInfo | null> | null => {
+  const [, , , , _] = xparse(input)
+  return _ ?? null
+}
+
+const redirectParse = async (_url: string): Promise<[
+  ResolvedInfo | undefined,
+  Promise<{} | null> | undefined,
+  Promise<ParsedInfo | null> | undefined
+]> => {
+  const url = await redirect(_url)
+  if (url != null) {
+    const [, resolved, redirected, data, parsed] = xparse(url)
+    if (resolved != null) {
+      return [redirected != null ? await redirected : resolved, data, parsed]
+    }
+  }
+  return [void 0, void 0, void 0]
+}
+const defaultParse = async (plugin: Plugin<{}>, dataPromise: Promise<{} | null>, info: ResolvedInfo): Promise<ParsedInfo | null> => {
+  const data = await dataPromise
+  return data != null ? plugin.parse(data, info) : null
+}
 export const xparse: {
-  (input: string): [] | [ResolvedInfo, Promise<ParsedInfo | null>]
+  (input: string): [Plugin<{}>?, ResolvedInfo?, Promise<ResolvedInfo>?, Promise<{} | null>?, Promise<ParsedInfo | null>?]
 } = function* (input: string) {
   input = trim(input)
   for (const plugin of plugins) {
@@ -64,11 +87,19 @@ export const xparse: {
       if (m != null) {
         const info = plugin.resolve(m, reg)
         if (info != null) {
+          freeze(info)
+          yield plugin
           yield info
           if (startsWith(info.id, '@redirect!')) {
-            yield redirect(info.url).then(url => url != null ? parse(url) : null)
+            const promise = redirectParse(info.url)
+            yield getAsync(promise, 0)
+            yield getAsync(promise, 1)
+            yield getAsync(promise, 2)
           } else {
-            yield plugin.parse(info)
+            yield void 0
+            const data = plugin.load(info)
+            yield data
+            yield defaultParse(plugin, data, info)
           }
           return
         }
@@ -100,10 +131,11 @@ export function* renderIds(args: string[], _template = template) {
     yield `[${rawId}]${url}`
   }
 }
-export async function* renderList(args: string[], _template = template, render = renderListDefaultRender) {
+export type Render = (...args: [string, ResolvedInfo, ParsedInfo]) => string
+export async function* renderList(args: string[], _template = template, render: Render = renderListDefaultRender) {
   const _ = getSeparator(_template)
   for (const arg of args) {
-    const [resolved, parsedPromise] = xparse(arg)
+    const [, resolved, redirected, , parsedPromise] = xparse(arg)
     if (resolved == null) {
       yield `Unknown Input : ${arg}`
       continue
@@ -113,18 +145,24 @@ export async function* renderList(args: string[], _template = template, render =
       yield `Not Found : ${resolved.id}`
       continue
     }
-    yield render(_, resolved, parsed)
+    yield render(_, redirected != null ? await redirected : resolved, parsed)
   }
 }
-export const renderListDefaultRender = (
-  _: string, { rawId }: ResolvedInfo, { title, ownerName }: ParsedInfo
-) => `${title}${_}${rawId}${_}${ownerName}`
-export const renderListNameRender = (
-  _: string, { id }: ResolvedInfo, { title, ownerName }: ParsedInfo
+export const renderListDefaultRender: Render = (
+  _, { rawId: id }, { title, ownerName }
+) => `${title}${_}${id}${_}${ownerName}`
+export const renderListNameRender: Render = (
+  _, { id }, { title, ownerName }
 ) => `${ownerName ? `[${ownerName}]` : ''}[${id}]${title}`
+const ESCAPE_REG = /(?<=^(?=av)|^a(?=v)|^(?=BV)|^B(?=V))./g
+const ESCAPE_FUNC = ($0: string) => fromCharCode(charCodeAt($0, 0) + 0xFEE0)
+export const renderListEscapeRender: Render = (
+  _, { rawId: id }, { title }
+) => `［${replace(ESCAPE_REG, id, ESCAPE_FUNC)}］${title}`
 
+const getSeparatorReg = /^\s*separator=(.*?)\s*$/m
 export const getSeparator = (_template = template) => {
-  return match(/^\s*separator=(.*?)\s*$/m, _template)?.[1] ?? '\uFF0F'
+  return match(getSeparatorReg, _template)?.[1] ?? '\uFF0F'
 }
 export const defaultTemplate = `\
 separator=\uFF0F
@@ -216,40 +254,44 @@ export const redirect = TARGET != 'client' ? async (url: string) => {
   return headers.get('location')
 } : null!
 
-export const html = TARGET != 'client' ? async (info: { id: string, url: string }) => {
-  const name = `${info.id}.html`
-  let text = SSR || PAGES ? await getCache(name) : null
+export const html = TARGET != 'client' ? async ({ id, url }: { id?: string, url: string }) => {
+  const name = id != null ? `${id}.html` : null
+  let text = SSR || PAGES ? name != null ? await getCache(name) : null : null
   if (text != null) {
-    const $ = cheerio.load(text, { baseURI: info.url })
+    const $ = cheerio.load(text, { baseURI: url })
     return { text, $ }
   }
-  const resp = await $fetch(info.url, htmlInit)
+  const resp = await $fetch(url, htmlInit)
   const { status } = resp
   if (status !== 200) {
     throw new TypeError(`Request failed with status code ${status}`)
   }
   text = await resp.text()
-  const $ = cheerio.load(text, { baseURI: info.url })
-  SSR || PAGES ? await setCache(name, text) : null
+  const $ = cheerio.load(text, { baseURI: url })
+  SSR || PAGES ? name != null ? await setCache(name, text) : null : null
   return { text, $ }
 } : null!
 
 export const json = TARGET != 'client' ? async <T = any>(
-  info: { id: string, url: string }, transform?: (json: any) => Promise<T> | T
+  { id, url }: { id: string, url: string }, transform?: (json: any) => Promise<T> | T
 ): Promise<T> => {
-  const name = `${info.id}.json`
-  let text = SSR || PAGES ? await getCache(name) : null
+  const name = id != null ? `${id}.json` : null
+  let text = SSR || PAGES ? name != null ? await getCache(name) : null : null
   if (text != null) {
     return JSON.parse(text)
   }
-  const resp = await $fetch(info.url, jsonInit)
+  const resp = await $fetch(url, jsonInit)
   const { status } = resp
   if (status !== 200) {
     throw new TypeError(`Request failed with status code ${status}`)
   }
   text = await resp.text()
   let data = JSON.parse(text)
-  data = await transform?.(data) ?? data
-  SSR || PAGES ? await setCache(name, JSON.stringify(data)) : null
+  if (transform != null) {
+    data = await transform(data) ?? { __RAW_DATA__: data }
+    SSR || PAGES ? name != null ? await setCache(name, JSON.stringify(data)) : null : null
+  } else {
+    SSR || PAGES ? name != null ? await setCache(name, text) : null : null
+  }
   return data
 } : null!

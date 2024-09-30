@@ -13,9 +13,12 @@ definePlugin({
     const url = `https://www.lyrical-nonsense.com/global/lyrics/${m[1]}/${m[2]}/`
     return { id, rawId: id, shortUrl: '', url }
   },
-  async parse(info) {
-    const { url } = info
+  async load(info) {
     const { $ } = await html(info)
+    return { $ }
+  },
+  async parse(data, info) {
+    const { $ } = data, { url } = info
     let desc = ''
     for (const el of Array.from($('.olyrictext')).reverse()) {
       desc += `\n${htmlToText(trim($(el).html()!))}`

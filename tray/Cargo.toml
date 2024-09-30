@@ -9,3 +9,4 @@ crate-type = ["cdylib"]
 [dependencies]
 nwg = {version = "^1.0.13", package = "native-windows-gui"}
 nwd = {version = "^1.0.5", package = "native-windows-derive"}
+winapi = { version = "^0.3", features = ["wincon", "winuser"] }
