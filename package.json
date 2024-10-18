@@ -4,26 +4,29 @@
   "version": "0.0.8",
   "type": "module",
   "scripts": {
-    "start": "start deno run --quiet --allow-net --allow-read=. --allow-write=./__cache__ --allow-run=explorer --unstable-ffi --allow-ffi ./lib/main.js start",
+    "start": "start deno run --quiet -S=cpus,systemMemoryInfo,osRelease -E -N -R=. -W=./__cache__ --allow-run=explorer --unstable-ffi --allow-ffi ./lib/main.js start",
+    "serve": " deno run --quiet -S=cpus,systemMemoryInfo,osRelease -E -N -R=. -W=./__cache__ --allow-run=explorer ./lib/main.js serve",
+    "serve:bun": "bun run ./lib/main.js serve",
     "dev": "vite",
     "build": "vue-tsc --noEmit && npm run build:client && npm run build:server",
     "build:client": "vite build",
     "build:server": "vite build --ssr main.ssr.ts --outDir ../dist",
     "extra": "npm run extra:tray && npm run extra:move:tray",
     "extra:tray": "cd tray && cargo build --release",
-    "extra:console": "cd tray && zig build-lib -dynamic -O ReleaseSafe ./src/console.zig -femit-bin=./target/release/console.dll",
     "extra:move:tray": "move /Y tray\\target\\release\\tray.dll dist\\",
-    "extra:move:console": "move /Y tray\\target\\release\\console.dll dist\\",
     "extra:icon": "curl https://www.bilibili.com/favicon.ico -o ./dist/favicon.ico",
-    "tar": "tar cf metadata-fetcher.tar package.json deno.json *.md run.bat lib/* dist/*",
-    "7z": "7z a metadata-fetcher.7z -m0=LZMA2 -mx=9 -mhc=off -ms=on -mqs=on -- package.json deno.json *.md run.bat lib/* dist/*"
+    "tar": "tar cf metadata-fetcher.tar deno.json *.md run.bat lib/* dist/*",
+    "7z": "7z a metadata-fetcher.7z -m0=LZMA2 -mx=9 -mhc=off -ms=on -mqs=on -- deno.json *.md run.bat lib/* dist/*"
   },
   "dependencies": {
     "cheerio": "^1.0.0-rc.12",
+    "temporal-polyfill": "^0.2.5",
     "view-ui-plus": "^1.3.16",
     "vue": "^3.4.18"
   },
   "devDependencies": {
+    "@types/bun": "^1.1.13",
+    "@types/deno": "^2.0.0",
     "@types/node": "^20.12.5",
     "@vitejs/plugin-vue": "^4.6.2",
     "koishi": "^4.17.9",

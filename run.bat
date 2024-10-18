@@ -5,8 +5,8 @@ cd /d "%~dp0"
 
 where deno /q
 if not %ERRORLEVEL% == 0 (
-  set "EXEC_DENO=.\deno\deno.exe"
-  set "DENO_DIR=%~dp0deno\"
+  set "EXEC_DENO=%cd%\deno\deno.exe"
+  set "DENO_DIR=%cd%\deno\"
   if not exist ".\deno\deno.exe" (
     if not exist ".\deno" ( mkdir ".\deno" )
     curl -Lo "./deno/deno.zip" "https://github.com/denoland/deno/releases/latest/download/deno-%TARGET%.zip"
@@ -20,4 +20,4 @@ if not exist ".\__cache__" (
   fsutil.exe file setCaseSensitiveInfo ".\__cache__" enable
 )
 
-start %EXEC_DENO% run --quiet --allow-net --allow-read=. --allow-write=./__cache__ --allow-run=explorer --unstable-ffi --allow-ffi ./lib/main.js start
+start "Metadata Fetcher" "%EXEC_DENO%" run --quiet -E=NODE_ENV -N -R=. -W=./__cache__ --allow-run=explorer --unstable-ffi --allow-ffi ./lib/main.js start
