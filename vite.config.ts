@@ -1,39 +1,48 @@
 
 import process from 'node:process'
 import type { Plugin } from 'vite'
-import { defineConfig, createFilter } from 'vite'
+import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
-const externalAssets = (() => {
+const externalAssets = (): Plugin => {
   const reg = /\/(ionicons)-[-\w]{8}\.((?!woff2)\S+)$/
   return {
-    renderBuiltUrl(fileName, { type, hostId, hostType }) {
-      if (hostType === 'css') {
-        const m = fileName.match(reg)
-        if (m != null) { return `data:text/plain,${m[1]}.${m[2]}` }
-      }
-      return { relative: true }
-    },
-    plugin: {
-      name: 'external-assets',
-      generateBundle(options, bundle) {
-        for (const fileName of Object.keys(bundle)) {
-          const m = fileName.match(reg)
-          if (m != null) { delete bundle[fileName] }
+    name: 'external-assets',
+    apply: 'build',
+    config(config, env) {
+      return {
+        experimental: {
+          renderBuiltUrl(fileName, { type, hostId, hostType }) {
+            if (type === 'asset' && hostType === 'css') {
+              const m = fileName.match(reg)
+              if (m != null) { return 'about:invalid' }
+            }
+            return { relative: true }
+          }
         }
+      }
+    },
+    generateBundle(options, bundle) {
+      for (const fileName of Object.keys(bundle)) {
+        const m = fileName.match(reg)
+        if (m != null) { delete bundle[fileName] }
       }
     }
   }
-})()
+}
 
 const buildTarget = (): Plugin => {
   const map = new Map()
+  for (const name of ['countup.js', 'dayjs', 'numeral']) {
+    map.set(name, 'export default null')
+  }
+  let target
   return {
     name: 'target',
     enforce: 'pre',
     apply: 'build',
     config(config, { isSsrBuild }) {
-      const target = !isSsrBuild ? process.env.VITE_TARGET ?? 'client' : 'server'
+      target = !isSsrBuild ? process.env.VITE_TARGET ?? 'client' : 'server'
       let outDir = config.build?.outDir
       let assetsDir = '.assets'
       if (target == 'client') {
@@ -50,7 +59,7 @@ const buildTarget = (): Plugin => {
         },
         build: {
           rollupOptions: {
-            external: target == 'koishi' ? ['koishi', 'cheerio'] : [],
+            external: target == 'koishi' ? ['koishi', 'cheerio', 'temporal-polyfill'] : [],
           },
           lib: target == 'koishi' ? {
             entry: 'main.koishi.ts',
@@ -67,7 +76,12 @@ const buildTarget = (): Plugin => {
     },
     load(id) {
       return map.get(id)
-    }
+    },
+    transform(code, id, options) {
+      if (target === 'koishi' && id.endsWith('.vue.ts')) {
+        return `${code.slice(0, code.indexOf('/*<component>*/'))}export default null`
+      }
+    },
   }
 }
 
@@ -81,7 +95,6 @@ export default defineConfig({
   resolve: {
     extensions: ['.js', '.ts', '.json', '.vue']
   },
-  experimental: { renderBuiltUrl: externalAssets.renderBuiltUrl },
   build: {
     outDir: '../dist',
     emptyOutDir: false,
@@ -100,7 +113,8 @@ export default defineConfig({
   ssr: { noExternal: /^(?!node:)/ },
   plugins: [
     vue(),
-    externalAssets.plugin,
+    externalAssets(),
+    buildTarget(),
     {
       name: 'view-ui-plus',
       enforce: 'pre',
@@ -116,7 +130,6 @@ import pkg from 'view-ui-plus/package.json'
 export const version = pkg.version`
         }
       }
-    },
-    buildTarget()
+    }
   ]
 })

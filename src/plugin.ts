@@ -1,7 +1,7 @@
 
 import type { Component } from 'vue'
 import * as cheerio from 'cheerio'
-import { $string, hasOwn, on, off, match, replace, getAsync } from './bind'
+import { noop, $string, hasOwn, $then as then, match, replace, on, off, getAsync } from './bind'
 import { ready as ready1, getCache, setCache } from './cache'
 const { freeze } = Object, { fromCharCode } = String
 const { trim, split, startsWith, charCodeAt } = $string
@@ -96,10 +96,12 @@ export const xparse: {
             yield getAsync(promise, 1)
             yield getAsync(promise, 2)
           } else {
+            let data, parsed
             yield void 0
-            const data = plugin.load(info)
+            then(data = plugin.load(info), null, noop)
             yield data
-            yield defaultParse(plugin, data, info)
+            then(parsed = defaultParse(plugin, data, info), null, noop)
+            yield parsed
           }
           return
         }
@@ -231,16 +233,17 @@ const _init: RequestInit = {
   headers: _headers,
   method: 'GET',
   referrerPolicy: 'no-referrer',
+  redirect: 'manual',
   credentials: 'omit'
 }
-const htmlInit = {
+export const htmlInit = {
   ..._init,
   headers: {
     ..._headers,
     'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8'
   }
 }
-const jsonInit = {
+export const jsonInit = {
   ..._init,
   headers: {
     ..._headers,
@@ -249,7 +252,7 @@ const jsonInit = {
 }
 
 export const redirect = TARGET != 'client' ? async (url: string) => {
-  const resp = await $fetch(url, { ...htmlInit, redirect: 'manual' })
+  const resp = await $fetch(url, htmlInit)
   const { headers } = resp
   return headers.get('location')
 } : null!

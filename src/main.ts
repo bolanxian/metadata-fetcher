@@ -1,7 +1,9 @@
 
+import { Temporal } from 'temporal-polyfill'
 import { createApp, createSSRApp } from 'vue'
 import App from './components/app.vue'
 import { ready } from './plugin'
+import { assign } from './bind'
 
 let store
 if (import.meta.env.TARGET == 'pages') {
@@ -15,4 +17,4 @@ if (import.meta.env.TARGET == 'pages') {
 }
 const app = store == null ? createApp(App) : createSSRApp(App, { store })
 const vm = app.mount('#app')
-  ; (window as any).vm = vm
+assign(window, { vm, Temporal })

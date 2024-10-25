@@ -49,7 +49,7 @@ export const $number = createBinder(Number.prototype)
 export const $string = createBinder(String.prototype)
 export const $array = createBinder(Array.prototype)
 
-export const { fromEntries, getOwnPropertyDescriptor: getPropDesc, freeze } = Object
+export const { assign, fromEntries, getOwnPropertyDescriptor: getPropDesc, freeze } = Object
 const ObjectProto = Object.prototype
 export const hasOwn = Object.hasOwn ?? bindCall(ObjectProto.hasOwnProperty)
 export const getTypeString = bindCall(ObjectProto.toString)
@@ -58,6 +58,7 @@ export const isPlainObject = (o: any) => {
   return o === '[object Object]' || o === '[object Array]'
 }
 
+export const $then = bindCall(Promise.prototype.then)
 export const test = bindCall(RegExp.prototype.test)
 export const match = bindCall(RegExp.prototype[Symbol.match])
 export const replace = bindCall(RegExp.prototype[Symbol.replace])
@@ -71,23 +72,6 @@ export const getAsync = async<
   T extends { [_ in K]: any }, K extends number | string | symbol
 >($: Promise<T>, key: K): Promise<Awaited<T[K]>> => (await $)[key]
 
-const REG_DATE = /^\w+\s+\w+\s+(\d\d)\s+(\d{4,6})\s+(\d\d):(\d\d)(?::00|(:\d\d))?\s+(?:GMT|UTC)([-+]\d\d)(\d\d)/
-const { getMonth, getDate, getHours, setDate, toString } = Date.prototype, { padStart } = $string
-export const dateToLocale = (date: string | number | Date | null | undefined, hour30 = false): string => {
-  if (date == null) { return '' }
-  date = new Date(date)
-  let hours = call(getHours, date)
-  if (hour30 && hours < 6) {
-    call(setDate, date, call(getDate, date) - 1)
-    hours += 24
-  }
-  const m = match(REG_DATE, call(toString, date))
-  if (m == null) { return '' }
-  const year = m[2].length > 4 ? `+${padStart(m[2], 6, '0')}` : m[2]
-  const month = padStart((call(getMonth, date) + 1) as any, 2, '0')
-  hours = padStart(hours as any, 2, '0') as any
-  return `${year}-${month}-${m[1]}T${hours}:${m[4]}${m[5] ?? ''}${m[6]}:${m[7]}`
-}
 
 export const htmlToText = import.meta.env.TARGET != 'client' ? (html: string, pre = false) => {
   if (!pre) { html = replace(/\r?\n/g, html, '' as any) }
