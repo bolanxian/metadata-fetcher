@@ -1,5 +1,7 @@
 
 export const name = 'Metadata Fetcher'
+export * from './bind'
+export * from './plugin'
 
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
@@ -10,15 +12,6 @@ import App from './components/app.vue'
 import type { Store } from './components/app.vue'
 const { keys } = Object
 const { join } = $array, { slice, replaceAll } = $string
-
-export { bindCall, $string, $array } from './bind'
-export {
-  resolve, parse, xparse,
-  render, renderIds, renderList,
-  renderListDefaultRender, renderListNameRender, renderListEscapeRender,
-  getSeparator, readTemplate, writeTemplate, ready,
-  redirect, html, json
-} from './plugin'
 
 type Creater = ($: cheerio.CheerioAPI, record: Record<string, string | null | undefined>) => Generator<cheerio.Cheerio<cheerio.AnyNode>, void, unknown>
 const createCreater = (name: string, content = 'content'): Creater => {

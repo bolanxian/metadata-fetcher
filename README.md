@@ -6,7 +6,8 @@
 npm run build
 
 : 运行 WebUI
-deno task serve
+npm run serve
+npm run serve:bun
 
 : 获取元数据
 deno task fetch ...
