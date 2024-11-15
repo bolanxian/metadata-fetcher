@@ -4,7 +4,7 @@
   "version": "0.0.8",
   "type": "module",
   "scripts": {
-    "start": "start deno run --quiet -S=cpus,systemMemoryInfo,osRelease -E -N -R=. -W=./__cache__ --allow-run=explorer --unstable-ffi --allow-ffi ./lib/main.js start",
+    "start": "start deno run --quiet --no-prompt --no-remote -S=cpus,systemMemoryInfo,osRelease -E -N -R -W=./__cache__ --allow-run=explorer --unstable-ffi --allow-ffi ./lib/main.js start",
     "serve": " deno run --quiet -S=cpus,systemMemoryInfo,osRelease -E -N -R=. -W=./__cache__ --allow-run=explorer ./lib/main.js serve",
     "serve:bun": "bun run ./lib/main.js serve",
     "dev": "vite",
