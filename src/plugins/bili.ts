@@ -188,3 +188,32 @@ definePlugin({
     }
   }
 })
+definePlugin({
+  include: [
+    /^bili!dyn!(\d{18,})/,
+    /^(?:https?:\/\/)?t\.bilibili\.com\/(\d{18,})/,
+    /^(?:https?:\/\/)?(?:m|www)\.bilibili\.com\/opus\/(\d{18,})/
+  ],
+  resolve(m) {
+    const id = `bili!dyn!${m[1]}`
+    return {
+      id, rawId: m[1],
+      shortUrl: `https://t.bilibili.com/${m[1]}`,
+      url: `https://www.bilibili.com/opus/${m[1]}`
+    }
+  },
+  async load({ id, rawId }) {
+    return await json(id, async (id) => {
+      const data = await (await $fetch(`https://api.bilibili.com/x/polymer/web-dynamic/v1/detail?id=${rawId}`, jsonInit)).json()
+      let msg
+      switch (data.code) {
+        case 0: return data.data.item
+        default: msg = `Unknown Error (${data.code}): ${data.message}`; break
+      }
+      throw new TypeError(msg, { cause: data })
+    })
+  },
+  async parse(data, info) {
+    return null
+  }
+})
