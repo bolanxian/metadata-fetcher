@@ -1,6 +1,6 @@
 use nwg::NativeUi;
 use std::ptr::addr_of_mut;
-use winapi::um::wincon::{GetConsoleWindow, SetConsoleTitleW};
+use winapi::um::wincon::{GetConsoleWindow, SetConsoleOutputCP, SetConsoleTitleW};
 use winapi::um::winuser::{ShowWindow, SW_HIDE, SW_SHOW};
 
 mod system_tray;
@@ -16,6 +16,11 @@ fn string_to_wide(string: &str) -> Vec<u16> {
 unsafe fn from_raw_parts<'a>(pointer: *const u8, length: usize) -> &'a str {
     use std::{slice::from_raw_parts, str::from_utf8_unchecked};
     from_utf8_unchecked(from_raw_parts(pointer, length))
+}
+
+#[no_mangle]
+pub extern "C" fn set_console_output_code_page(code_page_id: u32) -> i32 {
+    unsafe { SetConsoleOutputCP(code_page_id) }
 }
 
 #[no_mangle]

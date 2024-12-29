@@ -225,9 +225,10 @@ export const ready = SSR || PAGES ? (async () => {
   }
 })() : null!
 
+export const userAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0'
 const _headers = {
   'accept-language': '*',
-  'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0'
+  'user-agent': userAgent
 }
 const _init: RequestInit = {
   headers: _headers,

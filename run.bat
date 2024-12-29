@@ -1,4 +1,5 @@
 
+chcp 65001
 set "TARGET=x86_64-pc-windows-msvc"
 set "EXEC_DENO=deno"
 cd /d "%~dp0"
@@ -15,9 +16,12 @@ if not %ERRORLEVEL% == 0 (
   )
 )
 
+if not exist ".\__download__" (
+  mkdir ".\__download__"
+)
 if not exist ".\__cache__" (
   mkdir ".\__cache__"
   fsutil.exe file setCaseSensitiveInfo ".\__cache__" enable
 )
 
-start "Metadata Fetcher" "%EXEC_DENO%" run --quiet --no-prompt --no-remote -E=NODE_ENV -N -R -W=./__cache__ --allow-run=explorer --unstable-ffi --allow-ffi ./lib/main.js start
+start "Metadata Fetcher" "%EXEC_DENO%" run --quiet --no-prompt --no-remote -E=NODE_ENV -N -R -W=./__cache__ --allow-run=explorer,bbdown --unstable-ffi --allow-ffi ./lib/main.js start

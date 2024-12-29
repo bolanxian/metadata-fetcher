@@ -36,16 +36,21 @@ const buildTarget = (): Plugin => {
   for (const name of ['countup.js', 'dayjs', 'numeral']) {
     map.set(name, 'export default null')
   }
-  let target
+  map.set('@xterm/xterm', 'export let Terminal')
+  map.set('@xterm/addon-webgl', 'export let WebglAddon')
+
+  let target: 'client' | 'server' | 'pages' | 'koishi'
   return {
     name: 'target',
     enforce: 'pre',
     apply: 'build',
     config(config, { isSsrBuild }) {
-      target = !isSsrBuild ? process.env.VITE_TARGET ?? 'client' : 'server'
+      target = !isSsrBuild ? (process.env.VITE_TARGET as typeof target) ?? 'client' : 'server'
       let outDir = config.build?.outDir
       let assetsDir = '.assets'
       if (target == 'client') {
+        map.delete('@xterm/xterm')
+        map.delete('@xterm/addon-webgl')
         map.set('cheerio', 'export let load')
       } else if (target == 'pages') {
         outDir = '../dist-pages'
@@ -73,8 +78,24 @@ const buildTarget = (): Plugin => {
     },
     resolveId(source) {
       if (map.has(source)) { return source }
+      if (target === 'server' && source === 'vue') {
+        return source
+      }
     },
     load(id) {
+      if (id === 'vue') {
+        return this.resolve(id).then(async ({ id }) => {
+          const Vue = await import(`file:///${id}`)
+          const { func, other } = Object.groupBy(Object.keys(Vue), key => {
+            return typeof Vue[key] === 'function' ? 'func' : 'other'
+          })
+          return `\
+export { ${other.join(', ')} } from ${JSON.stringify(id)}
+import * as Vue from ${JSON.stringify(id)}
+export const { ${func.join(', ')} } = Vue
+`
+        })
+      }
       return map.get(id)
     },
     transform(code, id, options) {
@@ -99,7 +120,7 @@ export default defineConfig({
     outDir: '../dist',
     emptyOutDir: false,
     target: 'esnext',
-    modulePreload: { polyfill: true },
+    modulePreload: { polyfill: false },
     cssCodeSplit: false,
     minify: false,
     //ssrManifest:'manifest.ssr.json',

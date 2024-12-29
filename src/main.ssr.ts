@@ -2,6 +2,7 @@
 export const name = 'Metadata Fetcher'
 export * from './bind'
 export * from './plugin'
+export { handleRequest as handleRequestBbdown } from './utils/bbdown'
 
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'

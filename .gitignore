@@ -13,7 +13,8 @@ koishi-plugin/*.js
 *.tgz
 deno.lock
 package-lock.json
-__cache__
+__*__
+*.proxy.*
 node_modules
 dist
 dist-pages

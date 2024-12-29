@@ -22,12 +22,16 @@ export const bindCall = ((fn) => {
   }
   return bound
 }) as <F>(func: F) => <
-  T, A extends F extends (...args: infer A) => any ? [...A] : never
+  T extends F extends (this: infer T, ...args: any[]) => any ? T : never,
+  A extends F extends (...args: infer A) => any ? [...A] : never
 >(thisArg: T, ...args: A) => F extends (this: T, ...args: A) => infer R ? R : never
 
 export const call = bindCall(_call) as <T, A extends unknown[], R>(
   func: (this: T, ...args: A) => R, thisArg: T, ...args: A
 ) => R
+export const bind = bindCall(_bind) as <T, A extends unknown[], R>(
+  func: (this: T, ...args: A) => R, thisArg: T
+) => (...args: A) => R
 
 const $Proxy = Proxy, handler = {
   get(target: any, key: string, receiver: any) {
@@ -58,20 +62,25 @@ export const isPlainObject = (o: any) => {
   return o === '[object Object]' || o === '[object Array]'
 }
 
+export const encodeText = bind(TextEncoder.prototype.encode, new TextEncoder())
+export const decodeText = bind(TextDecoder.prototype.decode, new TextDecoder())
 export const $then = bindCall(Promise.prototype.then)
 export const test = bindCall(RegExp.prototype.test)
 export const match = bindCall(RegExp.prototype[Symbol.match])
 export const replace = bindCall(RegExp.prototype[Symbol.replace])
 export const split = bindCall(RegExp.prototype[Symbol.split])
+export const pipeTo = bindCall(ReadableStream.prototype.pipeTo)
 
 const EventTargetProto = EventTarget.prototype
 export const on = bindCall(EventTargetProto.addEventListener)
 export const off = bindCall(EventTargetProto.removeEventListener)
 
 export const getAsync = async<
-  T extends { [_ in K]: any }, K extends number | string | symbol
+  T extends { [_ in K]: any }, K extends PropertyKey
 >($: Promise<T>, key: K): Promise<Awaited<T[K]>> => (await $)[key]
 
+const REG_LAST = /.$/su
+export const removeLast = (input: string) => replace(REG_LAST, input, '' as any)
 
 export const htmlToText = import.meta.env.TARGET != 'client' ? (html: string, pre = false) => {
   if (!pre) { html = replace(/\r?\n/g, html, '' as any) }

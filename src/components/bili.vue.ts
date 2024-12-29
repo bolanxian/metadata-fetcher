@@ -1,9 +1,10 @@
 
-import { defineComponent, createVNode as h, watch, shallowReactive, withDirectives } from 'vue'
+import { defineComponent, createVNode as h, watch, shallowReactive, withDirectives, onMounted } from 'vue'
 import { ButtonGroup, Button, Card, Divider, Drawer, Icon, Tag, CellGroup, Cell } from 'view-ui-plus'
 import lineClamp from 'view-ui-plus/src/directives/line-clamp'
 import { instantToString, formatDuration } from '../utils/temporal'
 import { $string, $array, hasOwn } from '../bind'
+import { BBDown } from './bbdown'
 const { slice, startsWith } = $string, { join } = $array
 
 export const toShortUrl = (id: string) => `https://b23.tv/${id}`
@@ -50,12 +51,13 @@ export default defineComponent({
   props: { data: null as any },
   setup(props, ctx) {
     const state = shallowReactive<{
-      drawer: 'parts' | 'episodes' | null
+      drawer: 'parts' | 'episodes' | null | undefined
       drawerTitle: string
     }>({
-      drawer: null,
+      drawer: void 0,
       drawerTitle: '',
     })
+    onMounted(() => { state.drawer = null })
     let data: Record<'error' | 'thumb' | 'copyright' | 'pagesTitle' | 'episodesTitle', string | null>
       & Record<'channel' | 'subChannel', any>
     watch(() => props.data, ($data) => {
@@ -209,8 +211,9 @@ export default defineComponent({
                 disabled: videoData.ugc_season == null,
                 onClick: handle.drawerEpisodes
               }, () => [data.episodesTitle]),
+              h(BBDown, { id })
             ]),
-            h(Drawer, {
+            state.drawer !== void 0 ? h(Drawer, {
               width: 512,
               title: state.drawerTitle,
               modelValue: state.drawer != null,
@@ -244,7 +247,7 @@ export default defineComponent({
                   ))
                 ])
               ) : null
-            ])
+            ]) : null
           ]
         })
       ]
