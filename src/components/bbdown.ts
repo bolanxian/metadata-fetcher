@@ -1,18 +1,20 @@
 
 import { Terminal as Xterm } from '@xterm/xterm'
 import { WebglAddon } from '@xterm/addon-webgl'
-import { defineComponent, watch, createVNode as h, shallowReactive } from 'vue'
+import { type VNode, defineComponent, watch, createVNode as h, shallowReactive } from 'vue'
 import { Row, Col, Input, Modal, Button, ButtonGroup, Radio, RadioGroup, Checkbox } from 'view-ui-plus'
-import { create, echo } from '../utils/bbdown'
+import { type BBDownOptions, create, echo } from '../utils/bbdown'
 import { on, encodeText, removeLast } from '../bind'
-const delay = (t: number) => new Promise(ok => { setTimeout(ok, t) })
 const $rowAttrs = { style: 'margin-bottom:24px' }
 const $colAttrs0 = { span: 3, style: 'text-align:right;padding-right:8px;line-height:32px;' }
+const $colAttrs1 = { span: 3, style: 'text-align:right;padding-right:8px;line-height:25px;' }
+const $colAttrs2 = { span: 3, style: 'text-align:right;padding-right:8px;line-height:21px;' }
+const ON_MODEL = 'onUpdate:modelValue'
 
 export const BBDown = defineComponent({
   props: { id: String },
   data(): {
-    status: null | 'ready' | 'modal' | 'terminal' | 'closed' | 'abort'
+    status: null | 'ready' | 'modal' | 'terminal' | 'closed' | 'abort' | 'fading-out'
     currentId: string
     useApi: 'default' | 'tv' | 'app' | 'intl'
     input: string
@@ -25,13 +27,22 @@ export const BBDown = defineComponent({
     }
   },
   setup(props, ctx) {
+    const proto = create()
+    const options = shallowReactive(proto)
+    const setMap: Record<keyof BBDownOptions, (_: any) => void> = { __proto__: null! } as any
+    for (const key of Object.keys(proto) as (keyof BBDownOptions)[]) {
+      setMap[key] = (_: any) => { options[key] = _ }
+    }
     return {
       socket: null! as WebSocket,
-      options: shallowReactive(create())
+      options, setMap,
+      vnodeDefault: null as null | VNode[],
+      vnodeFooter: null as null | VNode[],
     }
   },
   computed: {
-    preview() { return echo(this.currentId, this.options) }
+    preview() { return echo(this.currentId, this.options) },
+    modalValue() { return this.status !== 'ready' && this.status !== 'fading-out' }
   },
   mounted() {
     const vm = this
@@ -39,7 +50,6 @@ export const BBDown = defineComponent({
     watch(() => vm.status, status => {
       switch (status) {
         case 'ready': vm.input = ''; break
-        case 'terminal': vm.handleTerminal(); break
         case 'abort': vm.handleAbort(); break
       }
     })
@@ -58,10 +68,11 @@ export const BBDown = defineComponent({
   methods: {
     handleModal() { this.status = 'modal' },
     handleStart() { this.status = 'terminal' },
-    handleCancel() { this.status = this.status === 'terminal' ? 'abort' : 'ready' },
-    async handleTerminal() {
-      await delay(0); const vm = this
-      const term: Xterm = (vm.$refs.terminal as any).xterm
+    handleCancel() { this.status = this.status === 'terminal' ? 'abort' : 'fading-out' },
+    handleHidden() { this.status = 'ready' },
+    handleTerminal(vnode: VNode) {
+      const vm = this
+      const term: Xterm = (vnode.component!.exposeProxy as any).xterm
       const socket = vm.socket = new WebSocket(`./.bbdown?${new URLSearchParams({
         id: vm.currentId,
         args: JSON.stringify(vm.options)
@@ -113,7 +124,7 @@ export const BBDown = defineComponent({
         term.write(`${prefix}\x1B[1;33m发生错误\x1B[0m\r\n`)
       })
     },
-    async handleAbort() {
+    handleAbort() {
       const term: Xterm = (this.$refs.terminal as any).xterm
       const prefix = term.buffer.active.cursorX > 0 ? '\r\n' : ''
       term.write(`${prefix}\x1B[1;33m取消操作\x1B[0m\r\n`)
@@ -121,19 +132,22 @@ export const BBDown = defineComponent({
     }
   },
   render() {
-    const vm = this, { options: opts } = vm
-    return h(Button, { onClick: vm.handleModal, disabled: vm.status != 'ready' }, () => [
+    const vm = this, { options: opts, setMap } = vm
+    return h(Button, { onClick: vm.handleModal, disabled: vm.status !== 'ready' }, () => [
       '下载',
       vm.status != null ? h(Modal, {
         width: 864 + 32, closable: !1, maskClosable: !1,
         title: 'BBDown',
-        modelValue: vm.status != 'ready'
+        modelValue: vm.modalValue,
+        onOnHidden: vm.handleHidden
       }, {
         footer: () => [
           h(ButtonGroup, null, () => {
+            let vnode: VNode[] | null = null
             switch (vm.status) {
-              case 'ready': return null
-              default: return [
+              case 'fading-out': return vm.vnodeFooter
+              case 'ready': vnode = null; break
+              default: vnode = [
                 h(Button, {
                   loading: vm.status === 'abort',
                   onClick: vm.handleCancel
@@ -144,37 +158,40 @@ export const BBDown = defineComponent({
                   disabled: vm.status === 'abort',
                   onClick: vm.handleStart
                 }, () => ['启动'])
-              ]
-              case 'closed': return [
+              ]; break
+              case 'closed': vnode = [
                 h(Button, {
                   type: 'primary',
                   onClick: vm.handleCancel
                 }, () => ['完成']),
-              ]
+              ]; break
             }
+            return vm.vnodeFooter = vnode
           })
         ],
         default: () => {
+          let vnode: VNode[] | null = null
           switch (vm.status) {
-            case 'ready': return [
+            case 'fading-out': return vm.vnodeDefault
+            case 'ready': vnode = [
               h('div', { style: 'width:864px;height:576px' })
-            ]
-            case 'modal': return [
+            ]; break
+            case 'modal': vnode = [
               h(Row, $rowAttrs, () => [
                 h(Col, $colAttrs0, () => ['视频地址：']),
                 h(Col, { span: 9 }, () => [
                   h(Input, {
                     modelValue: vm.currentId,
-                    'onUpdate:modelValue'(_: string) { vm.currentId = _ }
+                    [ON_MODEL](_: string) { vm.currentId = _ }
                   })
                 ])
               ]),
               h(Row, $rowAttrs, () => [
-                h(Col, $colAttrs0, () => ['解析模式：']),
+                h(Col, $colAttrs1, () => ['解析模式：']),
                 h(Col, { span: 21 }, () => [
                   h(RadioGroup, {
                     modelValue: vm.useApi,
-                    'onUpdate:modelValue'(_: any) { vm.useApi = _ }
+                    [ON_MODEL](_: any) { vm.useApi = _ }
                   }, () => [
                     h(Radio, { label: 'default' }, () => ['默认']),
                     h(Radio, { label: 'tv' }, () => ['TV端']),
@@ -187,20 +204,54 @@ export const BBDown = defineComponent({
                 h(Col, { span: 21, offset: 3 }, () => [
                   h(Checkbox, {
                     modelValue: opts.interactive,
-                    'onUpdate:modelValue'(_: any) { opts.interactive = _ }
+                    [ON_MODEL]: setMap.interactive
                   }, () => ['交互式选择清晰度']),
                   h(Checkbox, {
                     modelValue: opts.onlyShowInfo,
-                    'onUpdate:modelValue'(_: any) { opts.onlyShowInfo = _ }
+                    [ON_MODEL]: setMap.onlyShowInfo
                   }, () => ['仅解析而不进行下载']),
                   h(Checkbox, {
-                    modelValue: opts.skipMux,
-                    'onUpdate:modelValue'(_: any) { opts.skipMux = _ }
-                  }, () => ['跳过混流步骤']),
-                  h(Checkbox, {
                     modelValue: opts.useMp4box,
-                    'onUpdate:modelValue'(_: any) { opts.useMp4box = _ }
+                    [ON_MODEL]: setMap.useMp4box
                   }, () => ['使用MP4Box来混流'])
+                ])
+              ]),
+              h(Row, $rowAttrs, () => [
+                h(Col, $colAttrs2, () => ['仅下载：']),
+                h(Col, { span: 21 }, () => [
+                  h(Checkbox, {
+                    modelValue: opts.videoOnly,
+                    [ON_MODEL]: setMap.videoOnly
+                  }, () => ['视频']),
+                  h(Checkbox, {
+                    modelValue: opts.audioOnly,
+                    [ON_MODEL]: setMap.audioOnly
+                  }, () => ['音频']),
+                  h(Checkbox, {
+                    modelValue: opts.danmakuOnly,
+                    [ON_MODEL]: setMap.danmakuOnly
+                  }, () => ['弹幕']),
+                  h(Checkbox, {
+                    modelValue: opts.subOnly,
+                    [ON_MODEL]: setMap.subOnly
+                  }, () => ['字幕']),
+                  h(Checkbox, {
+                    modelValue: opts.coverOnly,
+                    [ON_MODEL]: setMap.coverOnly
+                  }, () => ['封面'])
+                ])
+              ]),
+              h(Row, $rowAttrs, () => [
+                h(Col, $colAttrs2, () => ['跳过：']),
+                h(Col, { span: 21 }, () => [
+                  h(Checkbox, {
+                    modelValue: opts.skipMux,
+                    [ON_MODEL]: setMap.skipMux
+                  }, () => ['混流步骤']),
+                  h(Checkbox, {
+                    modelValue: opts.skipAi,
+                    [ON_MODEL]: setMap.skipAi
+                  }, () => ['AI字幕'])
                 ])
               ]),
               h(Row, $rowAttrs, () => [
@@ -208,28 +259,25 @@ export const BBDown = defineComponent({
                 h(Col, { span: 21 }, () => [
                   h(Input, {
                     type: 'textarea',
-                    autosize: { minRows: 16, maxRows: 16 },
+                    autosize: { minRows: 12, maxRows: 12 },
                     readonly: true,
                     modelValue: vm.preview
                   })
                 ])
               ])
-            ]
+            ]; break
             case 'terminal':
             case 'closed':
-            case 'abort': return [
-              h(Terminal, { ref: 'terminal' }),
+            case 'abort': vnode = [
+              h(Terminal, { ref: 'terminal', onVnodeMounted: vm.handleTerminal }),
               h(Row, null, () => [
                 h(Col, { span: 12, offset: 12 }, () => [
-                  h(Input, {
-                    readonly: true,
-                    modelValue: vm.input
-                  })
+                  h(Input, { readonly: true, modelValue: vm.input })
                 ])
               ])
-            ]
+            ]; break
           }
-          return null
+          return vm.vnodeDefault = vnode
         }
       }) : null
     ])
@@ -237,19 +285,27 @@ export const BBDown = defineComponent({
 })
 
 export const Terminal = defineComponent({
-  setup(props, ctx) {
-    return { xterm: null! as Xterm }
-  },
-  mounted() {
-    const term = this.xterm = new Xterm()
-    term.loadAddon(new WebglAddon())
-    term.resize(96, 32)
-    term.open(this.$el)
-  },
-  beforeUnmount() {
-    this.xterm.dispose()
-  },
-  render() {
-    return h('div', { style: 'width:864px;height:544px;' })
+  emits: ['data'],
+  setup(props, { expose, emit }) {
+    let term: Xterm | null
+    const onVnodeMounted = (vnode: VNode) => {
+      term = new Xterm()
+      term.loadAddon(new WebglAddon())
+      term.resize(96, 32)
+      term.open(vnode.el as any)
+      term.onData(e => emit('data', e))
+    }
+    const onVnodeBeforeUnmount = (vnode: VNode) => {
+      term!.dispose()
+      term = null
+    }
+    const write = (data: string | Uint8Array, callback?: () => void) => {
+      term!.write(data, callback)
+    }
+    expose({ get xterm() { return term }, write })
+    return () => h('div', {
+      style: 'width:864px;height:544px;',
+      onVnodeMounted, onVnodeBeforeUnmount
+    })
   }
 })

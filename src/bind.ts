@@ -75,13 +75,33 @@ const EventTargetProto = EventTarget.prototype
 export const on = bindCall(EventTargetProto.addEventListener)
 export const off = bindCall(EventTargetProto.removeEventListener)
 
+export type Get<T, K extends PropertyKey> = T extends { [_ in K]: any } ? T[K] : undefined
+export const getOwn = <T extends {}, K extends PropertyKey>(o: T, k: K): Get<T, K> | undefined => {
+  return hasOwn(o, k) ? (o as any)[k] : void 0
+}
 export const getAsync = async<
   T extends { [_ in K]: any }, K extends PropertyKey
 >($: Promise<T>, key: K): Promise<Awaited<T[K]>> => (await $)[key]
 
+const REG_NOT_FIRST_32 = /(?<=^.{32}).+$/su
+export const onlyFirst32 = (input: string) => replace(REG_NOT_FIRST_32, input, '...' as any)
 const REG_LAST = /.$/su
 export const removeLast = (input: string) => replace(REG_LAST, input, '' as any)
 
+const createEscaper = (reg: RegExp, map: Record<string, string>) => {
+  const cb = (sub: string) => map[sub] ?? ''
+  return (input: string) => replace(reg, input, cb)
+}
+const escapeMap = {
+  __proto__: null!,
+  '"': '&quot;',
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '\xA0': '&nbsp;',
+}
+export const escapeAttr = createEscaper(/["&\xA0]/g, escapeMap)
+export const escapeText = createEscaper(/[&<>\xA0]/g, escapeMap)
 export const htmlToText = import.meta.env.TARGET != 'client' ? (html: string, pre = false) => {
   if (!pre) { html = replace(/\r?\n/g, html, '' as any) }
   const _ = cheerio.load(`<div>${html}</div>`, null, false)(':root')

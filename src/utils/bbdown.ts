@@ -1,8 +1,14 @@
 
 import { userAgent } from '../plugin'
 import { $string, $array, on, pipeTo } from '../bind'
-const { includes } = $string, { join } = $array
+const { includes, replaceAll } = $string, { join } = $array
 const { error } = console
+const $command = 'bbdown'
+const notExists = `\
+找不到 BBDown\r
+BBDown是一个免费且便捷高效的哔哩哔哩下载/解析软件.\r
+https://github.com/nilaoda/BBDown/ \r
+`
 
 export interface BBDownOptions {
   /** 使用TV端解析模式 */
@@ -17,8 +23,20 @@ export interface BBDownOptions {
   onlyShowInfo: boolean
   /** 交互式选择清晰度 */
   interactive: boolean
+  /** 仅下载视频 */
+  videoOnly: boolean
+  /** 仅下载音频 */
+  audioOnly: boolean
+  /** 仅下载弹幕 */
+  danmakuOnly: boolean
+  /** 仅下载字幕 */
+  subOnly: boolean
+  /** 仅下载封面 */
+  coverOnly: boolean
   /** 跳过混流步骤 */
   skipMux: boolean
+  /** 跳过AI字幕下载(默认开启) */
+  skipAi: boolean
 }
 
 export const create = (): BBDownOptions => {
@@ -29,7 +47,13 @@ export const create = (): BBDownOptions => {
     useMp4box: !1,
     onlyShowInfo: !1,
     interactive: !1,
-    skipMux: !1
+    videoOnly: !1,
+    audioOnly: !1,
+    danmakuOnly: !1,
+    subOnly: !1,
+    coverOnly: !1,
+    skipMux: !1,
+    skipAi: !0,
   }
 }
 
@@ -42,7 +66,13 @@ export function* xargs(opts: BBDownOptions): Generator<string, void, void> {
   if (opts.useMp4box) { yield '--use-mp4box' }
   if (opts.onlyShowInfo) { yield '--only-show-info' }
   if (opts.interactive) { yield '--interactive' }
+  if (opts.videoOnly) { yield '--video-only' }
+  if (opts.audioOnly) { yield '--audio-only' }
+  if (opts.danmakuOnly) { yield '--danmaku-only' }
+  if (opts.subOnly) { yield '--sub-only' }
+  if (opts.coverOnly) { yield '--cover-only' }
   if (opts.skipMux) { yield '--skip-mux' }
+  if (!opts.skipAi) { yield '--skip-ai'; yield 'false' }
   yield '--file-pattern'
   yield filePattern
   yield '--multi-file-pattern'
@@ -51,14 +81,18 @@ export function* xargs(opts: BBDownOptions): Generator<string, void, void> {
   yield userAgent
 }
 
-export const echo = (id: string, opts: BBDownOptions) => {
-  if (includes(id, ' ')) { id = `"${id}"` }
-  let ret: string[] = [id]
-  for (let arg of xargs(opts)) {
-    if (includes(arg, ' ')) { arg = `"${arg}"` }
-    ret[ret.length] = arg
+export const escape = (str: string) => {
+  if (includes(str, ' ') || includes(str, '"')) {
+    str = `"${replaceAll(str, '"', '\\"' as any)}"`
   }
-  return `bbdown ${join(ret, ' ')}`
+  return str
+}
+export const echo = (id: string, opts: BBDownOptions) => {
+  let ret = [$command, escape(id)]
+  for (let arg of xargs(opts)) {
+    ret[ret.length] = escape(arg)
+  }
+  return join(ret, ' ')
 }
 
 export const handleRequest = (request: Request, cwd: string) => {
@@ -71,34 +105,49 @@ export const handleRequest = (request: Request, cwd: string) => {
   } catch { }
   if (id == null || args == null) { return null }
 
-  const { socket, response } = Deno.upgradeWebSocket(request, { protocol: 'bbdown' })
+  const { socket, response } = Deno.upgradeWebSocket(request, { protocol: $command })
   socket.binaryType = 'arraybuffer'
-  const command = new Deno.Command('bbdown', {
-    args: [id, ...xargs(args)], cwd,
-    stdin: 'piped', stdout: 'piped', stderr: 'inherit'
-  })
+  const aborter = new AbortController()
+  const { signal } = aborter, options = { signal }
+  let command: Deno.Command
   let process: Deno.ChildProcess
   let code: number
-  on(socket, 'open', e => {
-    process = command.spawn()
-    pipeTo(stdin, process.stdin)
-    pipeTo(process.stdout, stdout)
-    process.status.then((status) => {
+  const handleOpen = async (e: Event) => {
+    try {
+      command = new Deno.Command($command, {
+        args: [id, ...xargs(args)], cwd, signal,
+        stdin: 'piped', stdout: 'piped', stderr: 'inherit'
+      })
+      process = command.spawn()
+      pipeTo(stdin, process.stdin)
+      pipeTo(process.stdout, stdout, options)
+      socket.send(`> ${echo(id, args)}\r\n`)
+      const status = await process.status
       code = status.code
-      socket.close(code != 0 ? 4000 : 1000, code > 0 ? `进程未成功退出（退出代码：${code}）` : '')
-    })
-    socket.send(`> ${echo(id, args)}\r\n`)
-  })
+    } catch (e: any) {
+      if (process == null && e?.code === 'ENOENT') {
+        socket.send(notExists)
+      } else {
+        error(e)
+      }
+    } finally {
+      let reason = ''
+      if (code == null) { reason = '进程未成功启动' }
+      else if (code !== 0) { reason = `进程未成功退出（退出代码：${code}）` }
+      socket.close(code !== 0 ? 4000 : 1000, reason)
+      aborter.abort()
+    }
+  }
   const stdin = new ReadableStream({
     start(controller) {
       on(socket, 'message', e => {
         const { data } = e as MessageEvent<ArrayBuffer | string>
         if (typeof data === 'string') {
-          process.kill('SIGKILL')
+          aborter.abort()
         } else {
           controller.enqueue(new Uint8Array(data))
         }
-      })
+      }, options)
     }
   })
   const stdout = new WritableStream({
@@ -106,11 +155,8 @@ export const handleRequest = (request: Request, cwd: string) => {
       socket.send(chunk)
     }
   })
-  on(socket, 'close', e => {
-    if (process != null && code == null) {
-      process.kill('SIGKILL')
-    }
-  })
-  on(socket, 'error', e => { error('错误: socket<bbdown>') })
+  on(socket, 'open', e => { handleOpen(e) }, options)
+  on(socket, 'close', e => { aborter.abort() }, options)
+  on(socket, 'error', e => { error('错误: socket<bbdown>') }, options)
   return response
 }

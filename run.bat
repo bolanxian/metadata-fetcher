@@ -23,5 +23,8 @@ if not exist ".\__cache__" (
   mkdir ".\__cache__"
   fsutil.exe file setCaseSensitiveInfo ".\__cache__" enable
 )
+if not exist ".\__cache__\_browser.json" (
+  "dist\reg-utils" browser > ".\__cache__\_browser.json"
+)
 
-start "Metadata Fetcher" "%EXEC_DENO%" run --quiet --no-prompt --no-remote -E=NODE_ENV -N -R -W=./__cache__ --allow-run=explorer,bbdown --unstable-ffi --allow-ffi ./lib/main.js start
+start "Metadata Fetcher" "%EXEC_DENO%" run --quiet --no-prompt --no-remote -S -E -N -R -W=./__cache__ --allow-run --unstable-ffi --allow-ffi ./lib/main.js start
