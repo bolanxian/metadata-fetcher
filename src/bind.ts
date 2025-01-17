@@ -95,11 +95,13 @@ const createEscaper = (reg: RegExp, map: Record<string, string>) => {
 const escapeMap = {
   __proto__: null!,
   '"': '&quot;',
+  "'": '&apos;',
   '&': '&amp;',
   '<': '&lt;',
   '>': '&gt;',
   '\xA0': '&nbsp;',
 }
+export const escapeAttrApos = createEscaper(/['&\xA0]/g, escapeMap)
 export const escapeAttr = createEscaper(/["&\xA0]/g, escapeMap)
 export const escapeText = createEscaper(/[&<>\xA0]/g, escapeMap)
 export const htmlToText = import.meta.env.TARGET != 'client' ? (html: string, pre = false) => {

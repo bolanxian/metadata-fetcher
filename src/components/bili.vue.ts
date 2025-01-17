@@ -1,10 +1,11 @@
 
-import { defineComponent, createVNode as h, watch, shallowReactive, withDirectives, onMounted } from 'vue'
-import { ButtonGroup, Button, Card, Divider, Drawer, Icon, Tag, CellGroup, Cell } from 'view-ui-plus'
+import { type VNode, defineComponent, shallowReactive, watchEffect, onMounted, createVNode as h, withDirectives } from 'vue'
+import { Alert, ButtonGroup, Button, Card, CellGroup, Cell, Divider, Drawer, Icon, Tag } from 'view-ui-plus'
 import lineClamp from 'view-ui-plus/src/directives/line-clamp'
 import { instantToString, formatDuration } from '../utils/temporal'
 import { $string, $array, hasOwn } from '../bind'
 import { BBDown } from './bbdown'
+const { from } = Array
 const { slice, startsWith } = $string, { join } = $array
 
 export const toShortUrl = (id: string) => `https://b23.tv/${id}`
@@ -22,12 +23,16 @@ export const enum DescInfoType {
   USER_HREF = 2,
 }
 /*<component>*/
-const createArgue = ({ argue_info }: any) => {
+const $a = { referrerpolicy: 'no-referrer', target: '_blank' }
+const $img = { referrerpolicy: 'no-referrer' }
+
+const renderArgue = ({ argue_info: info }: any, inner: VNode): (VNode | null)[] => {
+  const msg = info?.argue_msg
+  if (!msg) { return [null, inner, null] }
   let before = false
   let color = 'default'
   let type: string = null!
-  const msg = argue_info?.argue_msg
-  if (msg) switch (argue_info.argue_type) {
+  switch (info.argue_type) {
     case ArgueType.STRONG_NEGATIVE:
       before = true; color = 'error'; type = 'ios-alert'
       break
@@ -38,13 +43,14 @@ const createArgue = ({ argue_info }: any) => {
       type = 'ios-alert-outline'
       break
   }
-  const argue = msg ? h(Tag, { color }, () => [
+  const argue = h(Tag, { color }, () => [
     type != null ? h(Icon, { type }) : null, msg
-  ]) : null
-  return {
-    before: before ? argue : null,
-    after: before ? null : argue
-  }
+  ])
+  return [
+    before ? argue : null,
+    inner,
+    before ? null : argue
+  ]
 }
 
 export default defineComponent({
@@ -53,17 +59,23 @@ export default defineComponent({
     const state = shallowReactive<{
       drawer: 'parts' | 'episodes' | null | undefined
       drawerTitle: string
+      drawerChildren: VNode[]
     }>({
       drawer: void 0,
       drawerTitle: '',
+      drawerChildren: null!
     })
     onMounted(() => { state.drawer = null })
-    let data: Record<'error' | 'thumb' | 'copyright' | 'pagesTitle' | 'episodesTitle', string | null>
+    let data:
+      & Record<'error' | 'thumb' | 'date' | 'copyright', string | null>
+      & Record<'pagesTitle' | 'episodesTitle', string>
       & Record<'channel' | 'subChannel', any>
-    watch(() => props.data, ($data) => {
+    watchEffect(() => {
+      const $data = props.data
       data = {
         error: '',
         thumb: null,
+        date: null,
         copyright: null,
         pagesTitle: '分P',
         episodesTitle: '合集',
@@ -78,6 +90,7 @@ export default defineComponent({
       if (startsWith(data.thumb!, 'http:')) {
         data.thumb = `https:${slice(data.thumb!, 5)}`
       }
+      data.date = instantToString(videoData.pubdate * 1000, true)
       data.copyright = copyrightMap.get(videoData.copyright) ?? '未知'
       data.pagesTitle = `分P[${videoData.pages.length}]`
       if (videoData.ugc_season != null) {
@@ -105,49 +118,48 @@ export default defineComponent({
       }
       data.channel = { name: videoData.tname, url: '#' }
       data.subChannel = null
-    }, { immediate: true })
+    })
     const handle = {
-      drawerParts() {
-        state.drawer = 'parts'
-        state.drawerTitle = data.pagesTitle!
-      },
-      drawerEpisodes() {
-        state.drawer = 'episodes'
-        state.drawerTitle = data.episodesTitle!
-      },
+      drawerParts() { state.drawer = 'parts' },
+      drawerEpisodes() { state.drawer = 'episodes' },
+      drawerChildren: () => state.drawerChildren,
       drawerModelValue(_: boolean) { _ || (state.drawer = null) }
     }
+    watchEffect(() => {
+      const { videoData } = props.data
+      switch (state.drawer) {
+        case 'parts':
+          state.drawerTitle = data.pagesTitle
+          state.drawerChildren = renderDrawerParts(videoData)
+          break
+        case 'episodes':
+          state.drawerTitle = data.episodesTitle
+          state.drawerChildren = renderDrawerEpisodes(videoData)
+          break
+      }
+    })
 
-    const $a = { referrerpolicy: 'no-referrer', target: '_blank' }
-    const $img = { referrerpolicy: 'no-referrer' }
     return () => {
       if (data.error != null) {
         return [
-          h(Card, null, () => [h(Tag, { color: 'error' }, () => [data.error])])
+          h(Card, null, () => [h(Alert, { type: 'error', showIcon: true }, () => [data.error])])
         ]
       }
       const { tags, videoData } = props.data
       const id = `av${videoData.aid}`
       return [
         h(Card, null, {
-          title: () => {
-            const { before, after } = createArgue(videoData)
-            return [
-              withDirectives(h('div', {
-                style: 'margin-right:40px;line-height:1.2em;font-size:1.2em', title: videoData.title
-              }, [videoData.title]), [
-                [lineClamp, 1]
-              ]),
-              h('div', null, [
-                before,
-                h(Tag, { color: 'blue', title: '30小时制' }, () => [
-                  instantToString(videoData.pubdate * 1000, true)
-                ]),
-                after
-              ])
-            ]
-          },
-          extra: () => Array.from(videoData.staff ?? [videoData.owner], (owner: any) => h('a', {
+          title: () => [
+            withDirectives(h('div', {
+              style: 'margin-right:40px;line-height:1.2em;font-size:1.2em', title: videoData.title
+            }, [videoData.title]), [
+              [lineClamp, 1]
+            ]),
+            h('div', null, renderArgue(videoData, h(Tag, {
+              color: 'blue', title: '30小时制'
+            }, () => [data.date])))
+          ],
+          extra: () => from(videoData.staff ?? [videoData.owner], (owner: any) => h('a', {
             ...$a, class: 'ivu-avatar ivu-avatar-square ivu-avatar-image ivu-avatar-large',
             href: toSpaceUrl(owner.mid),
             title: `${owner.title != null ? `[${owner.title}]` : ''}${owner.name}`
@@ -170,7 +182,7 @@ export default defineComponent({
                 h(Tag, { color: 'blue' }, () => [videoData.bvid])
               ]),
             ]),
-            h('div', null, Array.from(tags, (tag: any) => {
+            h('div', null, from(tags, (tag: any) => {
               switch (tag.tag_type ?? null) {
                 case 'bgm':
                   return h('a', { ...$a, href: tag.jump_url }, [
@@ -196,7 +208,7 @@ export default defineComponent({
             h(Divider, { style: 'margin:16px 0' }),
             h('div', {
               title: `简介${videoData.desc_v2 != null ? '' : '为空'}`, style: 'white-space:pre-line'
-            }, Array.from(videoData.desc_v2 ?? [{ type: 1, raw_text: '\u200B' }], (_: any) => {
+            }, from(videoData.desc_v2 ?? [{ type: 1, raw_text: '\u200B' }], (_: any) => {
               switch (_.type) {
                 case DescInfoType.ORDINARY: return _.raw_text
                 case DescInfoType.USER_HREF: return h('a', { ...$a, href: toSpaceUrl(_.biz_id) }, [`@${_.raw_text} `])
@@ -205,10 +217,11 @@ export default defineComponent({
             h(Divider, { style: 'margin:16px 0' }),
             h(ButtonGroup, null, () => [
               h(Button, {
+                disabled: state.drawer === void 0,
                 onClick: handle.drawerParts
               }, () => [data.pagesTitle]),
               h(Button, {
-                disabled: videoData.ugc_season == null,
+                disabled: state.drawer === void 0 || videoData.ugc_season == null,
                 onClick: handle.drawerEpisodes
               }, () => [data.episodesTitle]),
               h(BBDown, { id })
@@ -218,39 +231,39 @@ export default defineComponent({
               title: state.drawerTitle,
               modelValue: state.drawer != null,
               'onUpdate:modelValue': handle.drawerModelValue
-            }, () => [
-              state.drawer == 'parts' ? h(CellGroup, null, () => Array.from(
-                videoData.pages, (page: any) => h(Cell, {
-                  title: page.part,
-                  extra: formatDuration(page.duration)
-                }, {
-                  label: () => [
-                    h('a', { ...$a, href: `${toUrl(id)}?p=${page.page}` }, [`cid:${page.cid}`])
-                  ]
-                })
-              )) : null,
-              state.drawer == 'episodes' ? Array.from(
-                videoData.ugc_season.sections ?? [], (section: any) => h(Card, {
-                  title: `${section.title}[${section.episodes.length}]`
-                }, () => [
-                  h(CellGroup, null, () => Array.from(
-                    section.episodes, (episode: any) => h(Cell, {
-                      title: episode.title,
-                      extra: formatDuration(episode.arc.duration),
-                      selected: videoData.aid == episode.aid
-                    }, {
-                      label: () => {
-                        const id = `av${episode.aid}`
-                        return [h('a', { ...$a, href: toUrl(id) }, [id])]
-                      }
-                    })
-                  ))
-                ])
-              ) : null
-            ]) : null
+            }, handle.drawerChildren) : null
           ]
         })
       ]
     }
   }
 })
+
+const renderDrawerParts = (videoData: any) => [h(CellGroup, null, () => from(
+  videoData.pages, (page: any) => h(Cell, {
+    title: page.part,
+    extra: formatDuration(page.duration)
+  }, {
+    label: () => [
+      h('a', { ...$a, href: `${toUrl(`av${videoData.aid}`)}?p=${page.page}` }, [`cid:${page.cid}`])
+    ]
+  })
+))]
+const renderDrawerEpisodes = (videoData: any) => from(
+  videoData.ugc_season.sections ?? [], (section: any) => h(Card, {
+    title: `${section.title}[${section.episodes.length}]`
+  }, () => [
+    h(CellGroup, null, () => from(
+      section.episodes, (episode: any) => h(Cell, {
+        title: episode.title,
+        extra: formatDuration(episode.arc.duration),
+        selected: videoData.aid == episode.aid
+      }, {
+        label: () => {
+          const id = `av${episode.aid}`
+          return [h('a', { ...$a, href: toUrl(id) }, [id])]
+        }
+      })
+    ))
+  ])
+)

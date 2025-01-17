@@ -1,7 +1,7 @@
 
-import { defineComponent, shallowRef as sr, shallowReactive, watch, createVNode as h, onMounted, onServerPrefetch } from 'vue'
+import { defineComponent, shallowRef as sr, shallowReactive, watch, createVNode as h, onMounted, onServerPrefetch, watchEffect } from 'vue'
 import type { Component, Prop } from 'vue'
-import { Row, Col, Icon, Input, Button, Modal, Message } from 'view-ui-plus'
+import { Row, Col, Icon, Input, ButtonGroup, Button, Modal, Message } from 'view-ui-plus'
 import {
   resolve, xparse, render as _render,
   renderIds, renderList, renderListNameRender, renderListEscapeRender,
@@ -45,10 +45,9 @@ export default defineComponent({
     const $loading = sr(false)
     const $disabled = sr(true)
     const $outputVm = sr<InstanceType<typeof Input> | null>(null)
-    !PAGES || $fetch != null ? onMounted(() => {
+    !(PAGES && $fetch == null) ? onMounted(() => {
       $disabled.value = false
-      //@ts-ignore
-      nextTick($outputVm.value.resizeTextarea)
+      nextTick(() => { ($outputVm.value as any).resizeTextarea() })
     }) : null
 
     let component: Component | undefined
@@ -160,11 +159,20 @@ export default defineComponent({
     const handleFocus = (e: FocusEvent) => {
       (e.target as HTMLInputElement).select()
     }
-    const handleTemplate = () => {
-      modalTemplate(store.template, _ => {
-        store.template = _
-        store.output = store.parsed != null ? _render(store.parsed, store.template) : ''
-      })
+    const handleOk = async (data: any) => {
+      let ok = false, { template } = data
+      try {
+        template = trim(template) ? template : defaultTemplate
+        ok = await writeTemplate(template)
+      } finally {
+        if (ok) {
+          if (!PAGES) { location.href += ''; return }
+          store.template = template
+          store.output = store.parsed != null ? _render(store.parsed, store.template) : ''
+        } else {
+          Message.error('失败')
+        }
+      }
     }
     return () => [
       h('div', { style: 'margin:60px auto 40px auto;text-align:center' }, [
@@ -200,7 +208,7 @@ export default defineComponent({
           }, {
             prepend: () => h(Icon, { type: 'md-share' }),
           }),
-          !PAGES || $fetch != null ? h(Input, {
+          !(PAGES && $fetch == null) && !(SSR || $disabled.value) ? h(Input, {
             ref: $outputVm,
             style: 'margin-top:20px',
             type: 'textarea',
@@ -208,11 +216,9 @@ export default defineComponent({
             modelValue: store.output,
             readonly: true
           }) : null,
-          !PAGES || $fetch != null ? h(Button, {
-            style: 'margin:20px 0',
-            disabled: $disabled.value,
-            onClick: handleTemplate
-          }, () => '编辑模板') : null
+          !(PAGES && $fetch == null) && !(SSR || $disabled.value)
+            ? h(Config, { template: store.template, handleOk })
+            : null
         ]),
         component != null ? h(Col, { xs: 24, sm: 12, md: 11, lg: 10 }, () => [
           h(component!, { data: store.data })
@@ -222,34 +228,74 @@ export default defineComponent({
   }
 })
 
-const modalTemplate = (template: string, onOk: (template: string) => void) => {
-  Modal.confirm({
-    title: '编辑模板',
-    width: 600,
-    loading: true,
-    closable: true,
-    render() {
-      return h(Input, {
-        type: 'textarea',
-        autosize: { minRows: 20, maxRows: 1 / 0 },
-        modelValue: template,
-        'onUpdate:modelValue'(value: string) { template = value }
-      })
-    },
-    async onOk() {
-      let ok = false
-      try {
-        template = trim(template) ? template : defaultTemplate
-        ok = await writeTemplate(template)
-      } finally {
-        if (ok) {
-          if (!PAGES) { location.href += ''; return }
-          onOk(template)
-        } else {
-          Message.error('失败')
-        }
-        Modal.remove()
+const Config = defineComponent({
+  props: { template: String, handleOk: null! as Prop<(data: any) => any> },
+  setup(props, ctx) {
+    const data = shallowReactive<{
+      status: undefined | null | 'modal' | 'pending'
+      template: string
+    }>({
+      status: void 0,
+      template: props.template!
+    })
+    const vm = data
+    const handleOk = () => { data.status = 'pending' }
+    const handleCancel = () => { data.status = null }
+    const handleHidden = () => { data.status = void 0 }
+    const handleModal = () => {
+      if (data.status == null) {
+        data.status = null
+        nextTick(() => { data.status = 'modal' })
       }
     }
-  })
-}
+    const handleProcess = async () => {
+      try { await props.handleOk!(data) }
+      finally { data.status = null }
+    }
+    watchEffect(() => {
+      if (data.status === 'pending') { handleProcess() }
+    })
+    const $rowAttrs = { style: 'margin-bottom:24px' }
+    const $colAttrs0 = { span: 3, style: 'text-align:right;padding-right:8px;line-height:32px;' }
+    return () => [
+      h(Button, {
+        style: 'margin:20px 0',
+        disabled: data.status != null,
+        onClick: handleModal
+      }, () => ['设置']),
+      data.status !== void 0 ? h(Modal, {
+        width: 540, closable: !1, maskClosable: !1,
+        title: '设置',
+        modelValue: data.status != null,
+        onOnHidden: handleHidden
+      }, {
+        footer: () => [
+          h(ButtonGroup, null, () => [
+            h(Button, {
+              disabled: vm.status === 'pending',
+              onClick: handleCancel
+            }, () => ['取消']),
+            h(Button, {
+              type: 'primary',
+              loading: vm.status === 'pending',
+              onClick: handleOk
+            }, () => ['确定'])
+          ])
+        ],
+        default: () => [
+          h(Row, $rowAttrs, () => [
+            h(Col, $colAttrs0, () => ['模板：']),
+            h(Col, { span: 21 }, () => [
+              h(Input, {
+                type: 'textarea',
+                autosize: { minRows: 20, maxRows: 20 },
+                modelValue: data.template,
+                'onUpdate:modelValue'(_: any) { data.template = _ }
+              })
+            ])
+          ])
+        ]
+      }) : null
+    ]
+  }
+})
