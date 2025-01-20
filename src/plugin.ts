@@ -3,6 +3,7 @@ import type { Component } from 'vue'
 import * as cheerio from 'cheerio'
 import { noop, $string, hasOwn, $then as then, match, replace, on, off, getAsync } from './bind'
 import { ready as ready1, getCache, setCache } from './cache'
+import { ready as ready2, config } from './config'
 const { freeze } = Object, { fromCharCode } = String
 const { trim, split, startsWith, charCodeAt } = $string
 const TARGET = import.meta.env.TARGET
@@ -109,9 +110,9 @@ export const xparse: {
     }
   }
 } as any
-export const render = (parsed: ParsedInfo, _template = template) => {
+export const render = (parsed: ParsedInfo, template = config.template) => {
   let ret = ''
-  for (let line of split(_template, '\n' as any)) {
+  for (let line of split(template, '\n' as any)) {
     if (line = trim(line)) {
       const [key, name] = split(line, '=' as any)
       if (hasOwn(parsed, key)) {
@@ -122,7 +123,7 @@ export const render = (parsed: ParsedInfo, _template = template) => {
   }
   return ret
 }
-export function* renderIds(args: string[], _template = template) {
+export function* renderIds(args: string[], separator = config.separator) {
   for (const arg of args) {
     const resolved = resolve(arg)
     if (resolved == null) {
@@ -134,8 +135,7 @@ export function* renderIds(args: string[], _template = template) {
   }
 }
 export type Render = (...args: [string, ResolvedInfo, ParsedInfo]) => string
-export async function* renderList(args: string[], _template = template, render: Render = renderListDefaultRender) {
-  const _ = getSeparator(_template)
+export async function* renderList(args: string[], separator = config.separator, render: Render = renderListDefaultRender) {
   for (const arg of args) {
     const [, resolved, redirected, , parsedPromise] = xparse(arg)
     if (resolved == null) {
@@ -147,7 +147,7 @@ export async function* renderList(args: string[], _template = template, render: 
       yield `Not Found : ${resolved.id}`
       continue
     }
-    yield render(_, redirected != null ? await redirected : resolved, parsed)
+    yield render(separator, redirected != null ? await redirected : resolved, parsed)
   }
 }
 export const renderListDefaultRender: Render = (
@@ -161,47 +161,6 @@ const ESCAPE_FUNC = ($0: string) => fromCharCode(charCodeAt($0, 0) + 0xFEE0)
 export const renderListEscapeRender: Render = (
   _, { rawId: id }, { title }
 ) => `［${replace(ESCAPE_REG, id, ESCAPE_FUNC)}］${title}`
-
-const getSeparatorReg = /^\s*separator=(.*?)\s*$/m
-export const getSeparator = (_template = template) => {
-  return match(getSeparatorReg, _template)?.[1] ?? '\uFF0F'
-}
-export const defaultTemplate = `\
-separator=\uFF0F
-title=标题：
-ownerName=UP主：
-publishDate=日期：
-shortUrl=链接：
-thumbnailUrl=封面：
-description=简介：
-`
-export let template = defaultTemplate
-const templateName = '_template.txt'
-export const readTemplate = SSR || PAGES ? async () => {
-  template = await getCache(templateName) ?? template
-  return template
-} : null!
-export const writeTemplate = async (_template = template): Promise<boolean> => {
-  if (TARGET == 'client') {
-    const resp = await fetch('./.template', {
-      method: 'POST',
-      body: _template,
-      headers: {
-        'content-type': 'text/plain'
-      }
-    })
-    if (resp.ok) {
-      template = _template
-      return true
-    }
-    return false
-  }
-  if (SSR || PAGES) {
-    await setCache(templateName, _template)
-  }
-  template = _template
-  return true
-}
 
 export let $fetch = SSR || TARGET == 'koishi' ? fetch : null!
 export const ready = SSR || PAGES ? (async () => {
@@ -221,7 +180,7 @@ export const ready = SSR || PAGES ? (async () => {
   }
   if (SSR || PAGES) {
     await ready1
-    await readTemplate()
+    await ready2
   }
 })() : null!
 

@@ -9,16 +9,14 @@ import { fromHTML } from '../utils/find-json-object'
 import { instantToString } from '../utils/temporal'
 
 export { REG_AV, REG_BV } from '../utils/bv-encode'
-export const REG_B23 = /^(?:https?:\/\/)?b23\.tv\/([-\w]+)(?=$|[?#])/
+export const REG_B23 = /^(?:https?:\/\/)?(?:b23\.tv|bili2{0,2}3{0,2}\.cn)\/([-\w]+)(?=$|[?#])/
+export const REG_FULL = /^(?:https?:\/\/)?(?:m|www)\.bilibili\.com\/video\/(\w+)\/?(?=$|[?#])/
 const { slice, startsWith } = $string, { join } = $array
 const REG_INIT = /^\s*window\.__INITIAL_STATE__\s*=\s*(?={)/
 let channelKv: any
 
 export const main = definePlugin({
-  include: [
-    BV.REG_AV, BV.REG_BV, REG_B23,
-    /^(?:https?:\/\/)?(?:m|www)\.bilibili\.com\/video\/(\w+)\/?(?=$|[?#])/
-  ],
+  include: [BV.REG_AV, BV.REG_BV, REG_B23, REG_FULL],
   resolve(m, reg) {
     let id = m[1]
     if (test(BV.REG_AV, id)) {

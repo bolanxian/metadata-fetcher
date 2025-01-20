@@ -3,12 +3,13 @@ export const name = 'Metadata Fetcher'
 export * from './bind'
 export * from './plugin'
 export { getCache, setCache } from './cache'
+export { config, readConfig, writeConfig } from './config'
 export { handleRequest as handleRequestBbdown } from './utils/bbdown'
 
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { $string, $array, onlyFirst32, escapeText, escapeAttr, escapeAttrApos } from './bind'
-import { template } from './plugin'
+import { config } from './config'
 import App from './components/app.vue'
 import type { Store } from './components/app.vue'
 const { keys } = Object, { stringify } = JSON
@@ -56,7 +57,7 @@ export const buildMeta = (parsed: Store['parsed']) => {
 }
 
 export const renderToHtml = async (input: string, ids?: string[]) => {
-  const store: Store = { input: input, resolved: null, data: null, parsed: null, output: '', template }
+  const store: Store = { input: input, resolved: null, data: null, parsed: null, output: '', config }
   if (input[0] === '.') {
     const args = join(ids!, ' ')
     store.input = `${slice(input, 1)} ${args}`

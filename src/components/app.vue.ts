@@ -1,15 +1,16 @@
 
-import { defineComponent, shallowRef as sr, shallowReactive, watch, createVNode as h, onMounted, onServerPrefetch, watchEffect } from 'vue'
+import { defineComponent, shallowReactive, toRaw, watch, watchEffect, createVNode as h, onMounted, onServerPrefetch } from 'vue'
 import type { Component, Prop } from 'vue'
-import { Row, Col, Icon, Input, ButtonGroup, Button, Modal, Message } from 'view-ui-plus'
+import { Row, Col, Icon, Input, ButtonGroup, Button, Select, Option, Modal, Message } from 'view-ui-plus'
+import { nextTick, $string, assign, split } from '../bind'
+import { type Config, config as defaultConfig, writeConfig } from '../config'
 import {
-  resolve, xparse, render as _render,
+  resolve, xparse, render as _render, $fetch,
   renderIds, renderList, renderListNameRender, renderListEscapeRender,
-  template as _template, defaultTemplate, writeTemplate, $fetch
 } from '../plugin'
 import type { ResolvedInfo, ParsedInfo } from '../plugin'
-import { nextTick, $string, split } from '../bind'
 import.meta.glob('../plugins/*', { eager: true })
+const { entries } = Object, { from } = Array
 const { trim, slice, indexOf, startsWith } = $string
 const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
@@ -22,19 +23,16 @@ export interface Store {
   data: {} | null
   parsed: ParsedInfo | null
   output: string
-  template: string
+  config: Config
 }
 
-const renderName = (args: string[], _template?: string) => renderList(args, _template, renderListNameRender)
-const renderEscape = (args: string[], _template?: string) => renderList(args, _template, renderListEscapeRender)
-const getRender = (id: string): {
-  (args: string[], _template?: string): Generator<string, void, unknown> | AsyncGenerator<string, void, unknown>
-} => {
+const render = (id: string, args: string[], sep?: string)
+  : Generator<string, void, unknown> | AsyncGenerator<string, void, unknown> => {
   switch (id) {
-    case '.id': return renderIds
-    case '.list': return renderList
-    case '.name': return renderName
-    case '.escape': return renderEscape
+    case '.id': return renderIds(args, sep)
+    case '.list': return renderList(args, sep)
+    case '.name': return renderList(args, sep, renderListNameRender)
+    case '.escape': return renderList(args, sep, renderListEscapeRender)
   }
   return null!
 }
@@ -42,13 +40,11 @@ const getRender = (id: string): {
 export default defineComponent({
   props: PAGES ? (void 0)! : { store: null! as Prop<Store> },
   setup(props, { expose }) {
-    const $loading = sr(false)
-    const $disabled = sr(true)
-    const $outputVm = sr<InstanceType<typeof Input> | null>(null)
-    !(PAGES && $fetch == null) ? onMounted(() => {
-      $disabled.value = false
-      nextTick(() => { ($outputVm.value as any).resizeTextarea() })
-    }) : null
+    const data = shallowReactive({ loading: false, disabled: true })
+    const handleRefOutput = (vm: any) => { nextTick(vm.resizeTextarea) }
+    if (!(PAGES && $fetch == null) && !SSR) {
+      onMounted(() => { data.disabled = false })
+    }
 
     let component: Component | undefined
     const $store = PAGES ? null : props.store
@@ -58,14 +54,14 @@ export default defineComponent({
       data: null,
       parsed: null,
       output: '',
-      template: _template
+      config: defaultConfig
     })
 
     SSR && store.input && onServerPrefetch(async () => {
       if (store.resolved != null) {
         store.output = ''
         const { id, url } = store.resolved
-        for await (const line of getRender(id)(split(S, url), store.template)) {
+        for await (const line of render(id, split(S, url), store.config.separator)) {
           store.output += `${line}\n`
         }
         return
@@ -76,7 +72,7 @@ export default defineComponent({
       store.resolved = redirected != null ? await redirected : resolved
       store.data = await dataPromise!
       if ((store.parsed = await parsedPromise!) != null) {
-        store.output = _render(store.parsed, store.template)
+        store.output = _render(store.parsed, store.config.template)
       }
     })
     if (!SSR) {
@@ -112,13 +108,13 @@ export default defineComponent({
     })
 
     const handleSearch = PAGES ? async () => {
-      if ($disabled.value || store.resolved == null) { return }
+      if (data.disabled || store.resolved == null) { return }
       try {
-        $loading.value = true
+        data.loading = true
         store.output = ''
         const { id, url } = store.resolved
         if (id[0] === '.') {
-          for await (const line of getRender(id)(split(S, url), store.template)) {
+          for await (const line of render(id, split(S, url), store.config.separator)) {
             store.output += `${line}\n`
           }
         } else {
@@ -128,7 +124,7 @@ export default defineComponent({
           store.resolved = resolved!
           store.data = await dataPromise!
           if ((store.parsed = await parsedPromise!) != null) {
-            store.output = _render(store.parsed, store.template)
+            store.output = _render(store.parsed, store.config.template)
           }
         }
       } catch (error) {
@@ -138,10 +134,10 @@ export default defineComponent({
         store.output = ''
         throw error
       } finally {
-        $loading.value = false
+        data.loading = false
       }
-    } : () => {
-      if ($disabled.value || store.resolved == null) { return }
+    } : !SSR ? () => {
+      if (data.disabled || store.resolved == null) { return }
       const { id, url } = store.resolved
       if (id[0] === '.') {
         const params = new URLSearchParams()
@@ -154,26 +150,26 @@ export default defineComponent({
       } else {
         location.href = `./${encodeURIComponent(id)}`
       }
-    }
+    } : null!
 
-    const handleFocus = (e: FocusEvent) => {
+    const handleFocus = !SSR ? (e: FocusEvent) => {
       (e.target as HTMLInputElement).select()
-    }
+    } : null!
     const handleOk = async (data: any) => {
-      let ok = false, { template } = data
+      let ok = false
       try {
-        template = trim(template) ? template : defaultTemplate
-        ok = await writeTemplate(template)
+        ok = await writeConfig(data)
       } finally {
         if (ok) {
           if (!PAGES) { location.href += ''; return }
-          store.template = template
-          store.output = store.parsed != null ? _render(store.parsed, store.template) : ''
+          assign(store.config, data)
+          store.output = store.parsed != null ? _render(store.parsed, store.config.template) : ''
         } else {
           Message.error('失败')
         }
       }
     }
+    !SSR ? expose({ __proto__: toRaw(props), data }) : null!
     return () => [
       h('div', { style: 'margin:60px auto 40px auto;text-align:center' }, [
         h('h2', null, ['\u3000'])
@@ -188,8 +184,8 @@ export default defineComponent({
           }, {
             append: () => h(Button, {
               icon: 'md-arrow-forward',
-              loading: $loading.value,
-              disabled: $disabled.value || store.resolved == null,
+              loading: data.loading,
+              disabled: data.disabled || store.resolved == null,
               onClick: handleSearch
             })
           }),
@@ -208,16 +204,16 @@ export default defineComponent({
           }, {
             prepend: () => h(Icon, { type: 'md-share' }),
           }),
-          !(PAGES && $fetch == null) && !(SSR || $disabled.value) ? h(Input, {
-            ref: $outputVm,
+          !(PAGES && $fetch == null) && !(SSR || data.disabled) ? h(Input, {
+            ref: handleRefOutput,
             style: 'margin-top:20px',
             type: 'textarea',
             autosize: { minRows: 20, maxRows: 1 / 0 },
             modelValue: store.output,
             readonly: true
           }) : null,
-          !(PAGES && $fetch == null) && !(SSR || $disabled.value)
-            ? h(Config, { template: store.template, handleOk })
+          !(PAGES && $fetch == null) && !(SSR || data.disabled)
+            ? h(Config, { config: store.config, handleOk })
             : null
         ]),
         component != null ? h(Col, { xs: 24, sm: 12, md: 11, lg: 10 }, () => [
@@ -229,15 +225,14 @@ export default defineComponent({
 })
 
 const Config = defineComponent({
-  props: { template: String, handleOk: null! as Prop<(data: any) => any> },
+  props: { config: null! as Prop<Config>, handleOk: null! as Prop<(data: any) => any> },
   setup(props, ctx) {
     const data = shallowReactive<{
       status: undefined | null | 'modal' | 'pending'
-      template: string
     }>({
-      status: void 0,
-      template: props.template!
+      status: void 0
     })
+    const config = shallowReactive(props.config!)
     const vm = data
     const handleOk = () => { data.status = 'pending' }
     const handleCancel = () => { data.status = null }
@@ -249,14 +244,14 @@ const Config = defineComponent({
       }
     }
     const handleProcess = async () => {
-      try { await props.handleOk!(data) }
+      try { await props.handleOk!(config) }
       finally { data.status = null }
     }
     watchEffect(() => {
       if (data.status === 'pending') { handleProcess() }
     })
     const $rowAttrs = { style: 'margin-bottom:24px' }
-    const $colAttrs0 = { span: 3, style: 'text-align:right;padding-right:8px;line-height:32px;' }
+    const $colAttrs0 = { span: 5, style: 'text-align:right;padding-right:8px;line-height:32px;' }
     return () => [
       h(Button, {
         style: 'margin:20px 0',
@@ -264,7 +259,7 @@ const Config = defineComponent({
         onClick: handleModal
       }, () => ['设置']),
       data.status !== void 0 ? h(Modal, {
-        width: 540, closable: !1, maskClosable: !1,
+        width: 350, closable: !1, maskClosable: !1,
         title: '设置',
         modelValue: data.status != null,
         onOnHidden: handleHidden
@@ -284,13 +279,35 @@ const Config = defineComponent({
         ],
         default: () => [
           h(Row, $rowAttrs, () => [
+            h(Col, $colAttrs0, () => ['浏览器：']),
+            h(Col, { span: 19 }, () => [
+              h(Select, {
+                transfer: true,
+                disabled: config.browsers == null,
+                modelValue: config.defaultBrowser,
+                'onUpdate:modelValue'(_: any) { config.defaultBrowser = _ }
+              }, () => config.browsers != null ? from(entries(config.browsers), ([key, { name, args }]) => h(Option, {
+                value: key, disabled: args == null
+              }, () => [name])) : null)
+            ])
+          ]),
+          h(Row, $rowAttrs, () => [
+            h(Col, $colAttrs0, () => ['分隔符：']),
+            h(Col, { span: 19 }, () => [
+              h(Input, {
+                modelValue: config.separator,
+                'onUpdate:modelValue'(_: any) { config.separator = _ }
+              })
+            ])
+          ]),
+          h(Row, $rowAttrs, () => [
             h(Col, $colAttrs0, () => ['模板：']),
-            h(Col, { span: 21 }, () => [
+            h(Col, { span: 19 }, () => [
               h(Input, {
                 type: 'textarea',
-                autosize: { minRows: 20, maxRows: 20 },
-                modelValue: data.template,
-                'onUpdate:modelValue'(_: any) { data.template = _ }
+                autosize: { minRows: 12, maxRows: 12 },
+                modelValue: config.template,
+                'onUpdate:modelValue'(_: any) { config.template = _ }
               })
             ])
           ])

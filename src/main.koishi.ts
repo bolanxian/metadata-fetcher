@@ -3,15 +3,18 @@ export const name = 'metadata-fetcher'
 export const inject = ['database']
 
 import { Context, Field, Schema, Session, Tables, h } from 'koishi'
+import { config as defaultConfig } from './config'
 import type { ResolvedInfo, ParsedInfo, Render } from './plugin'
-import { xparse, defaultTemplate, render, getSeparator, renderListNameRender, renderListDefaultRender } from './plugin'
+import { xparse, render, renderListNameRender, renderListDefaultRender } from './plugin'
 import.meta.glob('./plugins/*', { eager: true })
 
 export interface Config {
+  separator: string
   template: string
 }
 export const Config: Schema<Config> = Schema.object({
-  template: Schema.string().default(defaultTemplate)
+  separator: Schema.string().default(defaultConfig.separator),
+  template: Schema.string().default(defaultConfig.template),
 })
 
 const locale_zh_Hans = {
@@ -75,18 +78,17 @@ const parse = (ctx: Context, input: string): Promise<readonly [ResolvedInfo?, Pa
   return promise
 }
 async function* renderList(
-  ctx: Context, template: string,
+  ctx: Context, separator: string,
   session: Session, args: string[],
   render = renderListDefaultRender
 ) {
-  const _ = getSeparator(template)
   for (const arg of args) {
     const [resolved, parsed] = await parse(ctx, arg)
     if (parsed == null) {
       yield `${session.text(UNKNOWN)} : ${arg}`
       continue
     }
-    yield render(_, resolved!, parsed)
+    yield render(separator, resolved!, parsed)
   }
 }
 
@@ -111,7 +113,7 @@ export const apply = (ctx: Context, config: Config) => {
   ] as [string, Render][]) {
     ctx.command(`meta.${command} [...args]`).action(async ({ session }, ...args) => {
       let ret = ''
-      for await (const arg of renderList(ctx, config.template, session!, args, render)) { ret += `${arg}\n` }
+      for await (const arg of renderList(ctx, config.separator, session!, args, render)) { ret += `${arg}\n` }
       return ret
     })
   }

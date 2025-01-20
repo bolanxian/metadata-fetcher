@@ -1,6 +1,7 @@
 
-import { $string, htmlToText } from '../bind'
+import { $string, $array, htmlToText } from '../bind'
 import { definePlugin, html } from '../plugin'
+const { from } = Array, { reverse, join } = $array
 const { trim } = $string
 
 definePlugin({
@@ -20,8 +21,10 @@ definePlugin({
   async parse(data, info) {
     const { $ } = data, { url } = info
     let desc = ''
-    for (const el of Array.from($('.olyrictext')).reverse()) {
-      desc += `\n${htmlToText(trim($(el).html()!))}`
+    for (const el of reverse(from($('.olyrictext')))) {
+      let text = join(from($('.line-text', el), line => $(line).text()), '\n')
+      if (!text) { text = trim(htmlToText(trim($(el).html()!))) }
+      desc += `\n${text}\n`
     }
     return {
       title: $('input[type="hidden"][name="pagetitle"]').attr('value') ?? '',
