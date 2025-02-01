@@ -43,7 +43,7 @@ export const writeConfig = async (_config: Config) => {
   if (TARGET == 'client') {
     const resp = await fetch('./.config', {
       method: 'POST',
-      body: stringify(config),
+      body: stringify(_config),
       headers: {
         'content-type': 'application/json'
       }
