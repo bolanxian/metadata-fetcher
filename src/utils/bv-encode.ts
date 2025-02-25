@@ -1,8 +1,8 @@
 /**
  * Base on <https://github.com/Colerar/abv/blob/main/src/lib.rs>
  */
-import { $string, test } from '../bind'
-const { indexOf, slice } = $string
+import { test } from 'bind:utils'
+import { indexOf, slice } from 'bind:String'
 const int = BigInt, { asUintN } = int
 
 export const REG_AV = /^([aA][vV](?!0(?!$))\d{1,16})$/

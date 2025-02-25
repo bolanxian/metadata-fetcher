@@ -1,8 +1,10 @@
 
+import { pipeTo, on } from 'bind:utils'
+import { includes, replaceAll } from 'bind:String'
+import { join } from 'bind:Array'
 import { userAgent } from '../plugin'
-import { $string, $array, on, pipeTo } from '../bind'
-const { includes, replaceAll } = $string, { join } = $array
 const { error } = console
+
 const $command = 'bbdown'
 const notExists = `\
 找不到 BBDown\r
@@ -83,7 +85,7 @@ export function* xargs(opts: BBDownOptions): Generator<string, void, void> {
 
 export const escape = (str: string) => {
   if (includes(str, ' ') || includes(str, '"')) {
-    str = `"${replaceAll(str, '"', '\\"' as any)}"`
+    str = `"${replaceAll(str, '"', '\\"')}"`
   }
   return str
 }

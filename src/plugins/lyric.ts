@@ -1,8 +1,8 @@
 
-import { $string, $array, htmlToText } from '../bind'
+import { trim } from 'bind:String'
+import { from, reverse, join } from 'bind:Array'
+import { htmlToText } from '../bind'
 import { definePlugin, html } from '../plugin'
-const { from } = Array, { reverse, join } = $array
-const { trim } = $string
 
 definePlugin({
   include: [

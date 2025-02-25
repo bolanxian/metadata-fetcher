@@ -2,7 +2,11 @@
 import { defineComponent, shallowReactive, toRaw, watch, watchEffect, createVNode as h, onMounted, onServerPrefetch } from 'vue'
 import type { Component, Prop } from 'vue'
 import { Row, Col, Icon, Input, ButtonGroup, Button, Select, Option, Modal, Message } from 'view-ui-plus'
-import { nextTick, $string, assign, split } from '../bind'
+import { split } from 'bind:utils'
+import { assign, entries } from 'bind:Object'
+import { from } from 'bind:Array'
+import { trim, slice, indexOf, startsWith } from 'bind:String'
+import { nextTick } from '../bind'
 import { type Config, config as defaultConfig, writeConfig } from '../config'
 import {
   resolve, xparse, render as _render, $fetch,
@@ -10,8 +14,7 @@ import {
 } from '../plugin'
 import type { ResolvedInfo, ParsedInfo } from '../plugin'
 import.meta.glob('../plugins/*', { eager: true })
-const { entries } = Object, { from } = Array
-const { trim, slice, indexOf, startsWith } = $string
+
 const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
 const PAGES = TARGET == 'pages'
@@ -204,14 +207,16 @@ export default defineComponent({
           }, {
             prepend: () => h(Icon, { type: 'md-share' }),
           }),
-          !(PAGES && $fetch == null) && !(SSR || data.disabled) ? h(Input, {
+          !(PAGES && $fetch == null) ? !(SSR || data.disabled) ? h(Input, {
             ref: handleRefOutput,
             style: 'margin-top:20px',
             type: 'textarea',
             autosize: { minRows: 20, maxRows: 1 / 0 },
             modelValue: store.output,
             readonly: true
-          }) : null,
+          }) : h('div', { class: 'ivu-input-wrapper', style: 'margin-top:20px' }, [
+            h('textarea', { class: 'ivu-input', style: 'min-height:430px', readonly: true }, [store.output])
+          ]) : null,
           !(PAGES && $fetch == null) && !(SSR || data.disabled)
             ? h(Config, { config: store.config, handleOk })
             : null

@@ -3,8 +3,9 @@ import { Terminal as Xterm } from '@xterm/xterm'
 import { WebglAddon } from '@xterm/addon-webgl'
 import { type VNode, defineComponent, watch, createVNode as h, shallowReactive } from 'vue'
 import { Row, Col, Input, Modal, Button, ButtonGroup, Radio, RadioGroup, Checkbox } from 'view-ui-plus'
+import { encodeText, on } from 'bind:utils'
 import { type BBDownOptions, create, echo } from '../utils/bbdown'
-import { on, encodeText, removeLast } from '../bind'
+import { removeLast } from '../bind'
 const $rowAttrs = { style: 'margin-bottom:24px' }
 const $colAttrs0 = { span: 3, style: 'text-align:right;padding-right:8px;line-height:32px;' }
 const $colAttrs1 = { span: 3, style: 'text-align:right;padding-right:8px;line-height:25px;' }
@@ -31,7 +32,7 @@ export const BBDown = defineComponent({
     const options = shallowReactive(proto)
     const setMap: Record<keyof BBDownOptions, (_: any) => void> = { __proto__: null! } as any
     for (const key of Object.keys(proto) as (keyof BBDownOptions)[]) {
-      setMap[key] = (_: any) => { options[key] = _ }
+      setMap[key] = (_) => { options[key] = _ }
     }
     return {
       socket: null! as WebSocket,

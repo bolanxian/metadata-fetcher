@@ -1,8 +1,8 @@
 
 import process from 'node:process'
-import type { Plugin } from 'vite'
-import { defineConfig } from 'vite'
+import { type Plugin, defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { bindScript } from 'bind-script/plugin.vite'
 
 const externalAssets = (): Plugin => {
   const reg = /\/(ionicons)-[-\w]{8}\.((?!woff2)\S+)$/
@@ -136,6 +136,7 @@ export default defineConfig({
     vue(),
     externalAssets(),
     buildTarget(),
+    bindScript(),
     {
       name: 'view-ui-plus',
       enforce: 'pre',

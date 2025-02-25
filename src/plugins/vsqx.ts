@@ -1,9 +1,10 @@
 
-import { $string, replace } from '../bind'
+import { replace } from 'bind:utils'
+import { slice } from 'bind:String'
 import { definePlugin, json, resolve } from '../plugin'
-const { slice } = $string
+
 const DATE_REG = /^(\d\d\d\d)-(\d\d)-(\d\d)\s+(\d\d:\d\d:\d\d)$/
-const DATE_STR: any = '$1-$2-$3T$4+08:00'
+const DATE_STR = '$1-$2-$3T$4+08:00'
 
 definePlugin({
   include: [

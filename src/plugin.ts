@@ -1,11 +1,13 @@
 
 import type { Component } from 'vue'
 import * as cheerio from 'cheerio'
-import { noop, $string, hasOwn, $then as then, match, replace, on, off, getAsync } from './bind'
+import { hasOwn, $then as then, match, replace, on, off, getAsync } from 'bind:utils'
+import { freeze } from 'bind:Object'
+import { fromCharCode, trim, split, startsWith, charCodeAt } from 'bind:String'
+import { noop } from './bind'
 import { ready as ready1, getCache, setCache } from './cache'
 import { ready as ready2, config } from './config'
-const { freeze } = Object, { fromCharCode } = String
-const { trim, split, startsWith, charCodeAt } = $string
+
 const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
 const PAGES = TARGET == 'pages'
@@ -112,9 +114,9 @@ export const xparse: {
 } as any
 export const render = (parsed: ParsedInfo, template = config.template) => {
   let ret = ''
-  for (let line of split(template, '\n' as any)) {
+  for (let line of split(template, '\n')) {
     if (line = trim(line)) {
-      const [key, name] = split(line, '=' as any)
+      const [key, name] = split(line, '=')
       if (hasOwn(parsed, key)) {
         const value = parsed[key as keyof ParsedInfo]
         if (value) { ret += `${name}${value}\n` }

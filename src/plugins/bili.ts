@@ -1,7 +1,10 @@
 
 import * as cheerio from 'cheerio'
+import { hasOwn, test } from 'bind:utils'
+import { slice, startsWith } from 'bind:String'
+import { join } from 'bind:Array'
 import component, { toUrl, toShortUrl } from '../components/bili.vue'
-import { $string, $array, hasOwn, test, htmlToText } from '../bind'
+import { htmlToText } from '../bind'
 import { getCache, json } from '../cache'
 import { $fetch, definePlugin, htmlInit, jsonInit, html } from '../plugin'
 import * as BV from '../utils/bv-encode'
@@ -12,7 +15,6 @@ export { REG_AV, REG_BV } from '../utils/bv-encode'
 export const REG_B23 = /^(?:https?:\/\/)?(?:b23\.tv|bili2{0,2}3{0,2}\.cn)\/([-\w]+)(?=$|[?#])/
 export const REG_FULL = /^(?:https?:\/\/)?(?:m|www)\.bilibili\.com\/video\/(\w+)\/?(?=$|[?#])/
 export const REG_WL = /^(?:https?:\/\/)?www\.bilibili\.com\/list\/watchlater\?(?:\S*?&)??bvid=(\w+)/
-const { slice, startsWith } = $string, { join } = $array
 const REG_INIT = /^\s*window\.__INITIAL_STATE__\s*=\s*(?={)/
 let channelKv: any
 

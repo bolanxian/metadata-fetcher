@@ -1,9 +1,10 @@
 
 
-import { $string, $array, hasOwn, replace } from '../bind'
+import { hasOwn, replace } from 'bind:utils'
+import { slice, indexOf } from 'bind:String'
+import { find, map, join } from 'bind:Array'
 import { definePlugin, html } from '../plugin'
 import { fromHTML } from '../utils/find-json-object'
-const { slice, indexOf, } = $string, { find, map, join } = $array
 
 const name = 'youtube'
 export default definePlugin({

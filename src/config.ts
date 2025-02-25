@@ -1,7 +1,6 @@
 
-import { assign } from './bind'
+import { assign, keys } from 'bind:Object'
 import { ready as ready1, getCache, setCache } from './cache'
-const { keys } = Object
 const { parse, stringify } = JSON
 const { error } = console
 

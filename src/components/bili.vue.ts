@@ -2,11 +2,11 @@
 import { type VNode, defineComponent, shallowReactive, watchEffect, onMounted, createVNode as h, withDirectives } from 'vue'
 import { Alert, ButtonGroup, Button, Card, CellGroup, Cell, Divider, Drawer, Icon, Tag } from 'view-ui-plus'
 import lineClamp from 'view-ui-plus/src/directives/line-clamp'
+import { hasOwn } from 'bind:utils'
+import { slice, startsWith } from 'bind:String'
+import { from, join } from 'bind:Array'
 import { instantToString, formatDuration } from '../utils/temporal'
-import { $string, $array, hasOwn } from '../bind'
 import { BBDown } from './bbdown'
-const { from } = Array
-const { slice, startsWith } = $string, { join } = $array
 
 export const toShortUrl = (id: string) => `https://b23.tv/${id}`
 export const toUrl = (id: string) => `https://www.bilibili.com/video/${id}/`

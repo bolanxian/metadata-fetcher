@@ -1,9 +1,10 @@
 
-import { $string, test, htmlToText } from '../bind'
+import { test } from 'bind:utils'
+import { slice } from 'bind:String'
+import { htmlToText } from '../bind'
 import type { ResolvedInfo, ParsedInfo } from '../plugin'
 import { definePlugin, json } from '../plugin'
 export const REG_NICO = /^((?:sm|im|td|nc)(?!0\d)\d+)$/
-const { slice } = $string
 
 const toShortUrl = (id: string) => `https://nico.ms/${id}`
 const getUser = async (userId: string) => {

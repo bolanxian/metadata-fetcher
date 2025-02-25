@@ -1,6 +1,7 @@
 import { Temporal } from 'temporal-polyfill'
-import { call, $string, replace } from '../bind'
-const { padStart } = $string
+import { call } from 'bind:core'
+import { replace } from 'bind:utils'
+import { padStart } from 'bind:String'
 const { Now, Instant, Duration } = Temporal
 
 type SmallestUnit = Temporal.ToStringPrecisionOptions['smallestUnit'] & Temporal.TimeUnit
@@ -32,7 +33,7 @@ export const instantToString = (input: Temporal.Instant | string | bigint | numb
 export const formatDuration = (_seconds: number) => {
   const { hours, minutes, seconds } = Duration.from(`PT${_seconds}S`).round({ largestUnit: 'hour', smallestUnit: 'second' })
   let ret = `${hours}:${minutes}:${seconds}`
-  ret = replace(/(?<=^|:)(?=\d(?::|$))/g, ret, '0' as any)
-  ret = replace(/^0+:/, ret, '' as any)
+  ret = replace(/(?<=^|:)(?=\d(?::|$))/g, ret, '0')
+  ret = replace(/^0+:/, ret, '')
   return ret
 }
