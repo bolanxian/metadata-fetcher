@@ -11,7 +11,7 @@ export { handleRequest as handleRequestBbdown } from './utils/bbdown'
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { keys } from 'bind:Object'
-import { concat, slice, replaceAll } from 'bind:String'
+import { slice, replaceAll } from 'bind:String'
 import { join } from 'bind:Array'
 import { onlyFirst32, escapeText, escapeAttr, escapeAttrApos } from './bind'
 import { config } from './config'
@@ -24,7 +24,7 @@ const meta = (name: string, content = 'content') => {
     for (const key of keys(record)) {
       const value = record[key]
       if (value == null) { continue }
-      yield `<meta ${name}="${escapeAttr(key)}" ${content}="${escapeAttr(value)}">\n`
+      yield `<meta ${name}="${escapeAttr(key)}" ${content}="${escapeAttr(value)}">`
     }
   }
 }
@@ -37,8 +37,9 @@ export const buildMeta = (parsed: Store['parsed']) => {
   if (parsed == null) { return `<title>${name}</title>\n` }
   let description = onlyFirst32(parsed.description)
   description = replaceAll(description, '\n', ' ')
-  return concat(
-    `<title>${escapeText(parsed.title)} - ${name}</title>\n`,
+  return join([
+    '<link rel="icon" href="./.favicon">',
+    `<title>${escapeText(parsed.title)} - ${name}</title>`,
     ...metaName({
       title: parsed.title,
       author: parsed.ownerName,
@@ -57,7 +58,7 @@ export const buildMeta = (parsed: Store['parsed']) => {
       'og:image': parsed.thumbnailUrl,
       'og:description': description,
     }),
-  )
+  ], '\n')
 }
 
 export const renderToHtml = async (input: string, ids?: string[]) => {

@@ -1,5 +1,4 @@
 use nwg::NativeUi;
-use std::ptr::addr_of_mut;
 use winapi::um::wincon::{GetConsoleWindow, SetConsoleOutputCP, SetConsoleTitleW};
 use winapi::um::winuser::{ShowWindow, SW_HIDE, SW_SHOW};
 
@@ -7,15 +6,15 @@ mod system_tray;
 use system_tray::{Dispatch, Handle, SystemTray, SystemTrayUi};
 static mut UI: Option<SystemTrayUi> = None;
 
-fn string_to_wide(string: &str) -> Vec<u16> {
+use std::os::windows::ffi;
+use std::{iter, slice, str};
+fn string_to_wide(string: &str) -> iter::Chain<ffi::EncodeWide<'_>, iter::Once<u16>> {
+    use ffi::OsStrExt;
     use std::ffi::OsStr;
-    use std::iter::once;
-    use std::os::windows::ffi::OsStrExt;
-    OsStr::new(string).encode_wide().chain(once(0)).collect()
+    OsStr::new(string).encode_wide().chain(iter::once(0))
 }
 unsafe fn from_raw_parts<'a>(pointer: *const u8, length: usize) -> &'a str {
-    use std::{slice::from_raw_parts, str::from_utf8_unchecked};
-    from_utf8_unchecked(from_raw_parts(pointer, length))
+    str::from_utf8_unchecked(slice::from_raw_parts(pointer, length))
 }
 
 #[no_mangle]
@@ -26,7 +25,7 @@ pub extern "C" fn set_console_output_code_page(code_page_id: u32) -> i32 {
 #[no_mangle]
 pub extern "C" fn set_title(title_ptr: *const u8, title_len: usize) -> i32 {
     let title = unsafe { from_raw_parts(title_ptr, title_len) };
-    let wide = string_to_wide(title);
+    let wide: Box<[u16]> = string_to_wide(title).collect();
     unsafe { SetConsoleTitleW(wide.as_ptr()) }
 }
 
@@ -45,7 +44,7 @@ pub extern "C" fn tray_init(
     path_len: usize,
     handle: Handle,
 ) -> i32 {
-    let ui = unsafe { &mut *addr_of_mut!(UI) };
+    let ui = unsafe { &mut *&raw mut UI };
     if ui.is_some() {
         SystemTray::dispatch(handle, "!Already inited");
         return -1;
@@ -73,7 +72,7 @@ pub extern "C" fn tray_init(
 #[no_mangle]
 pub extern "C" fn tray_deinit() {
     nwg::stop_thread_dispatch();
-    *unsafe { &mut *addr_of_mut!(UI) } = None;
+    *unsafe { &mut *&raw mut UI } = None;
 }
 
 #[no_mangle]
@@ -84,9 +83,9 @@ pub extern "C" fn tray_notification(
     title_len: usize,
 ) {
     if let Some(ui) = unsafe { UI.as_ref() } {
-        let text = String::from(unsafe { from_raw_parts(text_ptr, text_len) });
-        let title = if title_len > 0 { Some(()) } else { None };
-        let title = title.map(|_| String::from(unsafe { from_raw_parts(title_ptr, title_len) }));
-        ui.notification(&text, title.as_deref());
+        let text = unsafe { from_raw_parts(text_ptr, text_len) };
+        let title = unsafe { from_raw_parts(title_ptr, title_len) };
+        let title = if title_len > 0 { Some(title) } else { None };
+        ui.notification(text, title);
     }
 }
