@@ -14,6 +14,7 @@ export interface Config {
   defaultBrowser: null | string
   separator: string
   template: string
+  batch: Record<string, string>
 }
 export const config: Config = {
   browsers: null,
@@ -26,7 +27,13 @@ publishDate=日期：
 shortUrl=链接：
 thumbnailUrl=封面：
 description=简介：
-`
+`,
+  batch: {
+    '.id': '[${rawId}]${url}',
+    list: '${title}${_}${rawId}${_}${ownerName}',
+    name: '[${ownerName}][${id}]${title}',
+    escape: '［${rawId|escape}］${title}',
+  }
 }
 
 export const readConfig = async () => {

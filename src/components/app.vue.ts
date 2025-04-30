@@ -4,13 +4,12 @@ import type { Component, Prop } from 'vue'
 import { Row, Col, Icon, Input, ButtonGroup, Button, Select, Option, Modal, Message } from 'view-ui-plus'
 import { split } from 'bind:utils'
 import { assign, entries } from 'bind:Object'
-import { from } from 'bind:Array'
+import { from, map } from 'bind:Array'
 import { trim, slice, indexOf, startsWith } from 'bind:String'
 import { nextTick } from '../bind'
 import { type Config, config as defaultConfig, writeConfig } from '../config'
 import {
-  resolve, xparse, render as _render, $fetch,
-  renderIds, renderList, renderListNameRender, renderListEscapeRender,
+  resolve, xparse, render as _render, renderBatch, $fetch
 } from '../plugin'
 import type { ResolvedInfo, ParsedInfo } from '../plugin'
 import.meta.glob('../plugins/*', { eager: true })
@@ -27,17 +26,6 @@ export interface Store {
   parsed: ParsedInfo | null
   output: string
   config: Config
-}
-
-const render = (id: string, args: string[], sep?: string)
-  : Generator<string, void, unknown> | AsyncGenerator<string, void, unknown> => {
-  switch (id) {
-    case '.id': return renderIds(args, sep)
-    case '.list': return renderList(args, sep)
-    case '.name': return renderList(args, sep, renderListNameRender)
-    case '.escape': return renderList(args, sep, renderListEscapeRender)
-  }
-  return null!
 }
 
 export default defineComponent({
@@ -64,7 +52,7 @@ export default defineComponent({
       if (store.resolved != null) {
         store.output = ''
         const { id, url } = store.resolved
-        for await (const line of render(id, split(S, url), store.config.separator)) {
+        for await (const line of renderBatch(split(S, url), slice(id, 1))) {
           store.output += `${line}\n`
         }
         return
@@ -90,7 +78,7 @@ export default defineComponent({
         input = trim(input)
         let id: string | null = null
         switch (slice(input, 0, indexOf(input, ' '))) {
-          case 'id': case '!': id = '.id'; break
+          case 'id': case '!': case '.id': id = '..id'; break
           case 'list': case '!!': id = '.list'; break
           case 'name': case '=': id = '.name'; break
           case 'escape': case '==': id = '.escape'; break
@@ -117,7 +105,7 @@ export default defineComponent({
         store.output = ''
         const { id, url } = store.resolved
         if (id[0] === '.') {
-          for await (const line of render(id, split(S, url), store.config.separator)) {
+          for await (const line of renderBatch(split(S, url), slice(id, 1))) {
             store.output += `${line}\n`
           }
         } else {
@@ -143,11 +131,10 @@ export default defineComponent({
       if (data.disabled || store.resolved == null) { return }
       const { id, url } = store.resolved
       if (id[0] === '.') {
-        const params = new URLSearchParams()
-        for (const arg of split(S, url)) {
-          params.append('id', arg)
-        }
-        location.href = `./${encodeURIComponent(id)}?${params}`
+        location.href = `./.batch?${new URLSearchParams([
+          ['type', slice(id, 1)],
+          ...map(split(S, url), arg => ['id', arg]) as any[]
+        ])}`
       } else if (startsWith(id, '@redirect!')) {
         location.href = `./.redirect?url=${encodeURIComponent(url)}`
       } else {

@@ -36,6 +36,8 @@ const buildTarget = (): Plugin => {
   for (const name of ['countup.js', 'dayjs', 'numeral']) {
     map.set(name, 'export default null')
   }
+  map.set('undici', 'export let stream')
+  map.set('encoding-sniffer', 'export let decodeBuffer, DecodeStream')
   map.set('@xterm/xterm', 'export let Terminal')
   map.set('@xterm/addon-webgl', 'export let WebglAddon')
 

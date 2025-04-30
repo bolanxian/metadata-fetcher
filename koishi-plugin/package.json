@@ -21,8 +21,9 @@
     "plugin"
   ],
   "peerDependencies": {
-    "cheerio": "^1.0.0-rc.12",
-    "koishi": "^4.17.9"
+    "cheerio": "^1.0.0",
+    "koishi": "^4.18.7",
+    "temporal-polyfill": "^0.2.5"
   },
   "koishi": {
     "service": {

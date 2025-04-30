@@ -1,9 +1,9 @@
 
 import type { Component } from 'vue'
 import * as cheerio from 'cheerio'
-import { hasOwn, $then as then, match, replace, on, off, getAsync } from 'bind:utils'
+import { getOwn, $then as then, match, replace, on, off, getAsync } from 'bind:utils'
 import { freeze } from 'bind:Object'
-import { fromCharCode, trim, split, startsWith, charCodeAt } from 'bind:String'
+import { fromCharCode, includes, trim, split, startsWith, charCodeAt } from 'bind:String'
 import { noop } from './bind'
 import { ready as ready1, getCache, setCache } from './cache'
 import { ready as ready2, config } from './config'
@@ -117,52 +117,55 @@ export const render = (parsed: ParsedInfo, template = config.template) => {
   for (let line of split(template, '\n')) {
     if (line = trim(line)) {
       const [key, name] = split(line, '=')
-      if (hasOwn(parsed, key)) {
-        const value = parsed[key as keyof ParsedInfo]
-        if (value) { ret += `${name}${value}\n` }
-      }
+      const value = getOwn(parsed, key)
+      if (value) { ret += `${name}${value}\n` }
     }
   }
   return ret
 }
-export function* renderIds(args: string[], separator = config.separator) {
-  for (const arg of args) {
-    const resolved = resolve(arg)
-    if (resolved == null) {
-      yield `Unknown Input : ${arg}`
-      continue
+
+const LINE_REG = /\$\{(.+?)\}/g
+export const renderLine = async (data: Record<string, string>, template: string) => {
+  return replace(LINE_REG, template, ($0, $1) => {
+    if (includes($1, '|')) {
+      const [_sub, ...args] = split($1, '|')
+      let val = getOwn(data, trim(_sub))
+      if (val == null) { return $0 }
+      for (let arg of args) {
+        const fn: (str: string) => string = getOwn(renderLine, trim(arg)) as any
+        val = fn(val)
+      }
+      return val
     }
-    const { rawId, url } = resolved
-    yield `[${rawId}]${url}`
-  }
+    return getOwn(data, trim($1)) ?? $0
+  })
 }
-export type Render = (...args: [string, ResolvedInfo, ParsedInfo]) => string
-export async function* renderList(args: string[], separator = config.separator, render: Render = renderListDefaultRender) {
-  for (const arg of args) {
-    const [, resolved, redirected, , parsedPromise] = xparse(arg)
-    if (resolved == null) {
-      yield `Unknown Input : ${arg}`
-      continue
-    }
-    const parsed = await parsedPromise
-    if (parsed == null) {
-      yield `Not Found : ${resolved.id}`
-      continue
-    }
-    yield render(separator, redirected != null ? await redirected : resolved, parsed)
-  }
-}
-export const renderListDefaultRender: Render = (
-  _, { rawId: id }, { title, ownerName }
-) => `${title}${_}${id}${_}${ownerName}`
-export const renderListNameRender: Render = (
-  _, { id }, { title, ownerName }
-) => `${ownerName ? `[${ownerName}]` : ''}[${id}]${title}`
 const ESCAPE_REG = /(?<=^(?=av)|^a(?=v)|^(?=BV)|^B(?=V))./g
 const ESCAPE_FUNC = ($0: string) => fromCharCode(charCodeAt($0, 0) + 0xFEE0)
-export const renderListEscapeRender: Render = (
-  _, { rawId: id }, { title }
-) => `［${replace(ESCAPE_REG, id, ESCAPE_FUNC)}］${title}`
+renderLine.escape = (str: string) => replace(ESCAPE_REG, str, ESCAPE_FUNC)
+
+export async function* renderBatch(args: string[], key: string) {
+  const template = getOwn(config.batch, key)
+  if (template == null) { yield `Unknown Template : ${key}`; return }
+  const { separator } = config
+  const sep = { separator, _: separator }
+  const hasParse = key[0] !== '.'
+  for (const arg of args) {
+    let data: Record<string, string>
+    if (hasParse) {
+      const [, resolved, redirected, , parsedPromise] = xparse(arg)
+      if (resolved == null) { yield `Unknown Input : ${arg}`; continue }
+      const parsed = await parsedPromise
+      if (parsed == null) { yield `Not Found : ${resolved.id}`; continue }
+      data = { ...sep, ...resolved, ...redirected != null ? await redirected : null, ...parsed }
+    } else {
+      const [, resolved] = xparse(arg)
+      if (resolved == null) { yield `Unknown Input : ${arg}`; continue }
+      data = { ...sep, ...resolved }
+    }
+    yield renderLine(data, template)
+  }
+}
 
 export let $fetch = SSR || TARGET == 'koishi' ? fetch : null!
 export const ready = SSR || PAGES ? (async () => {

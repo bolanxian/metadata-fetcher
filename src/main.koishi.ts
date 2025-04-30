@@ -2,10 +2,11 @@
 export const name = 'metadata-fetcher'
 export const inject = ['database']
 
+import { getOwn } from 'bind:utils'
 import { Context, Field, Schema, Session, Tables, h } from 'koishi'
 import { config as defaultConfig } from './config'
-import type { ResolvedInfo, ParsedInfo, Render } from './plugin'
-import { xparse, render, renderListNameRender, renderListDefaultRender } from './plugin'
+import type { ResolvedInfo, ParsedInfo } from './plugin'
+import { xparse, render, renderLine } from './plugin'
 import.meta.glob('./plugins/*', { eager: true })
 
 export interface Config {
@@ -78,17 +79,19 @@ const parse = (ctx: Context, input: string): Promise<readonly [ResolvedInfo?, Pa
   return promise
 }
 async function* renderList(
-  ctx: Context, separator: string,
-  session: Session, args: string[],
-  render = renderListDefaultRender
+  ctx: Context, session: Session,
+  separator: string, args: string[], key: string
 ) {
+  const template = getOwn(defaultConfig.batch, key)!
+  const sep = { separator, _: separator }
   for (const arg of args) {
     const [resolved, parsed] = await parse(ctx, arg)
     if (parsed == null) {
       yield `${session.text(UNKNOWN)} : ${arg}`
       continue
     }
-    yield render(separator, resolved!, parsed)
+    const data = { ...sep, ...resolved, ...parsed }
+    yield renderLine(data, template)
   }
 }
 
@@ -107,13 +110,10 @@ export const apply = (ctx: Context, config: Config) => {
     if (parsed == null) { return session!.text(UNKNOWN) }
     return h.image(parsed.thumbnailUrl)
   })
-  for (const [command, render] of [
-    ['list', renderListDefaultRender],
-    ['name', renderListNameRender]
-  ] as [string, Render][]) {
+  for (const command of ['list', 'name'] as string[]) {
     ctx.command(`meta.${command} [...args]`).action(async ({ session }, ...args) => {
       let ret = ''
-      for await (const arg of renderList(ctx, config.separator, session!, args, render)) { ret += `${arg}\n` }
+      for await (const arg of renderList(ctx, session!, config.separator, args, command)) { ret += `${arg}\n` }
       return ret
     })
   }

@@ -34,11 +34,10 @@ const metaItemprop = meta('itemprop')
 const metaProperty = meta('property')
 
 export const buildMeta = (parsed: Store['parsed']) => {
-  if (parsed == null) { return `<title>${name}</title>\n` }
+  if (parsed == null) { return `<title>${name}</title>` }
   let description = onlyFirst32(parsed.description)
   description = replaceAll(description, '\n', ' ')
   return join([
-    '<link rel="icon" href="./.favicon">',
     `<title>${escapeText(parsed.title)} - ${name}</title>`,
     ...metaName({
       title: parsed.title,
