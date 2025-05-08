@@ -14,7 +14,7 @@ export interface Config {
   defaultBrowser: null | string
   separator: string
   template: string
-  batch: Record<string, string>
+  batch: Record<string, { name: string, template: string }>
 }
 export const config: Config = {
   browsers: null,
@@ -29,10 +29,10 @@ thumbnailUrl=封面：
 description=简介：
 `,
   batch: {
-    '.id': '[${rawId}]${url}',
-    list: '${title}${_}${rawId}${_}${ownerName}',
-    name: '[${ownerName}][${id}]${title}',
-    escape: '［${rawId|escape}］${title}',
+    '.id': { name: 'ID', template: '[${rawId}]${url}' },
+    list: { name: '借物表', template: '${title}${_}${rawId}${_}${ownerName}' },
+    name: { name: '文件名', template: '[${ownerName}][${id}]${title}' },
+    escape: { name: '', template: '［${rawId|escape}］${title}' },
   }
 }
 

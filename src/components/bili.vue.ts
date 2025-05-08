@@ -52,6 +52,24 @@ const renderArgue = ({ argue_info: info }: any, inner: VNode): (VNode | null)[] 
     before ? null : argue
   ]
 }
+const resolveChannel = (videoData: { tid: number, tname: string }, channelKv: any) => {
+  if (channelKv != null) {
+    for (const channel of channelKv) {
+      if (!hasOwn(channel, 'sub')) { continue }
+      for (const sub of channel.sub) {
+        if (sub.tid === videoData.tid && sub.name === videoData.tname) {
+          return [channel, sub]
+        }
+      }
+    }
+    for (const channel of channelKv) {
+      if (channel.tid === videoData.tid && channel.name === videoData.tname) {
+        return [channel, null]
+      }
+    }
+  }
+  return [{ name: videoData.tname, url: '' }, null]
+}
 
 export default defineComponent({
   props: { data: null as any },
@@ -69,7 +87,9 @@ export default defineComponent({
     let data:
       & Record<'error' | 'thumb' | 'date' | 'copyright', string | null>
       & Record<'pagesTitle' | 'episodesTitle', string>
-      & Record<'channel' | 'subChannel', any>
+      & Record<'channel' | 'subChannel' | 'channel_v2' | 'subChannel_v2', {
+        name: string, url: string, desc?: string
+      } | null>
     watchEffect(() => {
       const $data = props.data
       data = {
@@ -81,6 +101,8 @@ export default defineComponent({
         episodesTitle: '合集',
         channel: null,
         subChannel: null,
+        channel_v2: null,
+        subChannel_v2: null,
       }
       if ($data == null) { return }
       const { error, channelKv, videoData } = $data
@@ -97,27 +119,12 @@ export default defineComponent({
         const { title, ep_count } = videoData.ugc_season
         data.episodesTitle = `${title}[${ep_count}]`
       }
-      if (channelKv != null) {
-        for (const channel of channelKv) {
-          if (!hasOwn(channel, 'sub')) { continue }
-          for (const sub of channel.sub) {
-            if (sub.tid === videoData.tid && sub.name === videoData.tname) {
-              data.channel = channel
-              data.subChannel = sub
-              return
-            }
-          }
-        }
-        for (const channel of channelKv) {
-          if (channel.tid === videoData.tid && channel.name === videoData.tname) {
-            data.channel = channel
-            data.subChannel = null
-            return
-          }
-        }
-      }
-      data.channel = { name: videoData.tname, url: '#' }
-      data.subChannel = null
+      !([data.channel, data.subChannel] = resolveChannel(videoData, channelKv))
+      hasOwn(videoData, 'tid_v2') && hasOwn(videoData, 'tname_v2') ? (
+        [data.channel_v2, data.subChannel_v2] = resolveChannel({
+          tid: videoData.tid_v2, tname: videoData.tname_v2
+        }, channelKv)
+      ) : null
     })
     const handle = {
       drawerParts() { state.drawer = 'parts' },
@@ -168,11 +175,17 @@ export default defineComponent({
           ])),
           default: () => [
             h('div', null, [
-              data.channel != null ? h('a', { ...$a, href: data.channel.url }, [
-                h(Tag, { color: 'blue' }, () => [data.channel.name])
+              data.channel != null ? h('a', { ...$a, href: data.channel.url || null, title: `videoData.tid=${videoData.tid}` }, [
+                h(Tag, { color: 'blue' }, () => [data.channel!.name])
               ]) : null,
-              data.subChannel != null ? h('a', { ...$a, href: data.subChannel.url, title: data.subChannel.desc }, [
-                h(Tag, { color: 'blue' }, () => [data.subChannel.name])
+              data.subChannel != null ? h('a', { ...$a, href: data.subChannel.url || null, title: data.subChannel.desc }, [
+                h(Tag, { color: 'blue' }, () => [data.subChannel!.name])
+              ]) : null,
+              data.channel_v2 != null ? h('a', { ...$a, href: data.channel_v2.url || null, title: `videoData.tid_v2=${videoData.tid_v2}` }, [
+                h(Tag, { color: 'blue' }, () => [data.channel_v2!.name])
+              ]) : null,
+              data.subChannel_v2 != null ? h('a', { ...$a, href: data.subChannel_v2.url || null, title: data.subChannel_v2.desc }, [
+                h(Tag, { color: 'blue' }, () => [data.subChannel_v2!.name])
               ]) : null,
               h(Tag, { color: 'cyan', title: `视频类型[${copyrightValues}]` }, () => [data.copyright]),
               h('a', { ...$a, href: toUrl(id) }, [

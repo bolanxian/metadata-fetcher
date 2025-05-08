@@ -84,6 +84,7 @@ export const xparse: {
   (input: string): [Plugin<{}>?, ResolvedInfo?, Promise<ResolvedInfo>?, Promise<{} | null>?, Promise<ParsedInfo | null>?]
 } = function* (input: string) {
   input = trim(input)
+  if (!(input.length > 0)) { return }
   for (const plugin of plugins) {
     for (const reg of plugin.include) {
       const m = match(reg, input)
@@ -145,8 +146,8 @@ const ESCAPE_FUNC = ($0: string) => fromCharCode(charCodeAt($0, 0) + 0xFEE0)
 renderLine.escape = (str: string) => replace(ESCAPE_REG, str, ESCAPE_FUNC)
 
 export async function* renderBatch(args: string[], key: string) {
-  const template = getOwn(config.batch, key)
-  if (template == null) { yield `Unknown Template : ${key}`; return }
+  const batch = getOwn(config.batch, key)
+  if (batch == null) { yield `Unknown Template : ${key}`; return }
   const { separator } = config
   const sep = { separator, _: separator }
   const hasParse = key[0] !== '.'
@@ -163,7 +164,7 @@ export async function* renderBatch(args: string[], key: string) {
       if (resolved == null) { yield `Unknown Input : ${arg}`; continue }
       data = { ...sep, ...resolved }
     }
-    yield renderLine(data, template)
+    yield renderLine(data, batch.template)
   }
 }
 

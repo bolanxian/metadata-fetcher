@@ -1,5 +1,5 @@
 
-chcp 65001
+@echo off
 set "TARGET=x86_64-pc-windows-msvc"
 set "EXEC_DENO=deno"
 cd /d "%~dp0"

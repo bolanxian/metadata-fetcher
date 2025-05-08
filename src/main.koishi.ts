@@ -82,7 +82,7 @@ async function* renderList(
   ctx: Context, session: Session,
   separator: string, args: string[], key: string
 ) {
-  const template = getOwn(defaultConfig.batch, key)!
+  const batch = getOwn(defaultConfig.batch, key)!
   const sep = { separator, _: separator }
   for (const arg of args) {
     const [resolved, parsed] = await parse(ctx, arg)
@@ -91,7 +91,7 @@ async function* renderList(
       continue
     }
     const data = { ...sep, ...resolved, ...parsed }
-    yield renderLine(data, template)
+    yield renderLine(data, batch.template)
   }
 }
 

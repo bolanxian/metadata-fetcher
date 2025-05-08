@@ -6,12 +6,13 @@ export { bindCall, call, bind } from 'bind:core'
 export { hasOwn, getOwn, encodeText, decodeText, test, match, replace, split, on, off } from 'bind:utils'
 export { getCache, setCache } from './cache'
 export { config, readConfig, writeConfig } from './config'
+export { createBatchParams } from './components/app.vue'
 export { handleRequest as handleRequestBbdown } from './utils/bbdown'
 
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { keys } from 'bind:Object'
-import { slice, replaceAll } from 'bind:String'
+import { replaceAll } from 'bind:String'
 import { join } from 'bind:Array'
 import { onlyFirst32, escapeText, escapeAttr, escapeAttrApos } from './bind'
 import { config } from './config'
@@ -33,7 +34,7 @@ const metaName = meta('name')
 const metaItemprop = meta('itemprop')
 const metaProperty = meta('property')
 
-export const buildMeta = (parsed: Store['parsed']) => {
+export const buildMeta = ({ parsed }: Store) => {
   if (parsed == null) { return `<title>${name}</title>` }
   let description = onlyFirst32(parsed.description)
   description = replaceAll(description, '\n', ' ')
@@ -60,17 +61,12 @@ export const buildMeta = (parsed: Store['parsed']) => {
   ], '\n')
 }
 
-export const renderToHtml = async (input: string, ids?: string[]) => {
-  const store: Store = { input: input, resolved: null, data: null, parsed: null, output: '', config }
-  if (input[0] === '.') {
-    const args = join(ids!, ' ')
-    store.input = `${slice(input, 1)} ${args}`
-    store.resolved = { id: input, rawId: input, shortUrl: '', url: args }
-  }
+export const renderToHtml = async (mode: string, input: string) => {
+  const store: Store = { mode, input, resolved: null, data: null, parsed: null, batchResolved: null, output: '', config }
   const app = createSSRApp(App, { store })
   const context = {}
   const appHTML = await renderToString(app, context)
   const attrs = ` data-store='${escapeAttrApos(stringify(store, void 0, 2))}'`
-  const head = buildMeta(store.parsed)
+  const head = buildMeta(store)
   return { head, attrs, app: appHTML, context }
 }

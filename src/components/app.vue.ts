@@ -1,13 +1,13 @@
 
 import { defineComponent, shallowReactive, toRaw, watch, watchEffect, createVNode as h, onMounted, onServerPrefetch } from 'vue'
 import type { Component, Prop } from 'vue'
-import { Row, Col, Icon, Input, ButtonGroup, Button, Select, Option, Modal, Message } from 'view-ui-plus'
-import { split } from 'bind:utils'
+import { Row, Col, Icon, Input, ButtonGroup, Button, Select, Option, Modal, Message, Menu, Submenu, MenuItem } from 'view-ui-plus'
+import { getOwn, split } from 'bind:utils'
 import { assign, entries } from 'bind:Object'
-import { from, map } from 'bind:Array'
-import { trim, slice, indexOf, startsWith } from 'bind:String'
+import { from, join } from 'bind:Array'
+import { trim, slice, startsWith } from 'bind:String'
 import { nextTick } from '../bind'
-import { type Config, config as defaultConfig, writeConfig } from '../config'
+import { config, type Config, config as defaultConfig, writeConfig } from '../config'
 import {
   resolve, xparse, render as _render, renderBatch, $fetch
 } from '../plugin'
@@ -20,18 +20,42 @@ const PAGES = TARGET == 'pages'
 const S = /\s+/
 
 export interface Store {
+  mode: string
   input: string
+
   resolved: ResolvedInfo | null
   data: {} | null
   parsed: ParsedInfo | null
+
+  batchResolved: string | null
+
   output: string
   config: Config
+}
+
+const resolveBatchCb = (id: string) => resolve(id)?.id ?? '!'
+const resolveBatch = (input: string) => (input = trim(input)) ? join(from(split(S, input), resolveBatchCb), ' ') : ''
+const createBatchParamsCb: (arg: string) => ['id', string] = arg => ['id', arg]
+export const createBatchParams = (type: string, input: string | Iterable<string>) => {
+  let ids: ['id', string][] | null = null
+  if (typeof input == 'string') { ids = input ? from(split(S, input), createBatchParamsCb) : [] }
+  else { ids = from(input, createBatchParamsCb) }
+  return new URLSearchParams([['type', type], ...ids])
 }
 
 export default defineComponent({
   props: PAGES ? (void 0)! : { store: null! as Prop<Store> },
   setup(props, { expose }) {
-    const data = shallowReactive({ loading: false, disabled: true })
+    const data = shallowReactive<({
+      mode: 'default'
+      batchType: null
+    } | {
+      mode: 'batch'
+      batchType: string
+    }) & {
+      loading: boolean
+      disabled: boolean
+    }>({ mode: 'default', batchType: null, loading: false, disabled: true })
     const handleRefOutput = (vm: any) => { nextTick(vm.resizeTextarea) }
     if (!(PAGES && $fetch == null) && !SSR) {
       onMounted(() => { data.disabled = false })
@@ -39,78 +63,89 @@ export default defineComponent({
 
     let component: Component | undefined
     const $store = PAGES ? null : props.store
-    const store = SSR ? $store! : shallowReactive($store ?? {
+    const store = SSR ? $store! : shallowReactive<Store>($store ?? {
+      mode: 'default',
       input: '',
       resolved: null,
       data: null,
       parsed: null,
       output: '',
+      batchResolved: null,
       config: defaultConfig
     })
 
-    SSR && store.input && onServerPrefetch(async () => {
-      if (store.resolved != null) {
-        store.output = ''
-        const { id, url } = store.resolved
-        for await (const line of renderBatch(split(S, url), slice(id, 1))) {
-          store.output += `${line}\n`
+    store.input = trim(store.input)
+    if (startsWith(store.mode, 'batch:')) {
+      data.mode = 'batch'
+      data.batchType = slice(store.mode, 6)
+      if (SSR) {
+        store.batchResolved = ''
+        store.input && onServerPrefetch(async () => {
+          store.batchResolved = resolveBatch(store.input)
+          let output = ''
+          for await (const line of renderBatch(split(S, store.input), data.batchType!)) {
+            output += `${line}\n`
+          }
+          store.output = output
+        })
+      }
+    } else {
+      if (SSR) {
+        store.input && onServerPrefetch(async () => {
+          const [plugin, resolved, redirected, dataPromise, parsedPromise] = xparse(store.input)
+          if (resolved == null) { return }
+          component = plugin!.component
+          store.resolved = redirected != null ? await redirected : resolved
+          store.data = await dataPromise!
+          if ((store.parsed = await parsedPromise!) != null) {
+            store.output = _render(store.parsed, store.config.template)
+          }
+        })
+      } else {
+        const id = store.resolved?.id
+        if (id != null) {
+          const [plugin] = xparse(id)
+          component = plugin?.component
         }
-        return
-      }
-      const [plugin, resolved, redirected, dataPromise, parsedPromise] = xparse(store.input)
-      if (resolved == null) { return }
-      component = plugin!.component
-      store.resolved = redirected != null ? await redirected : resolved
-      store.data = await dataPromise!
-      if ((store.parsed = await parsedPromise!) != null) {
-        store.output = _render(store.parsed, store.config.template)
-      }
-    })
-    if (!SSR) {
-      const id = store.resolved?.id
-      if (id != null && id[0] !== '.') {
-        const [plugin] = xparse(id)
-        component = plugin?.component
       }
     }
+
     !SSR && watch(() => store.input, input => {
       try {
-        input = trim(input)
-        let id: string | null = null
-        switch (slice(input, 0, indexOf(input, ' '))) {
-          case 'id': case '!': case '.id': id = '..id'; break
-          case 'list': case '!!': id = '.list'; break
-          case 'name': case '=': id = '.name'; break
-          case 'escape': case '==': id = '.escape'; break
-        }
-        if (id != null) {
-          const [, ...args] = split(S, input)
-          let ret = ''
-          for (const arg of args) {
-            ret += `${resolve(arg)?.id ?? '!'} `
-          }
-          store.resolved = { id, rawId: id, shortUrl: '', url: trim(ret) }
+        if (data.mode === 'batch') {
+          store.batchResolved = resolveBatch(input)
         } else {
           store.resolved = resolve(input)
         }
       } catch (error) {
         store.resolved = null
+        store.batchResolved = null
+        throw error
       }
     })
 
+    const handleSelect = PAGES ? null! : (name: string) => {
+      if (data.disabled) { return }
+      if (startsWith(name, 'batch:')) {
+        location.href = `./.batch?${createBatchParams(slice(name, 6), resolveBatch(store.input))}`
+      } else {
+        const id = resolve(split(S, trim(store.input), 1)[0])?.id ?? ''
+        location.href = `./${encodeURIComponent(id)}`
+      }
+    }
     const handleSearch = PAGES ? async () => {
-      if (data.disabled || store.resolved == null) { return }
+      if (data.disabled) { return }
       try {
         data.loading = true
         store.output = ''
-        const { id, url } = store.resolved
-        if (id[0] === '.') {
-          for await (const line of renderBatch(split(S, url), slice(id, 1))) {
+        if (data.mode === 'batch') {
+          for await (const line of renderBatch(split(S, store.batchResolved!), data.batchType)) {
             store.output += `${line}\n`
           }
-        } else {
+        } else if (store.resolved != null) {
+          const { id } = store.resolved
           if (startsWith(id, '@redirect!')) { return }
-          const [plugin, resolved, , dataPromise, parsedPromise] = xparse(store.input)
+          const [plugin, resolved, , dataPromise, parsedPromise] = xparse(trim(store.input))
           component = plugin!.component
           store.resolved = resolved!
           store.data = await dataPromise!
@@ -128,17 +163,16 @@ export default defineComponent({
         data.loading = false
       }
     } : !SSR ? () => {
-      if (data.disabled || store.resolved == null) { return }
-      const { id, url } = store.resolved
-      if (id[0] === '.') {
-        location.href = `./.batch?${new URLSearchParams([
-          ['type', slice(id, 1)],
-          ...map(split(S, url), arg => ['id', arg]) as any[]
-        ])}`
-      } else if (startsWith(id, '@redirect!')) {
-        location.href = `./.redirect?url=${encodeURIComponent(url)}`
-      } else {
-        location.href = `./${encodeURIComponent(id)}`
+      if (data.disabled) { return }
+      if (data.mode === 'batch') {
+        location.href = `./.batch?${createBatchParams(data.batchType, store.batchResolved!)}`
+      } else if (store.resolved != null) {
+        const { id, url } = store.resolved
+        if (startsWith(id, '@redirect!')) {
+          location.href = `./.redirect?url=${encodeURIComponent(url)}`
+        } else {
+          location.href = `./${encodeURIComponent(id)}`
+        }
       }
     } : null!
 
@@ -160,13 +194,36 @@ export default defineComponent({
       }
     }
     !SSR ? expose({ __proto__: toRaw(props), data }) : null!
+    const $colAttrs0 = { xs: 24, sm: { span: 20, offset: 2 }, md: { span: 16, offset: 4 }, lg: { span: 12, offset: 6 } }
+    const $colAttrs1 = { xs: 24, sm: 12, md: { span: 11, offset: 1 }, lg: { span: 10, offset: 2 } }
+    const $colAttrs2 = { xs: 24, sm: 12, md: 11, lg: 10 }
     return () => [
       h('div', { style: 'margin:60px auto 40px auto;text-align:center' }, [
         h('h2', null, ['\u3000'])
       ]),
-      h(Row, {}, () => [
-        h(Col, (store.data, component != null) ? { xs: 0, sm: 0, md: 1, lg: 2 } : { xs: 0, sm: 2, md: 4, lg: 6 }),
-        h(Col, component != null ? { xs: 24, sm: 12, md: 11, lg: 10 } : { xs: 24, sm: 20, md: 16, lg: 12 }, () => [
+      h(Row, { gutter: 8 }, () => [
+        h(Col, (store.data, component != null) ? $colAttrs1 : $colAttrs0, () => [
+          !PAGES ? h(Menu, {
+            style: 'margin-left:8px;margin-right:8px;z-index:1000',
+            mode: 'horizontal',
+            activeName: store.mode,
+            onOnSelect: handleSelect
+          }, () => [
+            h(MenuItem, { name: 'default' }, () => ['元数据']),
+            h(Submenu, { name: 'batch' }, {
+              title: () => {
+                let type = data.batchType, $ = ''
+                if (type != null) {
+                  const name = getOwn(config.batch, type)?.name
+                  $ = `[${name || type}]`
+                }
+                return ['批量模式', $]
+              },
+              default: () => from(entries(config.batch), ([key, { name }]) =>
+                h(MenuItem, { name: `batch:${key}`, style: name ? null : 'display:none' }, () => [name || key])
+              )
+            })
+          ]) : null,
           h(Input, {
             modelValue: store.input,
             'onUpdate:modelValue'(value: string) { store.input = value },
@@ -179,21 +236,26 @@ export default defineComponent({
               onClick: handleSearch
             })
           }),
-          h(Input, {
+          data.mode === 'default' ? h(Input, {
             modelValue: store.resolved?.url ?? '',
             onOnFocus: handleFocus,
             readonly: true
           }, {
             prepend: () => h(Icon, { type: 'md-link' }),
-          }),
-          h(Input, {
+          }) : null,
+          data.mode === 'default' ? h(Input, {
             style: store.resolved?.shortUrl ? null : 'display:none',
             modelValue: store.resolved?.shortUrl ?? '',
             onOnFocus: handleFocus,
             readonly: true
           }, {
             prepend: () => h(Icon, { type: 'md-share' }),
-          }),
+          }) : null,
+          data.mode === 'batch' ? h(Input, {
+            modelValue: store.batchResolved,
+            onOnFocus: handleFocus,
+            readonly: true
+          }) : null,
           !(PAGES && $fetch == null) ? !(SSR || data.disabled) ? h(Input, {
             ref: handleRefOutput,
             style: 'margin-top:20px',
@@ -208,7 +270,7 @@ export default defineComponent({
             ? h(Config, { config: store.config, handleOk })
             : null
         ]),
-        component != null ? h(Col, { xs: 24, sm: 12, md: 11, lg: 10 }, () => [
+        component != null ? h(Col, $colAttrs2, () => [
           h(component!, { data: store.data })
         ]) : null
       ])

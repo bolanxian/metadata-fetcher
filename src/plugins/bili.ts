@@ -18,7 +18,7 @@ export const REG_WL = /^(?:https?:\/\/)?www\.bilibili\.com\/list\/watchlater\?(?
 const REG_INIT = /^\s*window\.__INITIAL_STATE__\s*=\s*(?={)/
 let channelKv: any
 
-export const main = definePlugin({
+export const main = definePlugin<Record<'error' | 'redirect' | 'videoData' | 'tags' | 'channelKv', any>>({
   include: [BV.REG_AV, BV.REG_BV, REG_B23, REG_FULL, REG_WL],
   resolve(m, reg) {
     let id = m[1]
@@ -65,7 +65,7 @@ export const main = definePlugin({
         }
         return { error, videoData, tags }
       }),
-      channelKv: channelKv ??= await json('bili!channel', () => data.channelKv),
+      channelKv: channelKv ??= await json('bili!channel', () => data?.channelKv),
       ...extraData
     }
   },
@@ -92,12 +92,12 @@ export const main = definePlugin({
 
     let ownerName = videoData.owner.name
     if (hasOwn(videoData, 'staff')) {
-      ownerName = ''
-      for (const { name } of videoData.staff) {
-        ownerName += `${name}；`
+      const owners = []
+      for (const { title, name } of videoData.staff) {
+        owners[owners.length] = `${title != null ? `[${title}]` : ''}${name}`
       }
+      ownerName = join(owners, '；')
     }
-
     return {
       title: videoData.title,
       ownerName,

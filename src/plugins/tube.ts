@@ -7,19 +7,20 @@ import { definePlugin, html } from '../plugin'
 import { fromHTML } from '../utils/find-json-object'
 
 const name = 'youtube'
+const host = `www.${name}.com`
 export default definePlugin({
   include: [
     /^youtube[!:]([-\w]+)/,
     /^(?:https?:\/\/)?youtu\.be\/([-\w]+)/,
-    /^(?:https?:\/\/)?www\.youtube\.com\/(?:shorts|embed)\/([-\w]+)/,
-    /^(?:https?:\/\/)?www\.youtube\.com\/watch\?(?:\S*?&)??v=([-\w]+)/
+    /^(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:shorts|embed)\/([-\w]+)/,
+    /^(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?(?:\S*?&)??v=([-\w]+)/
   ],
   resolve({ 1: m1 }) {
     return {
       id: `${name}!${m1}`,
       rawId: `${name}:${m1}`,
       shortUrl: `https://youtu.be/${m1}`,
-      url: `https://www.${name}.com/watch?v=${m1}`
+      url: `https://${host}/watch?v=${m1}`
     }
   },
   async load(info) {
@@ -41,9 +42,22 @@ export default definePlugin({
         join(map(commandRuns, $ => `(?<=^.{${+$.startIndex}}).{${+$.length}}`), '|'), 'sg'
       ), content, (_, index) => {
         const command = find(commandRuns, $ => $.startIndex === index)
-        const ep = command.onTap.innertubeCommand.urlEndpoint
-        if (ep == null) { return _ }
-        return new URL(ep.url).searchParams.get('q') ?? _
+        const inner = command.onTap.innertubeCommand
+        let ep: any
+        if ((ep = inner.urlEndpoint) != null) {
+          const url = new URL(ep.url)
+          if (url.host === host && url.pathname === '/redirect') {
+            return url.searchParams.get('q') ?? ep.url
+          }
+          return ep.url
+        }
+        if ((ep = inner.watchEndpoint) != null) {
+          return `https://youtu.be/${ep.videoId}`
+        }
+        if ((ep = inner.reelWatchEndpoint) != null) {
+          return `https://youtu.be/${ep.videoId}`
+        }
+        return _
       })
     })(videoDesc[1].attributedDescription)
 
