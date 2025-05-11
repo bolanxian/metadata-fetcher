@@ -1,7 +1,7 @@
 {
   "name": "metadata-fetcher",
   "private": true,
-  "version": "0.0.8",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "start": "start deno run --quiet --no-prompt --no-remote -S=cpus,systemMemoryInfo,osRelease -E -N -R -W=./__cache__ --allow-run --unstable-ffi --allow-ffi ./lib/main.js start",

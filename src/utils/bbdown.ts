@@ -137,7 +137,6 @@ export const handleRequest = (request: Request, cwd: string) => {
       if (code == null) { reason = '进程未成功启动' }
       else if (code !== 0) { reason = `进程未成功退出（退出代码：${code}）` }
       socket.close(code !== 0 ? 4000 : 1000, reason)
-      aborter.abort()
     }
   }
   const stdin = new ReadableStream({
@@ -145,7 +144,7 @@ export const handleRequest = (request: Request, cwd: string) => {
       on(socket, 'message', e => {
         const { data } = e as MessageEvent<ArrayBuffer | string>
         if (typeof data === 'string') {
-          aborter.abort()
+          socket.close(4000, data)
         } else {
           controller.enqueue(new Uint8Array(data))
         }

@@ -31,7 +31,7 @@ description=简介：
   batch: {
     '.id': { name: 'ID', template: '[${rawId}]${url}' },
     list: { name: '借物表', template: '${title}${_}${rawId}${_}${ownerName}' },
-    name: { name: '文件名', template: '[${ownerName}][${id}]${title}' },
+    name: { name: '文件名', template: '[${ownerName|filename}][${id}]${title|filename}' },
     escape: { name: '', template: '［${rawId|escape}］${title}' },
   }
 }

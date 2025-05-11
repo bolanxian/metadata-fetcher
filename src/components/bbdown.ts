@@ -73,11 +73,12 @@ export const BBDown = defineComponent({
     handleHidden() { this.status = 'ready' },
     handleTerminal(vnode: VNode) {
       const vm = this
-      const term: Xterm = (vnode.component!.exposeProxy as any).xterm
+      const term: Xterm = vnode.component!.exposeProxy!.xterm
       const socket = vm.socket = new WebSocket(`./.bbdown?${new URLSearchParams({
         id: vm.currentId,
         args: JSON.stringify(vm.options)
       })}`, 'bbdown')
+      const { interactive } = vm.options
       socket.binaryType = 'arraybuffer'
       on(socket, 'open', e => {
         term.write(`\x1B[1;33m开始下载 ${vm.currentId}\x1B[0m\r\n`)
@@ -86,19 +87,20 @@ export const BBDown = defineComponent({
             case '\x03': // Ctrl+C
               vm.status = 'abort'
               break
-            case '\r': { // Enter
+            case '\r': if (interactive) { // Enter
               const input = `${vm.input}\r\n`
               socket.send(encodeText(input))
               term.write(input)
               vm.input = ''
             } break
-            case '\x7F': // Backspace
+            case '\x7F': if (interactive) { // Backspace
               vm.input = removeLast(vm.input)
-              break
-            default:
+            } break
+            default: if (interactive) {
               if (e >= '\x20' && e <= '\x7E' || e >= '\xA0') {
                 vm.input += e
               }
+            }
           }
         })
       })
@@ -128,8 +130,7 @@ export const BBDown = defineComponent({
     handleAbort() {
       const term: Xterm = (this.$refs.terminal as any).xterm
       const prefix = term.buffer.active.cursorX > 0 ? '\r\n' : ''
-      term.write(`${prefix}\x1B[1;33m取消操作\x1B[0m\r\n`)
-      this.socket.send('\x03')
+      this.socket.send(`${prefix}\x1B[1;33m取消操作\x1B[0m\r\n`)
     }
   },
   render() {
@@ -273,7 +274,7 @@ export const BBDown = defineComponent({
               h(Terminal, { ref: 'terminal', onVnodeMounted: vm.handleTerminal }),
               h(Row, null, () => [
                 h(Col, { span: 12, offset: 12 }, () => [
-                  h(Input, { readonly: true, modelValue: vm.input })
+                  h(Input, { disabled: !opts.interactive, readonly: true, modelValue: vm.input })
                 ])
               ])
             ]; break

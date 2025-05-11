@@ -1,3 +1,5 @@
 @import url('view-ui-plus/dist/styles/viewuiplus.css');
 @import url('@xterm/xterm/css/xterm.css');
 [v-cloak]{display:unset}
+div[v-cloak]{display:block}
+#app{padding:0 4px}

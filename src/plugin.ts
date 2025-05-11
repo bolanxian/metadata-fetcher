@@ -3,8 +3,8 @@ import type { Component } from 'vue'
 import * as cheerio from 'cheerio'
 import { getOwn, $then as then, match, replace, on, off, getAsync } from 'bind:utils'
 import { freeze } from 'bind:Object'
-import { fromCharCode, includes, trim, split, startsWith, charCodeAt } from 'bind:String'
-import { noop } from './bind'
+import { includes, trim, split, startsWith, indexOf, slice } from 'bind:String'
+import { noop, charToFullwidth, controlCharToPicture } from './bind'
 import { ready as ready1, getCache, setCache } from './cache'
 import { ready as ready2, config } from './config'
 
@@ -80,9 +80,9 @@ const defaultParse = async (plugin: Plugin<{}>, dataPromise: Promise<{} | null>,
   const data = await dataPromise
   return data != null ? plugin.parse(data, info) : null
 }
-export const xparse: {
-  (input: string): [Plugin<{}>?, ResolvedInfo?, Promise<ResolvedInfo>?, Promise<{} | null>?, Promise<ParsedInfo | null>?]
-} = function* (input: string) {
+export const xparse: (input: string) => [
+  Plugin<{}>?, ResolvedInfo?, Promise<ResolvedInfo>?, Promise<{} | null>?, Promise<ParsedInfo | null>?
+] = function* (input: string) {
   input = trim(input)
   if (!(input.length > 0)) { return }
   for (const plugin of plugins) {
@@ -115,12 +115,14 @@ export const xparse: {
 } as any
 export const render = (parsed: ParsedInfo, template = config.template) => {
   let ret = ''
-  for (let line of split(template, '\n')) {
-    if (line = trim(line)) {
-      const [key, name] = split(line, '=')
-      const value = getOwn(parsed, key)
-      if (value) { ret += `${name}${value}\n` }
-    }
+  for (const line of split(template, '\n')) {
+    const i = indexOf(line, '=')
+    if (!(i > 0)) { continue }
+    const key = trim(slice(line, 0, i))
+    let name = trim(slice(line, i + 1))
+    let value = getOwn(parsed, key)
+    if (name[0] === '"') { name = JSON.parse(name) }
+    if (name && value) { ret += `${name}${value}\n` }
   }
   return ret
 }
@@ -128,22 +130,25 @@ export const render = (parsed: ParsedInfo, template = config.template) => {
 const LINE_REG = /\$\{(.+?)\}/g
 export const renderLine = async (data: Record<string, string>, template: string) => {
   return replace(LINE_REG, template, ($0, $1) => {
+    let val: string | undefined
     if (includes($1, '|')) {
-      const [_sub, ...args] = split($1, '|')
-      let val = getOwn(data, trim(_sub))
-      if (val == null) { return $0 }
-      for (let arg of args) {
-        const fn: (str: string) => string = getOwn(renderLine, trim(arg)) as any
-        val = fn(val)
+      const [name, ...args] = split($1, '|')
+      val = getOwn(data, trim(name))
+      if (val != null) {
+        for (const arg of args) {
+          const fn: (str: string) => string = getOwn(renderLine, trim(arg))!
+          val = fn(val)
+        }
       }
-      return val
+    } else {
+      val = getOwn(data, trim($1))
     }
-    return getOwn(data, trim($1)) ?? $0
+    if (val == null) { return '' }
+    return controlCharToPicture(val)
   })
 }
-const ESCAPE_REG = /(?<=^(?=av)|^a(?=v)|^(?=BV)|^B(?=V))./g
-const ESCAPE_FUNC = ($0: string) => fromCharCode(charCodeAt($0, 0) + 0xFEE0)
-renderLine.escape = (str: string) => replace(ESCAPE_REG, str, ESCAPE_FUNC)
+renderLine.escape = (str: string) => replace(/(?<=^(?=av)|^a(?=v)|^(?=BV)|^B(?=V))./g, str, charToFullwidth)
+renderLine.filename = (str: string) => replace(/[\\/:*?"<>|]/g, str, charToFullwidth)
 
 export async function* renderBatch(args: string[], key: string) {
   const batch = getOwn(config.batch, key)
