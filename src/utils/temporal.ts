@@ -1,8 +1,8 @@
 import { Temporal } from 'temporal-polyfill'
-import { call } from 'bind:core'
-import { replace } from 'bind:utils'
-import { padStart } from 'bind:String'
 const { Now, Instant, Duration } = Temporal
+import { call } from 'bind:core'
+import { match, replace } from 'bind:utils'
+import { padStart, indexOf } from 'bind:String'
 
 type SmallestUnit = Temporal.ToStringPrecisionOptions['smallestUnit'] & Temporal.TimeUnit
 const autoSmallestUnitList: SmallestUnit[] = ['nanosecond', 'microsecond', 'millisecond', 'second']
@@ -31,9 +31,17 @@ export const instantToString = (input: Temporal.Instant | string | bigint | numb
 }
 
 export const formatDuration = (_seconds: number) => {
-  const { hours, minutes, seconds } = Duration.from(`PT${_seconds}S`).round({ largestUnit: 'hour', smallestUnit: 'second' })
+  const { hours, minutes, seconds } = Duration.from(`PT${+_seconds}S`).round({ largestUnit: 'hour', smallestUnit: 'second' })
   let ret = `${hours}:${minutes}:${seconds}`
   ret = replace(/(?<=^|:)(?=\d(?::|$))/g, ret, '0')
   ret = replace(/^0+:/, ret, '')
   return ret
+}
+const monthNamesShort = 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec'
+export const parseRfc2822Date = (input: string): string | null => {
+  const m = match(/^([A-Z][a-z]{2})\s+(\d+),\s+(\d+)$/, input)
+  if (m == null) { return null }
+  const month = indexOf(monthNamesShort, m[1]) / 4 + 1
+  if (!(month > 0)) { return null }
+  return new Temporal.PlainDate(+m[3], +month, +m[2]).toString()
 }

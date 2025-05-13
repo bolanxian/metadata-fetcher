@@ -2,11 +2,10 @@
 import { test } from 'bind:utils'
 import { slice } from 'bind:String'
 import { htmlToText } from '../bind'
-import type { ResolvedInfo, ParsedInfo } from '../plugin'
+import { config } from '../config'
 import { definePlugin, json } from '../plugin'
 export const REG_NICO = /^((?:sm|im|td|nc)(?!0\d)\d+)$/
 
-const toShortUrl = (id: string) => `https://nico.ms/${id}`
 const getUser = async (userId: string) => {
   const id = `nico!user!${userId}`
   return await json({ id, url: `https://account.nicovideo.jp/api/public/v1/users.json?userIds=${userId}` }, $user => {
@@ -24,27 +23,8 @@ const getWorks = async (id: string) => {
     return $work.data.node
   })
 }
-const load = async (info: ResolvedInfo) => {
-  const { id } = info
-  const work = await getWorks(id)
-  const user = await getUser(work.userId)
-  return { work, user }
-}
-const parse = async ({ work, user }: any, info: ResolvedInfo): Promise<ParsedInfo> => {
-  const { shortUrl, url } = info
-  const { title, updated, thumbnailURL, contentKind, description } = work
-  const { nickname } = user
-  return {
-    title,
-    ownerName: nickname,
-    publishDate: updated,
-    shortUrl, url,
-    thumbnailUrl: thumbnailURL,
-    description: contentKind !== 'commons' ? htmlToText(description) : description
-  }
-}
 
-definePlugin({
+definePlugin<{ work: any, user: any }>({
   include: [
     REG_NICO,
     /^(?:https?:\/\/)?nico\.ms\/([a-z]{2}\d+)/,
@@ -56,14 +36,33 @@ definePlugin({
   resolve({ 1: id }) {
     if (!test(REG_NICO, id)) { return null }
     let url: string
-    switch (slice(id, 0, 2)) {
+    switch (config.nicoUrlType !== 'tree' ? slice(id, 0, 2) : 'nc') {
       case 'sm': url = `https://www.nicovideo.jp/watch/${id}`; break
       case 'im': url = `https://seiga.nicovideo.jp/seiga/${id}`; break
       case 'td': url = `https://3d.nicovideo.jp/works/${id}`; break
       case 'nc': url = `https://commons.nicovideo.jp/works/${id}`; break
       default: return null
     }
-    return { id, rawId: id, shortUrl: toShortUrl(id), url }
+    const shortUrl = `https://nico.ms/${id}`
+    return { id, rawId: id, shortUrl, url }
   },
-  load, parse
+  async load(info) {
+    const { id } = info
+    const work = await getWorks(id)
+    const user = await getUser(work.userId)
+    return { work, user }
+  },
+  async parse({ work, user }, info) {
+    const { shortUrl, url } = info
+    const { title, updated, thumbnailURL, contentKind, description } = work
+    const { nickname } = user
+    return {
+      title,
+      ownerName: nickname,
+      publishDate: updated,
+      shortUrl, url,
+      thumbnailUrl: thumbnailURL,
+      description: contentKind !== 'commons' ? htmlToText(description) : description
+    }
+  }
 })

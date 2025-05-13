@@ -5,6 +5,7 @@ import { slice, indexOf } from 'bind:String'
 import { find, map, join } from 'bind:Array'
 import { definePlugin, html } from '../plugin'
 import { fromHTML } from '../utils/find-json-object'
+import { parseRfc2822Date } from '../utils/temporal'
 
 const name = 'youtube'
 const host = `www.${name}.com`
@@ -37,6 +38,10 @@ export default definePlugin({
       ], name => find(contents, $ => hasOwn($, name))[name]) as any[]
     })(data.contents.twoColumnWatchNextResults.results.results.contents)
 
+    const _date = videoDesc[0].dateText.simpleText
+    let date = parseRfc2822Date(_date)
+    if (date != null) { date = `${date}(${_date})` }
+
     const description = (({ content, commandRuns }) => {
       return replace(RegExp(
         join(map(commandRuns, $ => `(?<=^.{${+$.startIndex}}).{${+$.length}}`), '|'), 'sg'
@@ -64,7 +69,7 @@ export default definePlugin({
     return {
       title: videoDesc[0].title.runs[0].text,
       ownerName: videoDesc[1].owner.videoOwnerRenderer.title.runs[0].text,
-      publishDate: videoDesc[0].dateText.simpleText,
+      publishDate: date ?? _date,
       shortUrl, url,
       thumbnailUrl: `https://i.ytimg.com/vi/${slice(id, indexOf(id, '!') + 1)}/hqdefault.jpg`,
       description

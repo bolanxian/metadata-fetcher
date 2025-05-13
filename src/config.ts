@@ -15,6 +15,7 @@ export interface Config {
   separator: string
   template: string
   batch: Record<string, { name: string, template: string }>
+  nicoUrlType: 'watch' | 'tree'
 }
 export const config: Config = {
   browsers: null,
@@ -33,7 +34,8 @@ description=简介：
     list: { name: '借物表', template: '${title}${_}${rawId}${_}${ownerName}' },
     name: { name: '文件名', template: '[${ownerName|filename}][${id}]${title|filename}' },
     escape: { name: '', template: '［${rawId|escape}］${title}' },
-  }
+  },
+  nicoUrlType: 'watch'
 }
 
 export const readConfig = async () => {

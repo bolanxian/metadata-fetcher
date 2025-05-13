@@ -33,7 +33,7 @@ const externalAssets = (): Plugin => {
 
 const buildTarget = (): Plugin => {
   const map = new Map()
-  for (const name of ['countup.js', 'dayjs', 'numeral']) {
+  for (const name of ['countup.js', 'numeral', 'dayjs', 'js-calendar', 'view-ui-plus/src/utils/date']) {
     map.set(name, 'export default null')
   }
   map.set('undici', 'export let stream')

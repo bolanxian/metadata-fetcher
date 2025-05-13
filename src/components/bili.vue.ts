@@ -68,7 +68,7 @@ const resolveChannel = (videoData: { tid: number, tname: string }, channelKv: an
       }
     }
   }
-  return [{ name: videoData.tname, url: '' }, null]
+  return [null, { name: videoData.tname, url: '' }]
 }
 
 export default defineComponent({
@@ -175,17 +175,27 @@ export default defineComponent({
           ])),
           default: () => [
             h('div', null, [
-              data.channel != null ? h('a', { ...$a, href: data.channel.url || null, title: `videoData.tid=${videoData.tid}` }, [
-                h(Tag, { color: 'blue' }, () => [data.channel!.name])
-              ]) : null,
-              data.subChannel != null ? h('a', { ...$a, href: data.subChannel.url || null, title: data.subChannel.desc }, [
-                h(Tag, { color: 'blue' }, () => [data.subChannel!.name])
-              ]) : null,
-              data.channel_v2 != null ? h('a', { ...$a, href: data.channel_v2.url || null, title: `videoData.tid_v2=${videoData.tid_v2}` }, [
-                h(Tag, { color: 'blue' }, () => [data.channel_v2!.name])
-              ]) : null,
-              data.subChannel_v2 != null ? h('a', { ...$a, href: data.subChannel_v2.url || null, title: data.subChannel_v2.desc }, [
-                h(Tag, { color: 'blue' }, () => [data.subChannel_v2!.name])
+              h('a', {
+                ...$a,
+                href: data.subChannel?.url || data.channel?.url || null,
+                title: `tid=${videoData.tid}\n${data.subChannel?.desc ?? ''}`
+              }, [
+                h(Tag, { color: 'blue' }, () => [
+                  data.channel?.name,
+                  h(Icon, { type: 'ios-arrow-forward' }),
+                  data.subChannel?.name
+                ])
+              ]),
+              data.channel_v2 != null || data.subChannel_v2 != null ? h('a', {
+                ...$a,
+                href: data.subChannel_v2?.url || data.channel_v2?.url || null,
+                title: `tid_v2=${videoData.tid_v2}\n${data.subChannel_v2?.desc ?? ''}`
+              }, [
+                h(Tag, { color: 'blue' }, () => [
+                  data.channel_v2?.name,
+                  h(Icon, { type: 'ios-arrow-forward' }),
+                  data.subChannel_v2?.name
+                ])
               ]) : null,
               h(Tag, { color: 'cyan', title: `视频类型[${copyrightValues}]` }, () => [data.copyright]),
               h('a', { ...$a, href: toUrl(id) }, [
