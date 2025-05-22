@@ -5,7 +5,7 @@ import { Row, Col, Icon, Input, ButtonGroup, Button, Select, Option, Modal, Mess
 import { getOwn, split } from 'bind:utils'
 import { assign, entries } from 'bind:Object'
 import { from, join } from 'bind:Array'
-import { trim, slice, startsWith } from 'bind:String'
+import { trim, slice, startsWith, replaceAll } from 'bind:String'
 import { nextTick } from '../bind'
 import { config, type Config, config as defaultConfig, writeConfig } from '../config'
 import {
@@ -17,7 +17,7 @@ import.meta.glob('../plugins/*', { eager: true })
 const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
 const PAGES = TARGET == 'pages'
-const S = /\s+/
+export const S = /\s+/
 
 export interface Store {
   mode: string
@@ -35,12 +35,14 @@ export interface Store {
 
 const resolveBatchCb = (id: string) => resolve(id)?.id ?? '!'
 const resolveBatch = (input: string) => (input = trim(input)) ? join(from(split(S, input), resolveBatchCb), ' ') : ''
-const createBatchParamsCb: (arg: string) => ['id', string] = arg => ['id', arg]
 export const createBatchParams = (type: string, input: string | Iterable<string>) => {
-  let ids: ['id', string][] | null = null
-  if (typeof input == 'string') { ids = input ? from(split(S, input), createBatchParamsCb) : [] }
-  else { ids = from(input, createBatchParamsCb) }
-  return new URLSearchParams([['type', type], ...ids])
+  let ids = ''
+  if (typeof input == 'string') {
+    ids = `&${replaceAll(encodeURIComponent(input), '%20', '&')}`
+  } else for (const arg of input) {
+    ids += `&${encodeURIComponent(arg)}`
+  }
+  return `.type=${encodeURIComponent(type)}${ids}`
 }
 
 export default defineComponent({

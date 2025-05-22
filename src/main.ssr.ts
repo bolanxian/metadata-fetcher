@@ -6,7 +6,7 @@ export { bindCall, call, bind } from 'bind:core'
 export { hasOwn, getOwn, encodeText, decodeText, test, match, replace, split, on, off } from 'bind:utils'
 export { getCache, setCache } from './cache'
 export { config, readConfig, writeConfig } from './config'
-export { createBatchParams } from './components/app.vue'
+export { S, createBatchParams } from './components/app.vue'
 export { handleRequest as handleRequestBbdown } from './utils/bbdown'
 
 import { createSSRApp } from 'vue'
@@ -16,8 +16,7 @@ import { replaceAll } from 'bind:String'
 import { join } from 'bind:Array'
 import { onlyFirst32, escapeText, escapeAttr, escapeAttrApos } from './bind'
 import { config } from './config'
-import App from './components/app.vue'
-import type { Store } from './components/app.vue'
+import App, { type Store } from './components/app.vue'
 const { stringify } = JSON
 
 const meta = (name: string, content = 'content') => {
