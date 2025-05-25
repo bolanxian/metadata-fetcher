@@ -12,11 +12,11 @@ export { handleRequest as handleRequestBbdown } from './utils/bbdown'
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { keys } from 'bind:Object'
-import { replaceAll } from 'bind:String'
-import { join } from 'bind:Array'
-import { onlyFirst32, escapeText, escapeAttr, escapeAttrApos } from './bind'
+import { slice, startsWith, replaceAll } from 'bind:String'
+import { join, onlyFirst32, escapeText, escapeAttr, escapeAttrApos } from './bind'
 import { config } from './config'
-import App, { type Store } from './components/app.vue'
+import App, { BatchLength, type Store } from './components/app.vue'
+import { getOwn } from 'bind:utils'
 const { stringify } = JSON
 
 const meta = (name: string, content = 'content') => {
@@ -33,31 +33,43 @@ const metaName = meta('name')
 const metaItemprop = meta('itemprop')
 const metaProperty = meta('property')
 
-export const buildMeta = ({ parsed }: Store) => {
-  if (parsed == null) { return `<title>${name}</title>` }
-  let description = onlyFirst32(parsed.description)
-  description = replaceAll(description, '\n', ' ')
-  return join([
-    `<title>${escapeText(parsed.title)} - ${name}</title>`,
-    ...metaName({
+function* xbuildMeta({ mode, parsed, [BatchLength]: batchLength, config }: Store): Generator<string, void, unknown> {
+  if (mode === 'default' && parsed != null) {
+    let description = onlyFirst32(parsed.description)
+    description = replaceAll(description, '\n', ' ')
+    yield `<title>${escapeText(parsed.title)} - ${name}</title>`
+    yield* metaName({
       title: parsed.title,
       author: parsed.ownerName,
       description,
       keywords: parsed.keywords,
-    }),
-    ...metaItemprop({
+    })
+    yield* metaItemprop({
       name: parsed.title,
       image: parsed.thumbnailUrl,
       description,
-    }),
-    ...metaProperty({
-      'og:title': parsed.title,
+    })
+    yield* metaProperty({
       'og:type': 'website',
+      'og:site_name': name,
+      'og:title': parsed.title,
       'og:url': parsed.url,
       'og:image': parsed.thumbnailUrl,
       'og:description': description,
-    }),
-  ], '\n')
+    })
+    return
+  }
+  let title = name
+  if (startsWith(mode, 'batch:') && parsed != null) {
+    const type = slice(mode, 6)
+    const batchName = getOwn(config.batch, type)?.name || type
+    title = `批量模式[${escapeText(batchName)}]：${escapeText(parsed.title)}\u3000等 ${batchLength} 项 - ${name}`
+  }
+  yield `<title>${title}</title>`
+  yield* metaProperty({
+    'og:type': 'website',
+    'og:site_name': name,
+  })
 }
 
 export const renderToHtml = async (mode: string, input: string) => {
@@ -66,6 +78,6 @@ export const renderToHtml = async (mode: string, input: string) => {
   const context = {}
   const appHTML = await renderToString(app, context)
   const attrs = ` data-store='${escapeAttrApos(stringify(store, void 0, 2))}'`
-  const head = buildMeta(store)
+  const head = join(xbuildMeta(store), '\n')
   return { head, attrs, app: appHTML, context }
 }

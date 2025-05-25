@@ -150,7 +150,7 @@ export const renderLine = async (data: Record<string, string>, template: string)
 renderLine.escape = (str: string) => replace(/(?<=^(?=av)|^a(?=v)|^(?=BV)|^B(?=V))./g, str, charToFullwidth)
 renderLine.filename = (str: string) => replace(/[\\/:*?"<>|]/g, str, charToFullwidth)
 
-export async function* renderBatch(args: string[], key: string) {
+export async function* renderBatch(args: string[], key: string, onParsed?: (parsed: ParsedInfo) => void) {
   const batch = getOwn(config.batch, key)
   if (batch == null) { yield `Unknown Template : ${key}`; return }
   const { separator } = config
@@ -163,6 +163,7 @@ export async function* renderBatch(args: string[], key: string) {
       if (resolved == null) { yield `Unknown Input : ${arg}`; continue }
       const parsed = await parsedPromise
       if (parsed == null) { yield `Not Found : ${resolved.id}`; continue }
+      onParsed?.(parsed)
       data = { ...sep, ...resolved, ...redirected != null ? await redirected : null, ...parsed }
     } else {
       const [, resolved] = xparse(arg)

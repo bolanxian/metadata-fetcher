@@ -8,9 +8,7 @@ import { from, join } from 'bind:Array'
 import { trim, slice, startsWith, replaceAll } from 'bind:String'
 import { nextTick } from '../bind'
 import { config, type Config, config as defaultConfig, writeConfig } from '../config'
-import {
-  resolve, xparse, render as _render, renderBatch, $fetch
-} from '../plugin'
+import { resolve, xparse, render as _render, renderBatch, $fetch } from '../plugin'
 import type { ResolvedInfo, ParsedInfo } from '../plugin'
 import.meta.glob('../plugins/*', { eager: true })
 
@@ -18,6 +16,7 @@ const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
 const PAGES = TARGET == 'pages'
 export const S = /\s+/
+export const BatchLength = Symbol('BatchLength')
 
 export interface Store {
   mode: string
@@ -28,6 +27,7 @@ export interface Store {
   parsed: ParsedInfo | null
 
   batchResolved: string | null
+  [BatchLength]?: number
 
   output: string
   config: Config
@@ -55,9 +55,10 @@ export default defineComponent({
       mode: 'batch'
       batchType: string
     }) & {
+      batchTitle: string
       loading: boolean
       disabled: boolean
-    }>({ mode: 'default', batchType: null, loading: false, disabled: true })
+    }>({ mode: 'default', batchType: null, batchTitle: '', loading: false, disabled: true })
     const handleRefOutput = (vm: any) => { nextTick(vm.resizeTextarea) }
     if (!(PAGES && $fetch == null) && !SSR) {
       onMounted(() => { data.disabled = false })
@@ -78,14 +79,20 @@ export default defineComponent({
 
     store.input = trim(store.input)
     if (startsWith(store.mode, 'batch:')) {
+      const type = slice(store.mode, 6)
+      const name = getOwn(config.batch, type)?.name
       data.mode = 'batch'
-      data.batchType = slice(store.mode, 6)
+      data.batchType = type
+      data.batchTitle = `［${name || type}］`
       if (SSR) {
         store.batchResolved = ''
         store.input && onServerPrefetch(async () => {
           store.batchResolved = resolveBatch(store.input)
+          const args = split(S, store.input)
+          const onParsed = (parsed: ParsedInfo) => { store.parsed ??= parsed }
+          store[BatchLength] = args.length
           let output = ''
-          for await (const line of renderBatch(split(S, store.input), data.batchType!)) {
+          for await (const line of renderBatch(args, data.batchType!, onParsed)) {
             output += `${line}\n`
           }
           store.output = output
@@ -213,14 +220,7 @@ export default defineComponent({
           }, () => [
             h(MenuItem, { name: 'default' }, () => ['元数据']),
             h(Submenu, { name: 'batch' }, {
-              title: () => {
-                let type = data.batchType, $ = ''
-                if (type != null) {
-                  const name = getOwn(config.batch, type)?.name
-                  $ = `[${name || type}]`
-                }
-                return ['批量模式', $]
-              },
+              title: () => ['批量模式', data.batchTitle],
               default: () => from(entries(config.batch), ([key, { name }]) =>
                 h(MenuItem, { name: `batch:${key}`, style: name ? null : 'display:none' }, () => [name || key])
               )

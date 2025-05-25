@@ -10,6 +10,16 @@ import * as cheerio from 'cheerio'
 export const noop = () => { }
 export const nextTick = queueMicrotask
 
+export const iterator: typeof Symbol.iterator = Symbol.iterator
+export const join = (iter: Iterable<any>, separator = ',') => {
+  iter = iter[iterator]() as any
+  for (let ret of iter) {
+    for (const value of iter) {
+      ret = `${ret}${separator}${value}`
+    }
+    return ret
+  }
+}
 // [\x21-\x7E] to [\uFF01-\uFF5E]
 export const charToFullwidth = ($0: string) => fromCharCode(charCodeAt($0, 0) + 0xFEE0)
 const REG_NOT_FIRST_32 = /(?<=^.{32}).+$/su
