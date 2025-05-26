@@ -1,3 +1,6 @@
+
+/// <reference types="deno" />
+/// <reference types="bun" />
 /// <reference types="vite/client" />
 /// <reference types="bind-script" />
 
