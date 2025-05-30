@@ -6,7 +6,7 @@ export { bindCall, call, bind } from 'bind:core'
 export { hasOwn, getOwn, encodeText, decodeText, test, match, replace, split, on, off } from 'bind:utils'
 export { getCache, setCache } from './cache'
 export { config, readConfig, writeConfig } from './config'
-export { S, createBatchParams } from './components/app.vue'
+export { S, P, createBatchParams } from './components/app.vue'
 export { handleRequest as handleRequestBbdown } from './utils/bbdown'
 
 import { createSSRApp } from 'vue'

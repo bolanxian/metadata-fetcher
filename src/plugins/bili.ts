@@ -133,6 +133,7 @@ const loadAsRedirect = async (id: string, redirect: string) => {
 
 definePlugin({
   include: [
+    /^@redirect!(b23)!([-\w]+)/,
     /^bilibili:\/\/(video)\/(?!0\d)(\d{1,16})$/,
     /^(bv)!([aA][vV](?!0\d)\d{1,16})$/,
     /^(raw)!([bB][vV]1\w{9})$/
@@ -140,6 +141,11 @@ definePlugin({
   resolve(m) {
     let rawId, id
     switch (m[1]) {
+      case 'b23': {
+        const url = toShortUrl(m[2])
+        id = rawId = `@redirect!b23!${m[2]}`
+        return { id, rawId, shortUrl: '', url }
+      }
       case 'video': {
         id = rawId = `av${m[2]}`
       } break

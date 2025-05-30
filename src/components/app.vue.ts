@@ -2,7 +2,7 @@
 import { defineComponent, shallowReactive, toRaw, watch, watchEffect, createVNode as h, onMounted, onServerPrefetch } from 'vue'
 import type { Component, Prop } from 'vue'
 import { Row, Col, Icon, Input, ButtonGroup, Button, Select, Option, Modal, Message, Menu, Submenu, MenuItem } from 'view-ui-plus'
-import { getOwn, split } from 'bind:utils'
+import { getOwn, test, split } from 'bind:utils'
 import { assign, entries } from 'bind:Object'
 import { from, join } from 'bind:Array'
 import { trim, slice, startsWith, replaceAll } from 'bind:String'
@@ -15,7 +15,7 @@ import.meta.glob('../plugins/*', { eager: true })
 const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
 const PAGES = TARGET == 'pages'
-export const S = /\s+/
+export const S = /\s+/, P = /^\w/
 export const BatchLength = Symbol('BatchLength')
 
 export interface Store {
@@ -138,8 +138,12 @@ export default defineComponent({
       if (startsWith(name, 'batch:')) {
         location.href = `./.batch?${createBatchParams(slice(name, 6), resolveBatch(store.input))}`
       } else {
-        const id = resolve(split(S, trim(store.input), 1)[0])?.id ?? ''
-        location.href = `./${encodeURIComponent(id)}`
+        const id = resolve(split(S, trim(store.input), 1)[0])?.id
+        if (id == null || test(P, id)) {
+          location.href = `./${encodeURIComponent(id ?? '')}`
+        } else {
+          location.href = `./.search?.=${encodeURIComponent(id)}`
+        }
       }
     }
     const handleSearch = PAGES ? async () => {
@@ -176,11 +180,11 @@ export default defineComponent({
       if (data.mode === 'batch') {
         location.href = `./.batch?${createBatchParams(data.batchType, store.batchResolved!)}`
       } else if (store.resolved != null) {
-        const { id, url } = store.resolved
-        if (startsWith(id, '@redirect!')) {
-          location.href = `./.redirect?url=${encodeURIComponent(url)}`
-        } else {
+        const { id } = store.resolved
+        if (test(P, id)) {
           location.href = `./${encodeURIComponent(id)}`
+        } else {
+          location.href = `./.search?.=${encodeURIComponent(id)}`
         }
       }
     } : null!
