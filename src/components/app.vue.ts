@@ -1,7 +1,8 @@
 
 import { defineComponent, shallowReactive, toRaw, watch, watchEffect, createVNode as h, onMounted, onServerPrefetch } from 'vue'
 import type { Component, Prop } from 'vue'
-import { Row, Col, Icon, Input, ButtonGroup, Button, Select, Option, Modal, Message, Menu, Submenu, MenuItem } from 'view-ui-plus'
+import { Row, Col, Input, ButtonGroup, Button, Select, Option, Modal, Message, Menu, Submenu, MenuItem, Poptip, SkeletonItem } from 'view-ui-plus'
+import { toDataURL } from 'qrcode'
 import { getOwn, test, split } from 'bind:utils'
 import { assign, entries } from 'bind:Object'
 import { from, join } from 'bind:Array'
@@ -77,6 +78,7 @@ export default defineComponent({
       config: defaultConfig
     })
 
+    if (!SSR) { assign(config, store.config) }
     store.input = trim(store.input)
     if (startsWith(store.mode, 'batch:')) {
       const type = slice(store.mode, 6)
@@ -120,16 +122,12 @@ export default defineComponent({
     }
 
     !SSR && watch(() => store.input, input => {
-      try {
-        if (data.mode === 'batch') {
-          store.batchResolved = resolveBatch(input)
-        } else {
-          store.resolved = resolve(input)
-        }
-      } catch (error) {
+      if (data.mode === 'batch') {
+        store.batchResolved = ''
+        store.batchResolved = resolveBatch(input)
+      } else {
         store.resolved = null
-        store.batchResolved = null
-        throw error
+        store.resolved = resolve(input)
       }
     })
 
@@ -198,7 +196,7 @@ export default defineComponent({
         ok = await writeConfig(data)
       } finally {
         if (ok) {
-          if (!PAGES) { location.href += ''; return }
+          if (!PAGES) { location.reload(); return }
           assign(store.config, data)
           store.output = store.parsed != null ? _render(store.parsed, store.config.template) : ''
         } else {
@@ -238,7 +236,7 @@ export default defineComponent({
             append: () => h(Button, {
               icon: 'md-arrow-forward',
               loading: data.loading,
-              disabled: data.disabled || store.resolved == null,
+              disabled: data.disabled || (store.resolved == null && store.batchResolved == null),
               onClick: handleSearch
             })
           }),
@@ -247,7 +245,7 @@ export default defineComponent({
             onOnFocus: handleFocus,
             readonly: true
           }, {
-            prepend: () => h(Icon, { type: 'md-link' }),
+            prepend: () => h(QRCode, { icon: 'md-link', text: store.resolved?.url ?? '' }),
           }) : null,
           data.mode === 'default' ? h(Input, {
             style: store.resolved?.shortUrl ? null : 'display:none',
@@ -255,7 +253,7 @@ export default defineComponent({
             onOnFocus: handleFocus,
             readonly: true
           }, {
-            prepend: () => h(Icon, { type: 'md-share' }),
+            prepend: () => h(QRCode, { icon: 'md-share', text: store.resolved?.shortUrl ?? '' }),
           }) : null,
           data.mode === 'batch' ? h(Input, {
             modelValue: store.batchResolved,
@@ -272,7 +270,7 @@ export default defineComponent({
           }) : h('div', { class: 'ivu-input-wrapper', style: 'margin-top:20px' }, [
             h('textarea', { class: 'ivu-input', style: 'min-height:430px', readonly: true }, [store.output])
           ]) : null,
-          !(PAGES && $fetch == null) && !(SSR || data.disabled)
+          !((PAGES && $fetch == null) || (SSR || data.disabled))
             ? h(Config, { config: store.config, handleOk })
             : null
         ]),
@@ -293,7 +291,6 @@ const Config = defineComponent({
       status: void 0
     })
     const config = shallowReactive(props.config!)
-    const vm = data
     const handleOk = () => { data.status = 'pending' }
     const handleCancel = () => { data.status = null }
     const handleHidden = () => { data.status = void 0 }
@@ -319,7 +316,7 @@ const Config = defineComponent({
         onClick: handleModal
       }, () => ['设置']),
       data.status !== void 0 ? h(Modal, {
-        width: 350, closable: !1, maskClosable: !1,
+        width: 350, closable: !1, maskClosable: !1, transfer: true,
         title: '设置',
         modelValue: data.status != null,
         onOnHidden: handleHidden
@@ -327,12 +324,12 @@ const Config = defineComponent({
         footer: () => [
           h(ButtonGroup, null, () => [
             h(Button, {
-              disabled: vm.status === 'pending',
+              disabled: data.status === 'pending',
               onClick: handleCancel
             }, () => ['取消']),
             h(Button, {
               type: 'primary',
-              loading: vm.status === 'pending',
+              loading: data.status === 'pending',
               onClick: handleOk
             }, () => ['确定'])
           ])
@@ -374,5 +371,75 @@ const Config = defineComponent({
         ]
       }) : null
     ]
+  }
+})
+
+const QRCodeProps: Record<'icon' | 'text', Prop<string>> = { icon: null!, text: null! }
+const QRCode = defineComponent(SSR ? {
+  props: QRCodeProps,
+  render() {
+    return h(Poptip, {
+      trigger: 'hover', placement: 'bottom-start', disabled: !this.text
+    }, {
+      default: () => [h(Button, { icon: this.icon })],
+      content: () => [h(SkeletonItem, {
+        style: 'margin:5px 0', animated: !!this.text,
+        width: 240, height: 240, type: 'rect'
+      })]
+    })
+  }
+} : {
+  props: QRCodeProps,
+  setup(props, ctx) {
+    const data = shallowReactive<{
+      isShow: boolean
+      text: null | string
+      urlPromise: null | Promise<string>
+      url: null | string
+    }>({
+      isShow: false,
+      text: null,
+      urlPromise: null,
+      url: null
+    })
+    watchEffect((onCleanup) => {
+      if (!data.isShow) { return }
+      const text = props.text!
+      if (data.text === text) { return }
+      data.text = text
+      data.url = data.urlPromise = null
+      if (!text) { return }
+      data.urlPromise = (async () => {
+        let aborted = false
+        onCleanup(() => { aborted = true })
+        await new Promise(ok => { setTimeout(ok, 200) })
+        if (aborted) { return '' }
+        const url = await toDataURL(text, {
+          type: 'image/png',
+          margin: 0, scale: 1,
+        })
+        if (aborted) { return '' }
+        return data.url = url
+      })()
+    })
+    const $poptip = {
+      trigger: 'hover', placement: 'bottom-start', disabled: true,
+      onOnPopperShow() { data.isShow = true },
+      onOnPopperHide() { data.isShow = false }
+    }
+    return () => h(Poptip, ($poptip.disabled = !props.text, $poptip), {
+      default: () => [h(Button, { icon: props.icon })],
+      content: () => [
+        data.url != null
+          ? h('img', {
+            style: 'margin:5px 0;image-rendering:pixelated;object-fit:contain',
+            width: 240, height: 240, src: data.url
+          })
+          : h(SkeletonItem, {
+            style: 'margin:5px 0', animated: !!props.text,
+            width: 240, height: 240, type: 'rect'
+          })
+      ]
+    })
   }
 })

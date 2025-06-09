@@ -38,6 +38,7 @@ const buildTarget = (): Plugin => {
   }
   map.set('undici', 'export let stream')
   map.set('encoding-sniffer', 'export let decodeBuffer, DecodeStream')
+  map.set('qrcode', 'export let toDataURL')
   map.set('@xterm/xterm', 'export let Terminal')
   map.set('@xterm/addon-webgl', 'export let WebglAddon')
 
@@ -51,6 +52,7 @@ const buildTarget = (): Plugin => {
       let outDir = config.build?.outDir
       let assetsDir = '.assets'
       if (target == 'client') {
+        map.delete('qrcode')
         map.delete('@xterm/xterm')
         map.delete('@xterm/addon-webgl')
         map.set('cheerio', 'export let load')

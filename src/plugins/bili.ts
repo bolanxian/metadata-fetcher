@@ -14,7 +14,7 @@ import { instantToString } from '../utils/temporal'
 export { REG_AV, REG_BV } from '../utils/bv-encode'
 export const REG_B23 = /^(?:https?:\/\/)?(?:b23\.tv|bili2{0,2}3{0,2}\.cn)\/([-\w]+)(?=$|[?#])/
 export const REG_FULL = /^(?:https?:\/\/)?(?:m|www)\.bilibili\.com\/video\/(\w+)\/?(?=$|[?#])/
-export const REG_WL = /^(?:https?:\/\/)?www\.bilibili\.com\/list\/watchlater\?(?:\S*?&)??bvid=(\w+)/
+export const REG_WL = /^(?:https?:\/\/)?www\.bilibili\.com\/list\/watchlater\/?\?(?:\S*?&)??bvid=(\w+)/
 const REG_INIT = /^\s*window\.__INITIAL_STATE__\s*=\s*(?={)/
 let channelKv: any
 
@@ -221,6 +221,15 @@ definePlugin({
     })
   },
   async parse(data, info) {
-    return null
+    let { shortUrl, url } = info
+    const { module_author: author, module_dynamic: dynamic } = data.modules
+    return {
+      title: '',
+      ownerName: author.name,
+      publishDate: '',
+      shortUrl, url,
+      thumbnailUrl: dynamic.major?.draw?.items[0].src,
+      description: dynamic.desc.text
+    }
   }
 })

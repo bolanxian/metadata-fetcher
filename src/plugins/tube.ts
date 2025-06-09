@@ -43,6 +43,7 @@ export default definePlugin({
     if (date != null) { date = `${date}(${_date})` }
 
     const description = (({ content, commandRuns }) => {
+      if (commandRuns == null) { return content }
       return replace(RegExp(
         join(map(commandRuns, $ => `(?<=^.{${+$.startIndex}}).{${+$.length}}`), '|'), 'sg'
       ), content, (_, index) => {

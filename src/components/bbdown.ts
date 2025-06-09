@@ -6,13 +6,18 @@ import { Row, Col, Input, Modal, Button, ButtonGroup, Radio, RadioGroup, Checkbo
 import { encodeText, on } from 'bind:utils'
 import { type BBDownOptions, create, echo } from '../utils/bbdown'
 import { removeLast } from '../bind'
+const TARGET = import.meta.env.TARGET
 const $rowAttrs = { style: 'margin-bottom:24px' }
 const $colAttrs0 = { span: 3, style: 'text-align:right;padding-right:8px;line-height:32px;' }
 const $colAttrs1 = { span: 3, style: 'text-align:right;padding-right:8px;line-height:25px;' }
 const $colAttrs2 = { span: 3, style: 'text-align:right;padding-right:8px;line-height:21px;' }
 const ON_MODEL = 'onUpdate:modelValue'
 
-export const BBDown = defineComponent({
+export const BBDown = defineComponent(TARGET != 'client' ? {
+  render() {
+    return h(Button, { disabled: true }, () => ['下载', null])
+  }
+} : {
   props: { id: String },
   data(): {
     status: null | 'ready' | 'modal' | 'terminal' | 'closed' | 'abort' | 'fading-out'

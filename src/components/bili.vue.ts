@@ -3,10 +3,10 @@ import { type VNode, defineComponent, shallowReactive, watchEffect, onMounted, c
 import { Alert, ButtonGroup, Button, Card, CellGroup, Cell, Divider, Drawer, Icon, Tag } from 'view-ui-plus'
 import lineClamp from 'view-ui-plus/src/directives/line-clamp'
 import { hasOwn } from 'bind:utils'
-import { slice, startsWith } from 'bind:String'
 import { from, join } from 'bind:Array'
-import { instantToString, formatDuration } from '../utils/temporal'
 import { BBDown } from './bbdown'
+import { toHttps } from '../bind'
+import { instantToString, formatDuration } from '../utils/temporal'
 
 export const toShortUrl = (id: string) => `https://b23.tv/${id}`
 export const toUrl = (id: string) => `https://www.bilibili.com/video/${id}/`
@@ -52,7 +52,8 @@ const renderArgue = ({ argue_info: info }: any, inner: VNode): (VNode | null)[] 
     before ? null : argue
   ]
 }
-const resolveChannel = (videoData: { tid: number, tname: string }, channelKv: any) => {
+type Channel = { name: string, url: string, desc?: string }
+const resolveChannel = (videoData: { tid: number, tname: string }, channelKv: any): [Channel | null, Channel | null] => {
   if (channelKv != null) {
     for (const channel of channelKv) {
       if (!hasOwn(channel, 'sub')) { continue }
@@ -87,9 +88,7 @@ export default defineComponent({
     let data:
       & Record<'error' | 'thumb' | 'date' | 'copyright', string | null>
       & Record<'pagesTitle' | 'episodesTitle', string>
-      & Record<'channel' | 'subChannel' | 'channel_v2' | 'subChannel_v2', {
-        name: string, url: string, desc?: string
-      } | null>
+      & Record<'channel' | 'subChannel' | 'channel_v2' | 'subChannel_v2', Channel | null>
     watchEffect(() => {
       const $data = props.data
       data = {
@@ -108,10 +107,7 @@ export default defineComponent({
       const { error, channelKv, videoData } = $data
       data.error = error.message
       if (data.error != null) { return }
-      data.thumb = videoData.pic ?? ''
-      if (startsWith(data.thumb!, 'http:')) {
-        data.thumb = `https:${slice(data.thumb!, 5)}`
-      }
+      data.thumb = toHttps(videoData.pic ?? '')
       data.date = instantToString(videoData.pubdate * 1000, true)
       data.copyright = copyrightMap.get(videoData.copyright) ?? '未知'
       data.pagesTitle = `分P[${videoData.pages.length}]`
@@ -171,7 +167,7 @@ export default defineComponent({
             href: toSpaceUrl(owner.mid),
             title: `${owner.title != null ? `[${owner.title}]` : ''}${owner.name}`
           }, [
-            h('img', { ...$img, src: owner.face })
+            h('img', { ...$img, src: toHttps(owner.face) })
           ])),
           default: () => [
             h('div', null, [
@@ -247,7 +243,7 @@ export default defineComponent({
                 disabled: state.drawer === void 0 || videoData.ugc_season == null,
                 onClick: handle.drawerEpisodes
               }, () => [data.episodesTitle]),
-              h(BBDown, { id })
+              import.meta.env.TARGET !== 'pages' ? h(BBDown, { id }) : null
             ]),
             state.drawer !== void 0 ? h(Drawer, {
               width: 512,
