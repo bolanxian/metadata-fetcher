@@ -1,5 +1,5 @@
 
-import type { Component } from 'vue'
+import type { DefineComponent, ExtractPropTypes, Prop } from 'vue'
 import * as cheerio from 'cheerio'
 import { getOwn, $then as then, match, replace, on, off, getAsync } from 'bind:utils'
 import { freeze } from 'bind:Object'
@@ -12,12 +12,12 @@ const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
 const PAGES = TARGET == 'pages'
 
-export interface Plugin<T extends {}> {
+export interface Plugin<T extends {} = {}> {
   include: RegExp[]
   resolve(m: RegExpMatchArray, reg: RegExp): ResolvedInfo | null
   load(info: ResolvedInfo): Promise<T | null>
   parse(data: T, info: ResolvedInfo): Promise<ParsedInfo | null>
-  component?: Component<{ data: T }>
+  component?: DefineComponent<ExtractPropTypes<{ data: Prop<T> }>, {}, any>
 }
 export interface ResolvedInfo {
   id: string

@@ -1,5 +1,5 @@
 
-import { type VNode, defineComponent, shallowReactive, watchEffect, onMounted, createVNode as h, withDirectives } from 'vue'
+import { type VNode, type Prop, defineComponent, shallowReactive, watchEffect, onMounted, createVNode as h, withDirectives } from 'vue'
 import { Alert, ButtonGroup, Button, Card, CellGroup, Cell, Divider, Drawer, Icon, Tag } from 'view-ui-plus'
 import lineClamp from 'view-ui-plus/src/directives/line-clamp'
 import { hasOwn } from 'bind:utils'
@@ -8,6 +8,7 @@ import { BBDown } from './bbdown'
 import { toHttps } from '../bind'
 import { instantToString, formatDuration } from '../utils/temporal'
 
+export type Data = Record<'error' | 'redirect' | 'videoData' | 'tags' | 'channelKv', any>
 export const toShortUrl = (id: string) => `https://b23.tv/${id}`
 export const toUrl = (id: string) => `https://www.bilibili.com/video/${id}/`
 export const toSpaceUrl = (id: string) => `https://space.bilibili.com/${id}/`
@@ -73,7 +74,7 @@ const resolveChannel = (videoData: { tid: number, tname: string }, channelKv: an
 }
 
 export default defineComponent({
-  props: { data: null as any },
+  props: { data: null! as Prop<Data> },
   setup(props, ctx) {
     const state = shallowReactive<{
       drawer: 'parts' | 'episodes' | null | undefined
@@ -129,7 +130,7 @@ export default defineComponent({
       drawerModelValue(_: boolean) { _ || (state.drawer = null) }
     }
     watchEffect(() => {
-      const { videoData } = props.data
+      const { videoData } = props.data!
       switch (state.drawer) {
         case 'parts':
           state.drawerTitle = data.pagesTitle
@@ -148,7 +149,7 @@ export default defineComponent({
           h(Card, null, () => [h(Alert, { type: 'error', showIcon: true }, () => [data.error])])
         ]
       }
-      const { tags, videoData } = props.data
+      const { tags, videoData } = props.data!
       const id = `av${videoData.aid}`
       return [
         h(Card, null, {

@@ -35,8 +35,11 @@ const metaProperty = meta('property')
 
 function* xbuildMeta({ mode, parsed, [BatchLength]: batchLength, config }: Store): Generator<string, void, unknown> {
   if (mode === 'default' && parsed != null) {
-    let description = onlyFirst32(parsed.description)
-    description = replaceAll(description, '\n', ' ')
+    let { description } = parsed
+    if (description != null) {
+      description = onlyFirst32(description)
+      description = replaceAll(description, '\n', ' ')
+    }
     yield `<title>${escapeText(parsed.title)} - ${name}</title>`
     yield* metaName({
       title: parsed.title,
