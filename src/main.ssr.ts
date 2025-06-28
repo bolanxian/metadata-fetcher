@@ -8,6 +8,7 @@ export { getCache, setCache } from './cache'
 export { config, readConfig, writeConfig } from './config'
 export { S, P, createBatchParams } from './components/app.vue'
 export { handleRequest as handleRequestBbdown } from './utils/bbdown'
+export { illustId, illustName } from './utils/illust-name'
 
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
@@ -15,7 +16,7 @@ import { keys } from 'bind:Object'
 import { slice, startsWith, replaceAll } from 'bind:String'
 import { join, onlyFirst32, escapeText, escapeAttr, escapeAttrApos } from './bind'
 import { config } from './config'
-import App, { BatchLength, type Store } from './components/app.vue'
+import App, { Data, type Store } from './components/app.vue'
 import { getOwn } from 'bind:utils'
 const { stringify } = JSON
 
@@ -33,7 +34,7 @@ const metaName = meta('name')
 const metaItemprop = meta('itemprop')
 const metaProperty = meta('property')
 
-function* xbuildMeta({ mode, parsed, [BatchLength]: batchLength, config }: Store): Generator<string, void, unknown> {
+function* xbuildMeta({ mode, parsed, [Data]: data, config }: Store): Generator<string, void, unknown> {
   if (mode === 'default' && parsed != null) {
     let { description } = parsed
     if (description != null) {
@@ -66,7 +67,7 @@ function* xbuildMeta({ mode, parsed, [BatchLength]: batchLength, config }: Store
   if (startsWith(mode, 'batch:') && parsed != null) {
     const type = slice(mode, 6)
     const batchName = getOwn(config.batch, type)?.name || type
-    title = `批量模式[${escapeText(batchName)}]：${escapeText(parsed.title)}\u3000等 ${batchLength} 项 - ${name}`
+    title = `批量模式[${escapeText(batchName)}]：${escapeText(parsed.title)}\u3000等 ${data!.batchLength} 项 - ${name}`
   }
   yield `<title>${title}</title>`
   yield* metaProperty({

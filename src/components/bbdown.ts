@@ -1,9 +1,10 @@
 
 import { Terminal as Xterm } from '@xterm/xterm'
 import { WebglAddon } from '@xterm/addon-webgl'
-import { type VNode, defineComponent, watch, createVNode as h, shallowReactive } from 'vue'
+import { type VNode, type Prop, defineComponent, watch, createVNode as h, shallowReactive } from 'vue'
 import { Row, Col, Input, Modal, Button, ButtonGroup, Radio, RadioGroup, Checkbox } from 'view-ui-plus'
 import { encodeText, on } from 'bind:utils'
+import { keys } from 'bind:Object'
 import { type BBDownOptions, create, echo } from '../utils/bbdown'
 import { removeLast } from '../bind'
 const TARGET = import.meta.env.TARGET
@@ -14,11 +15,12 @@ const $colAttrs2 = { span: 3, style: 'text-align:right;padding-right:8px;line-he
 const ON_MODEL = 'onUpdate:modelValue'
 
 export const BBDown = defineComponent(TARGET != 'client' ? {
+  props: { id: null! as Prop<string> },
   render() {
     return h(Button, { disabled: true }, () => ['下载', null])
   }
 } : {
-  props: { id: String },
+  props: { id: null! as Prop<string> },
   data(): {
     status: null | 'ready' | 'modal' | 'terminal' | 'closed' | 'abort' | 'fading-out'
     currentId: string
@@ -36,7 +38,7 @@ export const BBDown = defineComponent(TARGET != 'client' ? {
     const proto = create()
     const options = shallowReactive(proto)
     const setMap: Record<keyof BBDownOptions, (_: any) => void> = { __proto__: null! } as any
-    for (const key of Object.keys(proto) as (keyof BBDownOptions)[]) {
+    for (const key of keys(proto) as (keyof BBDownOptions)[]) {
       setMap[key] = (_) => { options[key] = _ }
     }
     return {
@@ -143,7 +145,7 @@ export const BBDown = defineComponent(TARGET != 'client' ? {
     return h(Button, { onClick: vm.handleModal, disabled: vm.status !== 'ready' }, () => [
       '下载',
       vm.status != null ? h(Modal, {
-        width: 864 + 32, closable: !1, maskClosable: !1,
+        width: 768, closable: !1, maskClosable: !1,
         title: 'BBDown',
         modelValue: vm.modalValue,
         onOnHidden: vm.handleHidden

@@ -11,13 +11,14 @@ import { nextTick } from '../bind'
 import { config, type Config, config as defaultConfig, writeConfig } from '../config'
 import { resolve, xparse, render as _render, renderBatch, $fetch } from '../plugin'
 import type { ResolvedInfo, ParsedInfo } from '../plugin'
+import { Dialog } from './dialog'
 import.meta.glob('../plugins/*', { eager: true })
 
 const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
 const PAGES = TARGET == 'pages'
 export const S = /\s+/, P = /^\w/
-export const BatchLength = Symbol('BatchLength')
+export const Data = Symbol('Data')
 
 export interface Store {
   mode: string
@@ -28,10 +29,30 @@ export interface Store {
   parsed: ParsedInfo | null
 
   batchResolved: string | null
-  [BatchLength]?: number
+  [Data]?: Data
 
   output: string
   config: Config
+}
+export type Data = ({
+  mode: 'default'
+  batchType: null
+  batchLength: null
+  dialogType: null
+} | {
+  mode: 'batch'
+  batchType: string
+  batchLength: number
+  dialogType: null
+} | {
+  mode: 'dialog'
+  batchType: null
+  batchLength: null
+  dialogType: 'file' | 'directory'
+}) & {
+  batchTitle: string
+  loading: boolean
+  disabled: boolean
 }
 
 const resolveBatchCb = (id: string) => resolve(id)?.id ?? '!'
@@ -49,17 +70,11 @@ export const createBatchParams = (type: string, input: string | Iterable<string>
 export default defineComponent({
   props: PAGES ? (void 0)! : { store: null! as Prop<Store> },
   setup(props, { expose }) {
-    const data = shallowReactive<({
-      mode: 'default'
-      batchType: null
-    } | {
-      mode: 'batch'
-      batchType: string
-    }) & {
-      batchTitle: string
-      loading: boolean
-      disabled: boolean
-    }>({ mode: 'default', batchType: null, batchTitle: '', loading: false, disabled: true })
+    const data = shallowReactive<Data>({
+      mode: 'default',
+      batchType: null, batchLength: null, batchTitle: '',
+      dialogType: null, loading: false, disabled: true
+    })
     const handleRefOutput = (vm: any) => { nextTick(vm.resizeTextarea) }
     if (!(PAGES && $fetch == null) && !SSR) {
       onMounted(() => { data.disabled = false })
@@ -77,6 +92,7 @@ export default defineComponent({
       batchResolved: null,
       config: defaultConfig
     })
+    if (SSR) { store[Data] = data }
 
     if (!SSR) { assign(config, store.config) }
     store.input = trim(store.input)
@@ -92,7 +108,7 @@ export default defineComponent({
           store.batchResolved = resolveBatch(store.input)
           const args = split(S, store.input)
           const onParsed = (parsed: ParsedInfo) => { store.parsed ??= parsed }
-          store[BatchLength] = args.length
+          data.batchLength = args.length
           let output = ''
           for await (const line of renderBatch(args, data.batchType!, onParsed)) {
             output += `${line}\n`
@@ -100,6 +116,10 @@ export default defineComponent({
           store.output = output
         })
       }
+    } else if (startsWith(store.mode, 'dialog:')) {
+      const type = slice(store.mode, 7)
+      data.mode = 'dialog'
+      data.dialogType = type as any
     } else {
       if (SSR) {
         store.input && onServerPrefetch(async () => {
@@ -277,7 +297,8 @@ export default defineComponent({
         component != null ? h(Col, $colAttrs2, () => [
           h(component!, { data: store.data })
         ]) : null
-      ])
+      ]),
+      data.mode === 'dialog' ? h(Dialog, { type: data.dialogType, path: store.input }) : null
     ]
   }
 })
@@ -316,7 +337,7 @@ const Config = defineComponent({
         onClick: handleModal
       }, () => ['设置']),
       data.status !== void 0 ? h(Modal, {
-        width: 350, closable: !1, maskClosable: !1, transfer: true,
+        width: 384, closable: !1, maskClosable: !1, transfer: true,
         title: '设置',
         modelValue: data.status != null,
         onOnHidden: handleHidden

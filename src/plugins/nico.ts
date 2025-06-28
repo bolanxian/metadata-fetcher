@@ -31,6 +31,7 @@ definePlugin<{ work: any, user: any }>({
     /^(?:https?:\/\/)?www\.nicovideo\.jp\/watch\/(sm\d+)/,
     /^(?:https?:\/\/)?seiga\.nicovideo\.jp\/seiga\/(im\d+)/,
     /^(?:https?:\/\/)?3d\.nicovideo\.jp\/works\/(td\d+)/,
+    /^(?:https?:\/\/)?commons\.nicovideo\.jp\/material\/(nc\d+)/,
     /^(?:https?:\/\/)?commons\.nicovideo\.jp\/works\/([a-z]{2}\d+)/
   ],
   resolve({ 1: id }) {
