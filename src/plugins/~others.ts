@@ -8,12 +8,12 @@ import { from } from 'bind:Array'
 import { type Plugin, definePlugin } from '../plugin'
 const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
-const CLIENT = TARGET == 'client'
+const CSR = TARGET == 'client'
 const { parse } = JSON
 const defaultResolve: Plugin['resolve'] = ({ 0: id }) => ({ id, rawId: id, shortUrl: '', url: '' })
 
 type Info = {}
-const Info = SSR || CLIENT ? defineComponent(SSR ? {
+const Info = SSR || CSR ? defineComponent(SSR ? {
   props: null! as { data: Prop<Info> },
   render: () => [null]
 } : {
@@ -88,7 +88,7 @@ ${toFixed((memory.used / memory.total) * 100, 2)}%\
     ]) : null]
   }
 }) : null!
-SSR || CLIENT ? definePlugin<Info>({
+SSR || CSR ? definePlugin<Info>({
   include: [/^info$/],
   resolve: defaultResolve,
   async load(info) { return {} },
@@ -98,11 +98,11 @@ SSR || CLIENT ? definePlugin<Info>({
   component: Info
 }) : null
 
-definePlugin({
+definePlugin<{ title: string, since: string, date: string }[]>({
   include: [/^ice$/],
   resolve: defaultResolve,
   async load(info) {
-    const nowDate = Temporal.Now.plainDate('chinese')
+    const nowDate = Temporal.Now.plainDateISO('+0800').withCalendar('chinese')
     const nextChunjie = Temporal.PlainDate.from({
       year: +nowDate.year + 1, month: 1, day: 1, calendar: 'chinese'
     })
@@ -110,23 +110,26 @@ definePlugin({
 
     const diffOpts: Temporal.DifferenceOptions<'day'> = { largestUnit: 'day', smallestUnit: 'day' }
     const dtfOpts: Intl.DateTimeFormatOptions = { dateStyle: 'long' }
-    return {
-      since: [
-        startThawing.since(nowDate, diffOpts).toLocaleString('zh'),
-        nextChunjie.since(nowDate, diffOpts).toLocaleString('zh')
-      ],
-      duration: nextChunjie.since(startThawing, diffOpts).toLocaleString('zh'),
-      nextChunjie: nextChunjie.withCalendar('iso8601').toLocaleString('zh', dtfOpts),
-      startThawing: startThawing.withCalendar('iso8601').toLocaleString('zh', dtfOpts)
-    }
+    return [
+      {
+        title: '解冻开始',
+        since: startThawing.since(nowDate, diffOpts).toLocaleString('zh'),
+        date: startThawing.withCalendar('iso8601').toLocaleString('zh', dtfOpts)
+      }, {
+        title: '解冻完成',
+        since: nextChunjie.since(nowDate, diffOpts).toLocaleString('zh'),
+        date: nextChunjie.withCalendar('iso8601').toLocaleString('zh', dtfOpts)
+      }
+    ]
   },
   async parse(data, info) {
+    let desc = '\n'
+    for (const { title, since, date } of data) {
+      desc += `${title}：${date}（${since}）\n`
+    }
     return {
       title: '解冻',
-      description: `
-解冻开始：${data.startThawing}（${data.since[0]}）
-解冻完成：${data.nextChunjie}（${data.since[1]}）
-`
+      description: desc
     } as any
   }
 })

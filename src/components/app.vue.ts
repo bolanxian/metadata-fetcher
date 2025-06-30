@@ -16,6 +16,7 @@ import.meta.glob('../plugins/*', { eager: true })
 
 const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
+const CSR = TARGET == 'client'
 const PAGES = TARGET == 'pages'
 export const S = /\s+/, P = /^\w/
 export const Data = Symbol('Data')
@@ -75,8 +76,10 @@ export default defineComponent({
       batchType: null, batchLength: null, batchTitle: '',
       dialogType: null, loading: false, disabled: true
     })
-    const handleRefOutput = (vm: any) => { nextTick(vm.resizeTextarea) }
-    if (!(PAGES && $fetch == null) && !SSR) {
+    const handleRefOutput = (vm: any) => {
+      if (vm != null) { nextTick(vm.resizeTextarea) }
+    }
+    if (CSR || (PAGES && $fetch != null)) {
       onMounted(() => { data.disabled = false })
     }
 
@@ -94,7 +97,7 @@ export default defineComponent({
     })
     if (SSR) { store[Data] = data }
 
-    if (!SSR) { assign(config, store.config) }
+    if (CSR) { assign(config, store.config) }
     store.input = trim(store.input)
     if (startsWith(store.mode, 'batch:')) {
       const type = slice(store.mode, 6)
@@ -111,7 +114,7 @@ export default defineComponent({
           data.batchLength = args.length
           let output = ''
           for await (const line of renderBatch(args, data.batchType!, onParsed)) {
-            output += `${line}\n`
+            output += `${line.error ?? line.value}\n`
           }
           store.output = output
         })
@@ -148,6 +151,10 @@ export default defineComponent({
       } else {
         store.resolved = null
         store.resolved = resolve(input)
+        if (PAGES) {
+          const id = store.resolved?.id
+          data.disabled = id === 'ice' ? false : $fetch == null
+        }
       }
     })
 
@@ -171,7 +178,7 @@ export default defineComponent({
         store.output = ''
         if (data.mode === 'batch') {
           for await (const line of renderBatch(split(S, store.batchResolved!), data.batchType)) {
-            store.output += `${line}\n`
+            store.output += `${line.error ?? line.value}\n`
           }
         } else if (store.resolved != null) {
           const { id } = store.resolved
@@ -193,7 +200,7 @@ export default defineComponent({
       } finally {
         data.loading = false
       }
-    } : !SSR ? () => {
+    } : CSR ? () => {
       if (data.disabled) { return }
       if (data.mode === 'batch') {
         location.href = `./.batch?${createBatchParams(data.batchType, store.batchResolved!)}`
@@ -280,7 +287,7 @@ export default defineComponent({
             onOnFocus: handleFocus,
             readonly: true
           }) : null,
-          !(PAGES && $fetch == null) ? !(SSR || data.disabled) ? h(Input, {
+          SSR || CSR || (PAGES && !data.disabled) ? PAGES || (CSR && !data.disabled) ? h(Input, {
             ref: handleRefOutput,
             style: 'margin-top:20px',
             type: 'textarea',
@@ -290,7 +297,7 @@ export default defineComponent({
           }) : h('div', { class: 'ivu-input-wrapper', style: 'margin-top:20px' }, [
             h('textarea', { class: 'ivu-input', style: 'min-height:430px', readonly: true }, [store.output])
           ]) : null,
-          !((PAGES && $fetch == null) || (SSR || data.disabled))
+          (CSR || PAGES) && !data.disabled
             ? h(Config, { config: store.config, handleOk })
             : null
         ]),
@@ -298,7 +305,9 @@ export default defineComponent({
           h(component!, { data: store.data })
         ]) : null
       ]),
-      data.mode === 'dialog' ? h(Dialog, { type: data.dialogType, path: store.input }) : null
+      CSR && !data.disabled && data.mode === 'dialog'
+        ? h(Dialog, { type: data.dialogType, path: store.input })
+        : null
     ]
   }
 })
@@ -414,11 +423,13 @@ const QRCode = defineComponent(SSR ? {
   setup(props, ctx) {
     const data = shallowReactive<{
       isShow: boolean
+      trigger: 'hover' | 'click'
       text: null | string
       urlPromise: null | Promise<string>
       url: null | string
     }>({
       isShow: false,
+      trigger: 'hover',
       text: null,
       urlPromise: null,
       url: null
@@ -443,12 +454,19 @@ const QRCode = defineComponent(SSR ? {
         return data.url = url
       })()
     })
+    onMounted(() => {
+      data.trigger = matchMedia('(hover: hover)').matches ? 'hover' : 'click'
+    })
     const $poptip = {
       trigger: 'hover', placement: 'bottom-start', disabled: true,
       onOnPopperShow() { data.isShow = true },
       onOnPopperHide() { data.isShow = false }
     }
-    return () => h(Poptip, ($poptip.disabled = !props.text, $poptip), {
+    return () => h(Poptip, (
+      $poptip.disabled = !props.text,
+      $poptip.trigger = data.trigger,
+      $poptip
+    ), {
       default: () => [h(Button, { icon: props.icon })],
       content: () => [
         data.url != null

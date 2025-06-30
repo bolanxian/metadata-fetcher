@@ -16,6 +16,7 @@ Cargo.lock
 deno.lock
 package-lock.json
 __*__
+*.local.*
 *.proxy.*
 node_modules
 dist

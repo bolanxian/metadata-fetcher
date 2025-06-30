@@ -12,6 +12,8 @@ const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
 const PAGES = TARGET == 'pages'
 
+export type Result<T, E extends {}> = { error: E, cause?: any } | { error: null, value: T }
+export type BatchResult = Result<string, string>
 export interface Plugin<T extends {} = {}> {
   include: RegExp[]
   resolve(m: RegExpMatchArray, reg: RegExp): ResolvedInfo | null
@@ -36,7 +38,7 @@ export interface ParsedInfo {
   description: string
 }
 
-export const plugins: Plugin<{}>[] = []
+export const plugins: Plugin[] = []
 export const definePlugin = <T extends {}>(plugin: Plugin<T>) => {
   freeze(plugin)
   freeze(plugin.include)
@@ -127,9 +129,9 @@ export const render = (parsed: ParsedInfo, template = config.template) => {
   return ret
 }
 
-const LINE_REG = /\$\{(.+?)\}/g
-export const renderLine = async (data: Record<string, string>, template: string) => {
-  return replace(LINE_REG, template, ($0, $1) => {
+const REG_LINE = /\$\{(.+?)\}/g
+export const renderLine = (data: Record<string, string>, template: string) => {
+  return replace(REG_LINE, template, ($0, $1) => {
     let val: string | undefined
     if (includes($1, '|')) {
       const [name, ...args] = split($1, '|')
@@ -150,28 +152,40 @@ export const renderLine = async (data: Record<string, string>, template: string)
 renderLine.escape = (str: string) => replace(/(?<=^(?=av)|^a(?=v)|^(?=BV)|^B(?=V))./g, str, charToFullwidth)
 renderLine.filename = (str: string) => replace(/[\\/:*?"<>|]/g, str, charToFullwidth)
 
-export async function* renderBatch(args: string[], key: string, onParsed?: (parsed: ParsedInfo) => void) {
+export const renderBatchSingle = (
+  arg: string, template: string, sep: Record<string, string>,
+): BatchResult => {
+  let data: Record<string, string>
+  const [, resolved] = xparse(arg)
+  if (resolved == null) { return { error: `Unknown Input : ${arg}` } }
+  data = { ...sep, ...resolved }
+  return { error: null, value: renderLine(data, template) }
+}
+export const renderBatchSingleWithParse = async (
+  arg: string, template: string, sep: Record<string, string>,
+  onParsed?: (parsed: ParsedInfo) => void
+): Promise<BatchResult> => {
+  let data: Record<string, string>
+  const [, resolved, redirected, , parsedPromise] = xparse(arg)
+  if (resolved == null) { return { error: `Unknown Input : ${arg}` } }
+  let parsed: ParsedInfo | null | undefined, cause: any
+  try { parsed = await parsedPromise } catch (e) { cause = e }
+  if (parsed == null) { return { error: `Not Found : ${resolved.id}`, cause } }
+  onParsed?.(parsed)
+  data = { ...sep, ...resolved, ...redirected != null ? await redirected : null, ...parsed }
+  return { error: null, value: renderLine(data, template) }
+}
+export async function* renderBatch(
+  args: string[], key: string, onParsed?: (parsed: ParsedInfo) => void
+): AsyncGenerator<BatchResult> {
   const batch = getOwn(config.batch, key)
-  if (batch == null) { yield `#Unknown Template : ${key}`; return }
-  const { separator } = config
+  if (batch == null) { yield { error: `Unknown Template : ${key}` }; return }
+  const { separator } = config, { template } = batch
   const sep = { separator, _: separator }
-  const hasParse = key[0] !== '.'
+  const withParse = key[0] !== '.'
+  const single = withParse ? renderBatchSingleWithParse : renderBatchSingle
   for (const arg of args) {
-    let data: Record<string, string>
-    if (hasParse) {
-      const [, resolved, redirected, , parsedPromise] = xparse(arg)
-      if (resolved == null) { yield `#Unknown Input : ${arg}`; continue }
-      let parsed: ParsedInfo | null | undefined
-      try { parsed = await parsedPromise } catch { }
-      if (parsed == null) { yield `#Not Found : ${resolved.id}`; continue }
-      onParsed?.(parsed)
-      data = { ...sep, ...resolved, ...redirected != null ? await redirected : null, ...parsed }
-    } else {
-      const [, resolved] = xparse(arg)
-      if (resolved == null) { yield `#Unknown Input : ${arg}`; continue }
-      data = { ...sep, ...resolved }
-    }
-    yield renderLine(data, batch.template)
+    yield single(arg, template, sep, onParsed)
   }
 }
 
