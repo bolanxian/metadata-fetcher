@@ -3,12 +3,14 @@
 export { default as $string } from 'bind:String'
 //@ts-ignore
 export { default as $array } from 'bind:Array'
-import { replace } from 'bind:utils'
-import { fromCharCode, charCodeAt, slice, startsWith, trim } from 'bind:String'
+import { test, replace } from 'bind:utils'
+import { fromCharCode, charCodeAt, indexOf, slice } from 'bind:String'
+import { freeze } from 'bind:Object'
 import * as cheerio from 'cheerio'
 
 export const noop = () => { }
 export const nextTick = queueMicrotask
+export const empty = freeze([])
 
 export const iterator: typeof Symbol.iterator = Symbol.iterator
 export const join = (iter: Iterable<any>, separator = ',') => {
@@ -30,13 +32,22 @@ export const removeLast = (input: string) => replace(REG_LAST, input, '')
 export const controlCharToPicture = (str: string) => replace(/[\x00-\x1F\x7F]/g, str, $0 => {
   return $0 === '\x7F' ? '\u2421' : fromCharCode(charCodeAt($0, 0) + 0x2400)
 })
-export const toHttps = (input: string) => {
-  input = trim(input)
-  if (startsWith(input, 'http:')) {
-    input = `https:${slice(input, 5)}`
+export const REG_PROTOCOL = /^https?:\/*|^(?:https?)?:?\/{2,}/
+export const REG_DOMAIN = /^((?!-)[-0-9A-Za-z]{1,63}(?<!-)\.){1,63}[A-Za-z]{2,63}$/
+export const resolveAsHttp = (input: string) => {
+  if (test(REG_PROTOCOL, input)) {
+    return replace(REG_PROTOCOL, input, '')
   }
-  return input
+  const slashIndex = indexOf(input, '/')
+  if (slashIndex > 0) {
+    const maybeDomain = slice(input, 0, slashIndex)
+    if (test(REG_DOMAIN, maybeDomain)) {
+      return input
+    }
+  }
+  return null
 }
+export const toHttps = (input: string) => replace(REG_PROTOCOL, input, 'https://')
 
 const createEscaper = (reg: RegExp, map: Record<string, string>) => {
   const cb = (sub: string) => map[sub] ?? ''

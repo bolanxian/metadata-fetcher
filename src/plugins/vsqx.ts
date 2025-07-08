@@ -7,9 +7,9 @@ const DATE_REG = /^(\d\d\d\d)-(\d\d)-(\d\d)\s+(\d\d:\d\d:\d\d)$/
 const DATE_STR = '$1-$2-$3T$4+08:00'
 
 definePlugin({
-  include: [
-    /^(vn(?!0)\d+)/,
-    /^(?:https?:\/\/)?www\.vsqx\.top\/project\/(vn(?!0)\d+)/
+  include: [/^(vn(?!0)\d+)/],
+  includeAsHttp: [
+    /^www\.vsqx\.top\/project\/(vn(?!0)\d+)/
   ],
   resolve({ 1: id }) {
     const url = `https://www.vsqx.top/project/${id}`

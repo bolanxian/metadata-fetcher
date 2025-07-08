@@ -12,14 +12,15 @@ import { fromHTML } from '../utils/find-json-object'
 import { instantToString } from '../utils/temporal'
 
 export { REG_AV, REG_BV } from '../utils/bv-encode'
-export const REG_B23 = /^(?:https?:\/\/)?(?:b23\.tv|bili2{0,2}3{0,2}\.cn)\/([-\w]+)(?=$|[?#])/
-export const REG_FULL = /^(?:https?:\/\/)?(?:m|www)\.bilibili\.com\/video\/(\w+)\/?(?=$|[?#])/
-export const REG_WL = /^(?:https?:\/\/)?www\.bilibili\.com\/list\/watchlater\/?\?(?:\S*?&)??bvid=(\w+)/
+export const REG_B23 = /^(?:b23\.tv|bili2{0,2}3{0,2}\.cn)\/([-\w]+)(?=$|[?#])/
+export const REG_FULL = /^(?:m|www)\.bilibili\.com\/video\/(\w+)\/?(?=$|[?#])/
+export const REG_WL = /^www\.bilibili\.com\/list\/watchlater\/?\?(?:\S*?&)??bvid=(\w+)/
 const REG_INIT = /^\s*window\.__INITIAL_STATE__\s*=\s*(?={)/
 let channelKv: any
 
 export const main = definePlugin<Data>({
-  include: [BV.REG_AV, BV.REG_BV, REG_B23, REG_FULL, REG_WL],
+  include: [BV.REG_AV, BV.REG_BV],
+  includeAsHttp: [REG_B23, REG_FULL, REG_WL],
   resolve(m, reg) {
     let id = m[1]
     if (test(BV.REG_AV, id)) {
@@ -170,9 +171,9 @@ definePlugin({
 })
 
 definePlugin({
-  include: [
-    /^cv(\d+)/,
-    /^(?:https?:\/\/)?www\.bilibili\.com\/(?:read\/cv|mobile\?id=)(\d+)/
+  include: [/^cv(\d+)/],
+  includeAsHttp: [
+    /^www\.bilibili\.com\/(?:read\/cv|mobile\?id=)(\d+)/
   ],
   resolve(m) {
     const id = `cv${m[1]}`
@@ -197,9 +198,11 @@ definePlugin({
 })
 definePlugin({
   include: [
-    /^bili!dyn!(\d{18,})/,
-    /^(?:https?:\/\/)?t\.bilibili\.com\/(\d{18,})/,
-    /^(?:https?:\/\/)?(?:m|www)\.bilibili\.com\/opus\/(\d{18,})/
+    /^bili!dyn!(\d{18,})/
+  ],
+  includeAsHttp: [
+    /^t\.bilibili\.com\/(\d{18,})/,
+    /^(?:m|www)\.bilibili\.com\/opus\/(\d{18,})/
   ],
   resolve(m) {
     const id = `bili!dyn!${m[1]}`

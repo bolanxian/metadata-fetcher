@@ -9,7 +9,9 @@ definePlugin({
     /^pixiv[!:](\d+)(?:[!-]\d+)??$/,
     /^pid=(\d+)$/,
     /^pixiv:\/\/illusts\/(\d+)(?=$|[?#])/,
-    /^(?:https?:\/\/)?www\.pixiv\.net\/artworks\/(\d+)(?=$|[?#])/
+  ],
+  includeAsHttp: [
+    /^www\.pixiv\.net\/artworks\/(\d+)(?=$|[?#])/
   ],
   resolve({ 1: m1 }, reg) {
     return {

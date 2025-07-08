@@ -25,14 +25,14 @@ const getWorks = async (id: string) => {
 }
 
 definePlugin<{ work: any, user: any }>({
-  include: [
-    REG_NICO,
-    /^(?:https?:\/\/)?nico\.ms\/([a-z]{2}\d+)/,
-    /^(?:https?:\/\/)?www\.nicovideo\.jp\/watch\/(sm\d+)/,
-    /^(?:https?:\/\/)?seiga\.nicovideo\.jp\/seiga\/(im\d+)/,
-    /^(?:https?:\/\/)?3d\.nicovideo\.jp\/works\/(td\d+)/,
-    /^(?:https?:\/\/)?commons\.nicovideo\.jp\/material\/(nc\d+)/,
-    /^(?:https?:\/\/)?commons\.nicovideo\.jp\/works\/([a-z]{2}\d+)/
+  include: [REG_NICO],
+  includeAsHttp: [
+    /^nico\.ms\/([a-z]{2}\d+)/,
+    /^www\.nicovideo\.jp\/watch\/(sm\d+)/,
+    /^seiga\.nicovideo\.jp\/seiga\/(im\d+)/,
+    /^3d\.nicovideo\.jp\/works\/(td\d+)/,
+    /^commons\.nicovideo\.jp\/material\/(nc\d+)/,
+    /^commons\.nicovideo\.jp\/works\/([a-z]{2}\d+)/
   ],
   resolve({ 1: id }) {
     if (!test(REG_NICO, id)) { return null }

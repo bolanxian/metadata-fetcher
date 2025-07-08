@@ -1,5 +1,12 @@
 # Metadata Fetcher
 
+### 支持
+| 运行环境 | 托盘图标 | WebUI | CLI |
+| - | - | - | - |
+| [Node.js](https://nodejs.org/) | ❌ | ❌ | ✔️ |
+| [Deno](https://deno.com/) | ✔️ | ✔️ | ✔️ |
+| [Bun](https://bun.com/) | ❌ | ✔️ | ✔️ |
+
 ### CLI / WebUI
 ```batch
 : 构建
@@ -11,12 +18,8 @@ npm run serve:bun
 
 : 获取元数据
 deno task fetch ...
-: 仅解析
-deno task id ...
-: 借物表
-deno task list ...
-: 文件名
-deno task list ...
+: 批量模式
+deno task batch <".id" | "list" | "name" | ...> ...
 ```
 
 ### Koishi 插件
