@@ -4,7 +4,7 @@ import * as cheerio from 'cheerio'
 import { getOwn, $then as then, match, replace, on, off, getAsync } from 'bind:utils'
 import { freeze } from 'bind:Object'
 import { includes, trim, split, startsWith, indexOf, slice } from 'bind:String'
-import { noop, charToFullwidth, controlCharToPicture } from './bind'
+import { noop, charToFullwidth, controlCharToPicture, resolveAsHttp, empty } from './bind'
 import { ready as ready1, getCache, setCache } from './cache'
 import { ready as ready2, config } from './config'
 
@@ -15,7 +15,8 @@ const PAGES = TARGET == 'pages'
 export type Result<T, E extends {}> = { error: E, cause?: any } | { error: null, value: T }
 export type BatchResult = Result<string, string>
 export interface Plugin<T extends {} = {}> {
-  include: RegExp[]
+  include: readonly RegExp[]
+  includeAsHttp?: readonly RegExp[]
   resolve(m: RegExpMatchArray, reg: RegExp): ResolvedInfo | null
   load(info: ResolvedInfo): Promise<T | null>
   parse(data: T, info: ResolvedInfo): Promise<ParsedInfo | null>
@@ -49,9 +50,10 @@ export const definePlugin = <T extends {}>(plugin: Plugin<T>) => {
 const recursionResolve = (m: RegExpMatchArray) => resolve(m[1])
 const recursionLoad = () => null!
 const recursionParse = (_: any, { id }: ResolvedInfo) => parse(id)!
-export const defineRecursionPlugin = (include: RegExp[]) => {
+export const defineRecursionPlugin = (include: RegExp[], includeAsHttp: RegExp[]) => {
   return definePlugin({
-    include, resolve: recursionResolve, load: recursionLoad, parse: recursionParse
+    include, includeAsHttp,
+    resolve: recursionResolve, load: recursionLoad, parse: recursionParse
   })
 }
 
@@ -64,6 +66,9 @@ export const parse = (input: string): Promise<ParsedInfo | null> | null => {
   return _ ?? null
 }
 
+type IncludeGetter = (plugin: Plugin) => readonly RegExp[]
+const getIncludeDefault: IncludeGetter = plugin => plugin.include
+const getIncludeHttp: IncludeGetter = plugin => getOwn(plugin, 'includeAsHttp') ?? empty
 const redirectParse = async (_url: string): Promise<[
   ResolvedInfo | undefined,
   Promise<{} | null> | undefined,
@@ -85,10 +90,15 @@ const defaultParse = async (plugin: Plugin<{}>, dataPromise: Promise<{} | null>,
 export const xparse: (input: string) => [
   Plugin<{}>?, ResolvedInfo?, Promise<ResolvedInfo>?, Promise<{} | null>?, Promise<ParsedInfo | null>?
 ] = function* (input: string) {
-  input = trim(input)
   if (!(input.length > 0)) { return }
+  let getInclude = getIncludeDefault
+  const maybeHttp = resolveAsHttp(input)
+  if (maybeHttp != null) {
+    input = maybeHttp
+    getInclude = getIncludeHttp
+  }
   for (const plugin of plugins) {
-    for (const reg of plugin.include) {
+    for (const reg of getInclude(plugin)) {
       const m = match(reg, input)
       if (m != null) {
         const info = plugin.resolve(m, reg)

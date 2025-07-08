@@ -7,7 +7,7 @@ import { getOwn, test, split } from 'bind:utils'
 import { assign, entries } from 'bind:Object'
 import { from, join } from 'bind:Array'
 import { trim, slice, startsWith, replaceAll } from 'bind:String'
-import { nextTick } from '../bind'
+import { nextTick, resolveAsHttp } from '../bind'
 import { config, type Config, config as defaultConfig, writeConfig } from '../config'
 import { resolve, xparse, render as _render, renderBatch, $fetch } from '../plugin'
 import type { ResolvedInfo, ParsedInfo } from '../plugin'
@@ -54,10 +54,11 @@ export type Data = ({
   batchTitle: string
   loading: boolean
   disabled: boolean
+  maybeHttp: string | null
 }
 
 const resolveBatchCb = (id: string) => resolve(id)?.id ?? '!'
-const resolveBatch = (input: string) => (input = trim(input)) ? join(from(split(S, input), resolveBatchCb), ' ') : ''
+const resolveBatch = (input: string) => input ? join(from(split(S, input), resolveBatchCb), ' ') : ''
 export const createBatchParams = (type: string, input: string | Iterable<string>) => {
   let ids = ''
   if (typeof input == 'string') {
@@ -74,7 +75,7 @@ export default defineComponent({
     const data = shallowReactive<Data>({
       mode: 'default',
       batchType: null, batchLength: null, batchTitle: '',
-      dialogType: null, loading: false, disabled: true
+      dialogType: null, loading: false, disabled: true, maybeHttp: null
     })
     const handleRefOutput = (vm: any) => {
       if (vm != null) { nextTick(vm.resizeTextarea) }
@@ -126,6 +127,7 @@ export default defineComponent({
     } else {
       if (SSR) {
         store.input && onServerPrefetch(async () => {
+          data.maybeHttp = resolveAsHttp(store.input)
           const [plugin, resolved, redirected, dataPromise, parsedPromise] = xparse(store.input)
           if (resolved == null) { return }
           component = plugin!.component
@@ -136,6 +138,7 @@ export default defineComponent({
           }
         })
       } else {
+        data.maybeHttp = store.input ? resolveAsHttp(store.input) : null
         const id = store.resolved?.id
         if (id != null) {
           const [plugin] = xparse(id)
@@ -144,13 +147,16 @@ export default defineComponent({
       }
     }
 
-    !SSR && watch(() => store.input, input => {
+    !SSR && watch(() => trim(store.input), input => {
       if (data.mode === 'batch') {
         store.batchResolved = ''
         store.batchResolved = resolveBatch(input)
       } else {
-        store.resolved = null
-        store.resolved = resolve(input)
+        store.resolved = data.maybeHttp = null
+        if (input) {
+          store.resolved = resolve(input)
+          data.maybeHttp = resolveAsHttp(input)
+        }
         if (PAGES) {
           const id = store.resolved?.id
           data.disabled = id === 'ice' ? false : $fetch == null
@@ -161,7 +167,7 @@ export default defineComponent({
     const handleSelect = PAGES ? null! : (name: string) => {
       if (data.disabled) { return }
       if (startsWith(name, 'batch:')) {
-        location.href = `./.batch?${createBatchParams(slice(name, 6), resolveBatch(store.input))}`
+        location.href = `./.batch?${createBatchParams(slice(name, 6), resolveBatch(trim(store.input)))}`
       } else {
         const id = resolve(split(S, trim(store.input), 1)[0])?.id
         if (id == null || test(P, id)) {
@@ -260,12 +266,17 @@ export default defineComponent({
             'onUpdate:modelValue'(value: string) { store.input = value },
             onOnEnter: handleSearch
           }, {
-            append: () => h(Button, {
-              icon: 'md-arrow-forward',
-              loading: data.loading,
-              disabled: data.disabled || (store.resolved == null && store.batchResolved == null),
-              onClick: handleSearch
-            })
+            prepend: () => data.maybeHttp != null
+              ? h(QRCode, { icon: 'ios-globe-outline', text: `https://${data.maybeHttp}` })
+              : h(QRCode, { icon: 'ios-search', text: store.input }),
+            append: () => {
+              const disabled = data.disabled || (store.resolved == null && store.batchResolved == null)
+              return h(Button, {
+                icon: disabled ? 'md-help' : 'md-arrow-forward',
+                loading: data.loading, disabled,
+                onClick: handleSearch
+              })
+            }
           }),
           data.mode === 'default' ? h(Input, {
             modelValue: store.resolved?.url ?? '',
@@ -472,7 +483,7 @@ const QRCode = defineComponent(SSR ? {
         data.url != null
           ? h('img', {
             style: 'margin:5px 0;image-rendering:pixelated;object-fit:contain',
-            width: 240, height: 240, src: data.url
+            width: 240, height: 240, src: data.url, title: props.text,
           })
           : h(SkeletonItem, {
             style: 'margin:5px 0', animated: !!props.text,

@@ -6,8 +6,10 @@ import { definePlugin, html } from '../plugin'
 
 definePlugin({
   include: [
-    /^lyrical-nonsense!([-\w]+)!([-\w]+)/,
-    /^(?:https?:\/\/)?www\.lyrical-nonsense\.com\/(?:global\/)?lyrics\/([-\w]+)\/([-\w]+)\//
+    /^lyrical-nonsense!([-\w]+)!([-\w]+)/
+  ],
+  includeAsHttp: [
+    /^www\.lyrical-nonsense\.com\/(?:global\/)?lyrics\/([-\w]+)\/([-\w]+)\//
   ],
   resolve(m) {
     const id = `lyrical-nonsense!${m[1]}!${m[2]}`

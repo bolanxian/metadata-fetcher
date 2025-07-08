@@ -13,6 +13,7 @@ const $colAttrs0 = { span: 3, style: 'text-align:right;padding-right:8px;line-he
 const $colAttrs1 = { span: 3, style: 'text-align:right;padding-right:8px;line-height:25px;' }
 const $colAttrs2 = { span: 3, style: 'text-align:right;padding-right:8px;line-height:21px;' }
 const ON_MODEL = 'onUpdate:modelValue'
+const width = 864 + 32
 
 export const BBDown = defineComponent(TARGET != 'client' ? {
   props: { id: null! as Prop<string> },
@@ -145,7 +146,7 @@ export const BBDown = defineComponent(TARGET != 'client' ? {
     return h(Button, { onClick: vm.handleModal, disabled: vm.status !== 'ready' }, () => [
       '下载',
       vm.status != null ? h(Modal, {
-        width: 768, closable: !1, maskClosable: !1,
+        width, closable: !1, maskClosable: !1,
         title: 'BBDown',
         modelValue: vm.modalValue,
         onOnHidden: vm.handleHidden

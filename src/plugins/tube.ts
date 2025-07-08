@@ -11,10 +11,12 @@ const name = 'youtube'
 const host = `www.${name}.com`
 export default definePlugin({
   include: [
-    /^youtube[!:]([-\w]+)/,
-    /^(?:https?:\/\/)?youtu\.be\/([-\w]+)/,
-    /^(?:https?:\/\/)?(?:www\.)?youtube\.com\/(?:shorts|embed)\/([-\w]+)/,
-    /^(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?(?:\S*?&)??v=([-\w]+)/
+    /^youtube[!:]([-\w]+)/
+  ],
+  includeAsHttp: [
+    /^youtu\.be\/([-\w]+)/,
+    /^(?:www\.)?youtube\.com\/(?:shorts|embed)\/([-\w]+)/,
+    /^(?:www\.)?youtube\.com\/watch\?(?:\S*?&)??v=([-\w]+)/
   ],
   resolve({ 1: m1 }) {
     return {
