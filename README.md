@@ -28,6 +28,6 @@ deno task batch <".id" | "list" | "name" | ...> ...
 deno task build:koishi
 npm pack -w koishi-plugin-metadata-fetcher
 
-cd <koishi-app>
-npm install koishi-plugin-metadata-fetcher-<version>.tgz
+cd <koishi-desktop>\data\instances\default
+yarn add ./koishi-plugin-metadata-fetcher-<version>.tgz
 ```

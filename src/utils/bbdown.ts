@@ -2,7 +2,7 @@
 import { pipeTo, on } from 'bind:utils'
 import { includes, replaceAll } from 'bind:String'
 import { join } from 'bind:Array'
-import { userAgent } from '../plugin'
+import { defaultUserAgent as userAgent } from '@/meta-fetch/mod'
 const { error } = console
 
 const $command = 'bbdown'

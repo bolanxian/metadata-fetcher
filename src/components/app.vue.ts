@@ -8,11 +8,12 @@ import { assign, entries } from 'bind:Object'
 import { from, join } from 'bind:Array'
 import { trim, slice, startsWith, replaceAll } from 'bind:String'
 import { nextTick, resolveAsHttp } from '../bind'
-import { config, type Config, config as defaultConfig, writeConfig } from '../config'
-import { resolve, xparse, render as _render, renderBatch, $fetch } from '../plugin'
-import type { ResolvedInfo, ParsedInfo } from '../plugin'
+import { type Config, config, config as defaultConfig, writeConfig } from '../config'
+import { render as _render, renderBatch } from '../render'
+import { resolve, xparse, $fetch, getPluginComponent } from '@/meta-fetch/mod'
+import type { ResolvedInfo, ParsedInfo } from '@/meta-fetch/mod'
 import { Dialog } from './dialog'
-import.meta.glob('../plugins/*', { eager: true })
+import './bilibili.vue'
 
 const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
@@ -130,7 +131,7 @@ export default defineComponent({
           data.maybeHttp = resolveAsHttp(store.input)
           const [plugin, resolved, redirected, dataPromise, parsedPromise] = xparse(store.input)
           if (resolved == null) { return }
-          component = plugin!.component
+          component = getPluginComponent(plugin!)
           store.resolved = redirected != null ? await redirected : resolved
           store.data = await dataPromise!
           if ((store.parsed = await parsedPromise!) != null) {
@@ -142,7 +143,7 @@ export default defineComponent({
         const id = store.resolved?.id
         if (id != null) {
           const [plugin] = xparse(id)
-          component = plugin?.component
+          component = plugin != null ? getPluginComponent(plugin) : void 0
         }
       }
     }
@@ -188,9 +189,9 @@ export default defineComponent({
           }
         } else if (store.resolved != null) {
           const { id } = store.resolved
-          if (startsWith(id, '@redirect!')) { return }
+          if (id[0] === '@') { return }
           const [plugin, resolved, , dataPromise, parsedPromise] = xparse(trim(store.input))
-          component = plugin!.component
+          component = getPluginComponent(plugin!)
           store.resolved = resolved!
           store.data = await dataPromise!
           if ((store.parsed = await parsedPromise!) != null) {

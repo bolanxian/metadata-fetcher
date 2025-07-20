@@ -1,6 +1,6 @@
 import { match } from 'bind:utils'
 import { replace } from 'bind:String'
-import { type BatchResult, renderBatch } from '../plugin'
+import { type BatchResult, renderBatch } from '@/render'
 
 type Plugin = [
   RegExp, (m: RegExpMatchArray) => string,

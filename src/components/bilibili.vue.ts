@@ -5,13 +5,11 @@ import lineClamp from 'view-ui-plus/src/directives/line-clamp'
 import { hasOwn } from 'bind:utils'
 import { from, join } from 'bind:Array'
 import { BBDown } from './bbdown'
-import { toHttps } from '../bind'
-import { instantToString, formatDuration } from '../utils/temporal'
+import { toHttps } from '@/bind'
+import { instantToString, formatDuration } from '@/utils/temporal'
+import { definePluginComponent } from '@/meta-fetch/plugin'
+import { type Data, toUrl, toSpaceUrl, bilibiliVideo } from '@/meta-fetch/platforms/bilibili-video'
 
-export type Data = Record<'error' | 'redirect' | 'videoData' | 'tags' | 'channelKv', any>
-export const toShortUrl = (id: string) => `https://b23.tv/${id}`
-export const toUrl = (id: string) => `https://www.bilibili.com/video/${id}/`
-export const toSpaceUrl = (id: string) => `https://space.bilibili.com/${id}/`
 export const copyrightMap = new Map([[1, '自制'], [2, '转载']])
 export const copyrightValues = join([...copyrightMap.values()], ',')
 export const enum ArgueType {
@@ -73,7 +71,7 @@ const resolveChannel = (videoData: { tid: number, tname: string }, channelKv: an
   return [null, { name: videoData.tname, url: '' }]
 }
 
-export default defineComponent({
+export default definePluginComponent(bilibiliVideo, defineComponent({
   props: { data: null! as Prop<Data> },
   setup(props, ctx) {
     const state = shallowReactive<{
@@ -257,7 +255,7 @@ export default defineComponent({
       ]
     }
   }
-})
+}))
 
 const renderDrawerParts = (videoData: any) => [h(CellGroup, null, () => from(
   videoData.pages, (page: any) => h(Cell, {

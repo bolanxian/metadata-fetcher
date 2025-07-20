@@ -4,10 +4,14 @@ export const inject = ['database']
 
 import { getOwn } from 'bind:utils'
 import { Context, Field, Schema, Session, Tables, h } from 'koishi'
-import { config as defaultConfig } from './config'
-import type { ResolvedInfo, ParsedInfo } from './plugin'
-import { xparse, render, renderLine } from './plugin'
-import.meta.glob('./plugins/*', { eager: true })
+import type { ResolvedInfo, ParsedInfo } from './meta-fetch/mod'
+import { init, NoCache, xparse } from './meta-fetch/mod'
+import {/*init as initConfig,*/config as defaultConfig } from './config'
+import { render, renderLine } from './render'
+const ready = (async () => {
+  init({ cache: new NoCache(), fetch })
+  // await initConfig()
+})()
 
 export interface Config {
   separator: string
@@ -96,6 +100,7 @@ async function* renderList(
 }
 
 export const apply = (ctx: Context, config: Config) => {
+  ctx.on('ready', () => ready)
   ctx.i18n.define('zh-Hans', locale_zh_Hans)
   ctx.i18n.define('zh-CN', locale_zh_Hans)
   ctx.model.extend(name, fields)
@@ -107,8 +112,9 @@ export const apply = (ctx: Context, config: Config) => {
   })
   ctx.command('meta.img <arg0>').action(async ({ session }, arg0) => {
     const [, parsed] = await parse(ctx, arg0)
-    if (parsed == null) { return session!.text(UNKNOWN) }
-    return h.image(parsed.thumbnailUrl)
+    const image = parsed?.thumbnailUrl
+    if (image == null) { return session!.text(UNKNOWN) }
+    return h.image(image)
   })
   for (const command of ['list', 'name'] as string[]) {
     ctx.command(`meta.${command} [...args]`).action(async ({ session }, ...args) => {

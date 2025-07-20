@@ -1,10 +1,11 @@
 
 export const name = 'Metadata Fetcher'
 export * from './bind'
-export * from './plugin'
+export * from './meta-fetch/mod'
+export { ready } from './init'
+export { render, renderBatch } from './render'
 export { bindCall, call, bind } from 'bind:core'
 export { hasOwn, getOwn, encodeText, decodeText, test, match, replace, split, on, off } from 'bind:utils'
-export { getCache, setCache } from './cache'
 export { config, readConfig, writeConfig } from './config'
 export { S, P, createBatchParams } from './components/app.vue'
 export { handleRequest as handleRequestBbdown } from './utils/bbdown'

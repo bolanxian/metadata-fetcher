@@ -1,10 +1,11 @@
 
+import '@/meta-fetch/mod'
 import { Temporal } from 'temporal-polyfill'
 import { createApp, createSSRApp } from 'vue'
 import { on } from 'bind:utils'
 import { assign } from 'bind:Object'
+import { ready } from './init'
 import App from './components/app.vue'
-import { ready } from './plugin'
 const PAGES = import.meta.env.TARGET == 'pages'
 
 const root = document.querySelector('#app')!

@@ -1,36 +1,55 @@
 
-
-import { hasOwn, replace } from 'bind:utils'
+import * as cheerio from 'cheerio'
+import { hasOwn, test, replace } from 'bind:utils'
 import { slice, indexOf } from 'bind:String'
 import { find, map, join } from 'bind:Array'
-import { definePlugin, html } from '../plugin'
-import { fromHTML } from '../utils/find-json-object'
-import { parseRfc2822Date } from '../utils/temporal'
+import { fromHTML } from '@/utils/find-json-object'
+import { parseRfc2822Date } from '@/utils/temporal'
+import { defineDiscover } from '../discover'
+import { definePlugin } from '../plugin'
+import { $fetch, htmlInit } from '../fetch'
+import { cache } from '../cache'
+const host = `www.youtube.com`
+const REG_YOUTUBE = /^youtube[!:]([-\w]+)$/
 
-const name = 'youtube'
-const host = `www.${name}.com`
-export default definePlugin({
-  include: [
-    /^youtube[!:]([-\w]+)/
-  ],
-  includeAsHttp: [
+defineDiscover({
+  name: 'Youtube',
+  discover: [REG_YOUTUBE],
+  discoverHttp: [
     /^youtu\.be\/([-\w]+)/,
     /^(?:www\.)?youtube\.com\/(?:shorts|embed)\/([-\w]+)/,
     /^(?:www\.)?youtube\.com\/watch\?(?:\S*?&)??v=([-\w]+)/
   ],
-  resolve({ 1: m1 }) {
+  handle: m => `youtube/video/${m[1]}`
+})
+definePlugin({
+  name: 'Youtube',
+  path: 'youtube/video',
+  resolve(path) {
+    if (path.length !== 1) { return }
+    const id = `youtube!${path[0]}`
+    if (!test(REG_YOUTUBE, id)) { return }
     return {
-      id: `${name}!${m1}`,
-      rawId: `${name}:${m1}`,
-      shortUrl: `https://youtu.be/${m1}`,
-      url: `https://${host}/watch?v=${m1}`
+      id, cacheId: id,
+      displayId: `youtube:${path[0]}`,
+      shortUrl: `https://youtu.be/${path[0]}`,
+      url: `https://${host}/watch?v=${path[0]}`
     }
   },
-  async load(info) {
-    const { $ } = await html(info)
+  async fetch(info) {
+    const text = await cache.tryGet(`${info.id}.html`, async () => {
+      const resp = await $fetch(info.url, htmlInit)
+      const { status } = resp
+      if (status !== 200) {
+        throw new TypeError(`Request failed with status code ${status}`)
+      }
+      return await resp.text()
+    })
+    if (text == null) { return }
+    const $ = cheerio.load(text, { baseURI: info.url })
     return fromHTML($, /^\s*var\s+ytInitialData\s*=\s*(?={)/)
   },
-  async parse(data, info) {
+  parse(data, info) {
     const { id, shortUrl, url } = info
 
     const videoDesc = ((contents) => {

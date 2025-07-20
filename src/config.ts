@@ -1,6 +1,6 @@
 
 import { assign, keys } from 'bind:Object'
-import { ready as ready1, getCache, setCache } from './cache'
+import { cache } from './meta-fetch/cache'
 const { parse, stringify } = JSON
 const { error } = console
 
@@ -25,22 +25,22 @@ export const config: Config = {
 title=标题：
 ownerName=UP主：
 publishDate=日期：
-shortUrl=链接：
+shortUrl||url=链接：
 thumbnailUrl=封面：
 description=简介：
 `,
   batch: {
-    '.id': { name: 'ID', template: '[${rawId}]${url}' },
-    list: { name: '借物表', template: '${title}${_}${rawId}${_}${ownerName}' },
+    '.id': { name: 'ID', template: '[${displayId}]${url}' },
+    list: { name: '借物表', template: '${title}${_}${displayId}${_}${ownerName}' },
     name: { name: '文件名', template: '[${ownerName|filename}][${id}]${title|filename}' },
-    escape: { name: '', template: '［${rawId|escape}］${title}' },
+    escape: { name: '', template: '［${displayId|escape}］${title}' },
   },
   nicoUrlType: 'watch'
 }
 
 export const readConfig = async () => {
   if (SSR || PAGES) {
-    const data = await getCache(configName)
+    const data = await cache.get(configName)
     if (data != null) {
       assign(config, parse(data))
     }
@@ -63,14 +63,13 @@ export const writeConfig = async (_config: Config) => {
     return false
   }
   if (SSR || PAGES) {
-    await setCache(configName, stringify(_config))
+    await cache.set(configName, stringify(_config))
     assign(config, _config)
   }
   return true
 }
 
-export const ready = SSR || PAGES ? (async () => {
-  await ready1
+export const init = async () => {
   await readConfig()
   if (SSR) {
     if (config.browsers == null) {
@@ -91,4 +90,4 @@ export const ready = SSR || PAGES ? (async () => {
       } catch (e) { error(e) }
     }
   }
-})() : null!
+}

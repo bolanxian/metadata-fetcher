@@ -2,22 +2,79 @@
 import { type Prop, defineComponent, onBeforeUnmount, onMounted, shallowReactive, createVNode as h } from 'vue'
 import { Card, Cell, CellGroup } from 'view-ui-plus'
 import { Temporal } from 'temporal-polyfill'
-import { on } from 'bind:utils'
+import { getOwn, on } from 'bind:utils'
 import { toFixed } from 'bind:Number'
 import { from } from 'bind:Array'
-import { type Plugin, definePlugin } from '../plugin'
+import { discoverList, defineDiscover } from '@/meta-fetch/discover'
+import { definePlugin, definePluginComponent } from '@/meta-fetch/plugin'
 const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
 const CSR = TARGET == 'client'
 const { parse } = JSON
-const defaultResolve: Plugin['resolve'] = ({ 0: id }) => ({ id, rawId: id, shortUrl: '', url: '' })
+const defaultFetch = async () => ({})
 
-type Info = {}
-const Info = SSR || CSR ? defineComponent(SSR ? {
-  props: null! as { data: Prop<Info> },
+defineDiscover({
+  name: '',
+  discover: [/^discover$/],
+  handle: m => 'extra/discover/'
+})
+const discover = definePlugin<{}>({
+  name: '', path: 'extra/discover',
+  resolve(path) {
+    if (!(path.length === 1 && path[0] === '')) { return }
+    const id = 'discover'
+    return { id, displayId: id, cacheId: id, shortUrl: '', url: '' }
+  },
+  fetch: defaultFetch,
+  parse: () => ({ title: '发现' })
+})
+definePluginComponent(discover, defineComponent({
+  render() {
+    return [
+      h(Card, { title: '发现' }, () => [
+        h(CellGroup, null, () => from(discoverList, discover => {
+          if (!discover.name) { return null }
+          const include = getOwn(discover, 'discover')
+          if (include == null) { return null }
+          return from(include, reg => h(Cell, {
+            title: `/${reg.source}/`, label: discover.name
+          }))
+        }))
+      ]),
+      h(Card, { title: '发现(HTTP)' }, () => [
+        h(CellGroup, null, () => from(discoverList, discover => {
+          if (!discover.name) { return null }
+          const include = getOwn(discover, 'discoverHttp')
+          if (include == null) { return null }
+          return from(include, reg => h(Cell, {
+            title: `/${reg.source}/`, label: discover.name
+          }))
+        }))
+      ])
+    ]
+  }
+}))
+
+SSR || CSR ? defineDiscover({
+  name: '',
+  discover: [/^info$/],
+  handle: m => 'extra/info/'
+}) : null!
+const info = SSR || CSR ? definePlugin<{}>({
+  name: '', path: 'extra/info',
+  resolve(path) {
+    if (!(path.length === 1 && path[0] === '')) { return }
+    const id = 'info'
+    return { id, displayId: id, cacheId: id, shortUrl: '', url: '' }
+  },
+  fetch: defaultFetch,
+  parse: () => ({ title: '系统信息' })
+}) : null!
+SSR || CSR ? definePluginComponent(info, defineComponent(SSR ? {
+  props: null! as { data: Prop<{}> },
   render: () => [null]
 } : {
-  props: null! as { data: Prop<Info> },
+  props: null! as { data: Prop<{}> },
   setup(props, ctx) {
     type VersionInfo = Record<'name' | 'version', string>
     type Info = {
@@ -87,21 +144,21 @@ ${toFixed((memory.used / memory.total) * 100, 2)}%\
       }),
     ]) : null]
   }
-}) : null!
-SSR || CSR ? definePlugin<Info>({
-  include: [/^info$/],
-  resolve: defaultResolve,
-  async load(info) { return {} },
-  async parse(data, info) {
-    return { title: '系统信息' } as any
-  },
-  component: Info
-}) : null
+})) : null!
 
+defineDiscover({
+  name: '',
+  discover: [/^ice$/],
+  handle: m => 'extra/ice/'
+})
 definePlugin<{ title: string, since: string, date: string }[]>({
-  include: [/^ice$/],
-  resolve: defaultResolve,
-  async load(info) {
+  name: '', path: 'extra/ice',
+  resolve(path) {
+    if (!(path.length === 1 && path[0] === '')) { return }
+    const id = 'ice'
+    return { id, displayId: id, cacheId: id, shortUrl: '', url: '' }
+  },
+  async fetch(info) {
     const nowDate = Temporal.Now.plainDateISO('+0800').withCalendar('chinese')
     const nextChunjie = Temporal.PlainDate.from({
       year: +nowDate.year + 1, month: 1, day: 1, calendar: 'chinese'
@@ -122,7 +179,7 @@ definePlugin<{ title: string, since: string, date: string }[]>({
       }
     ]
   },
-  async parse(data, info) {
+  parse(data, info) {
     let desc = '\n'
     for (const { title, since, date } of data) {
       desc += `${title}：${date}（${since}）\n`
@@ -130,6 +187,6 @@ definePlugin<{ title: string, since: string, date: string }[]>({
     return {
       title: '解冻',
       description: desc
-    } as any
+    }
   }
 })

@@ -3,6 +3,7 @@ import process from 'node:process'
 import { type Plugin, defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { bindScript } from 'bind-script/plugin.vite'
+import { resolve } from 'node:path'
 
 const externalAssets = (): Plugin => {
   const reg = /\/(ionicons)-[-\w]{8}\.((?!woff2)\S+)$/
@@ -132,6 +133,7 @@ export default defineConfig({
   publicDir: '../public',
   cacheDir: '../node_modules/.vite',
   resolve: {
+    alias: { '@': resolve('./src') },
     extensions: ['.js', '.ts', '.json', '.vue']
   },
   build: {
