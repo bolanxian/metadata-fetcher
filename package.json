@@ -4,8 +4,8 @@
   "version": "0.2.0",
   "type": "module",
   "scripts": {
-    "start": "start deno run --quiet --no-prompt --no-remote -S=cpus,systemMemoryInfo,osRelease -E -N -R -W=./__cache__ --allow-run --unstable-ffi --allow-ffi ./lib/main.js start",
-    "serve": "      deno run --quiet --no-prompt --no-remote -S=cpus,systemMemoryInfo,osRelease -E -N -R -W=./__cache__ --allow-run ./lib/main.js serve",
+    "start": "start deno run --quiet --no-prompt --no-remote -S -E -N -R -W=./__cache__ --allow-run --unstable-ffi --allow-ffi ./lib/main.js start",
+    "serve": "      deno run --quiet --no-prompt --no-remote -S -E -N -R -W=./__cache__ --allow-run ./lib/main.js serve",
     "serve:bun": "bun run ./lib/main.js serve",
     "dev": "vite",
     "build": "vue-tsc --noEmit && npm run build:client && npm run build:server",
@@ -14,9 +14,10 @@
     "crates": "npm run crate:reg && npm run crate:tray",
     "crate:reg": "cd crates/reg-utils && cargo build --release && move /Y target\\release\\reg-utils.exe ..\\..\\dist\\",
     "crate:tray": "cd crates/tray && cargo build --release && move /Y target\\release\\tray.dll ..\\..\\dist\\",
-    "extra:icon": "curl https://www.bilibili.com/favicon.ico -o ./dist/favicon.ico",
-    "tar": "tar cf metadata-fetcher.tar deno.json *.md run.bat lib/* dist/*",
-    "7z": "7z a metadata-fetcher.7z -m0=LZMA2 -mx=9 -mhc=off -ms=on -mqs=on -- deno.json *.md run.bat lib/* dist/*"
+    "extra:png": "python ./lib/convert-svg.py ./public/favicon.svg ./dist/favicon.png",
+    "extra:ico": "ffmpeg -i ./dist/favicon.png ./dist/favicon.ico",
+    "tar": "tar cf metadata-fetcher.tar deno.json *.md run.bat lib/main.js lib/server.js lib/tray.js lib/info.js dist/*",
+    "7z": "7z a metadata-fetcher.7z -m0=LZMA2 -mx=9 -mhc=off -ms=on -mqs=on -- deno.json *.md run.bat lib/main.js lib/server.js lib/tray.js lib/info.js dist/*"
   },
   "dependencies": {
     "@xterm/addon-webgl": "^0.18.0",

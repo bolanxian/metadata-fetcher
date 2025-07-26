@@ -11,7 +11,7 @@ export { S, P, createBatchParams } from './components/app.vue'
 export { handleRequest as handleRequestBbdown } from './utils/bbdown'
 export { illustId, illustName } from './utils/illust-name'
 
-import { createSSRApp } from 'vue'
+import { type AppConfig, createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { keys } from 'bind:Object'
 import { slice, startsWith, replaceAll } from 'bind:String'
@@ -20,6 +20,10 @@ import { config } from './config'
 import App, { Data, type Store } from './components/app.vue'
 import { getOwn } from 'bind:utils'
 const { stringify } = JSON
+
+const errorHandler: AppConfig['errorHandler'] = (err, instance, info) => {
+  reportError(err)
+}
 
 const meta = (name: string, content = 'content') => {
   return function* (record: Record<string, string | null | undefined>) {
@@ -30,11 +34,9 @@ const meta = (name: string, content = 'content') => {
     }
   }
 }
-
 const metaName = meta('name')
 const metaItemprop = meta('itemprop')
 const metaProperty = meta('property')
-
 function* xbuildMeta({ mode, parsed, [Data]: data, config }: Store): Generator<string, void, unknown> {
   if (mode === 'default' && parsed != null) {
     let { description } = parsed
@@ -79,8 +81,8 @@ function* xbuildMeta({ mode, parsed, [Data]: data, config }: Store): Generator<s
 
 export const renderToHtml = async (mode: string, input: string) => {
   const store: Store = { mode, input, resolved: null, data: null, parsed: null, batchResolved: null, output: '', config }
-  const app = createSSRApp(App, { store })
-  const context = {}
+  const app = createSSRApp(App, { store }), context = {}
+  app.config.errorHandler = errorHandler
   const appHTML = await renderToString(app, context)
   const attrs = ` data-store='${escapeAttrApos(stringify(store, void 0, 2))}'`
   const head = join(xbuildMeta(store), '\n')

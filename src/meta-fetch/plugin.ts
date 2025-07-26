@@ -1,12 +1,13 @@
 
 import type { DefineComponent, ExtractPropTypes, Prop } from 'vue'
+import { noop, voidPromise } from '@/bind'
 import { call } from 'bind:core'
+import { $then } from 'bind:utils'
 import { freeze } from 'bind:Object'
 import { get, set } from 'bind:WeakMap'
 import { redirect } from './fetch'
 import { resolveDiscover } from './discover'
 import { type RouteMap, defineRoute, resolveRoute } from './router'
-import { $then } from 'bind:utils'
 
 export interface Plugin<T extends {} = {}> {
   name: string
@@ -73,11 +74,12 @@ export const xparse: (input: string) => [
   const redirectedPromise = tryRedirect(resolved)
   yield redirectedPromise
   if (redirectedPromise != null) { return }
-  const dataPromise = plugin.fetch(resolved)
+  const dataPromise = $then(voidPromise, () => plugin.fetch(resolved))
   yield dataPromise
   const parsedPromise = $then(dataPromise, data => {
     return data != null ? plugin.parse(data, resolved) : null
   })
+  $then(parsedPromise, null, noop)
   yield parsedPromise
 } as any
 export const definePlugin = <T extends {}>(plugin: Plugin<T>) => {

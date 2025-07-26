@@ -111,15 +111,7 @@ export const { ${func.join(', ')} } = Vue
     },
     transformIndexHtml(html, ctx) {
       if (target === 'pages') {
-        const svg = `\
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="-50 -59 100 100">\
-<text font-size="90" text-anchor="middle" dominant-baseline="middle">\
-🔨\
-</text>\
-</svg>\
-`
-        const href = `data:image/svg+xml,${encodeURIComponent(svg)}`
-        return [{ tag: 'link', injectTo: 'head', attrs: { rel: 'icon', href } }]
+        return [{ tag: 'link', injectTo: 'head', attrs: { rel: 'icon', href: './favicon.svg' } }]
       }
     }
   }

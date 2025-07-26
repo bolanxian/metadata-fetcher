@@ -1,7 +1,5 @@
 
-//@ts-ignore
 export { default as $string } from 'bind:String'
-//@ts-ignore
 export { default as $array } from 'bind:Array'
 import { test, replace } from 'bind:utils'
 import { fromCharCode, charCodeAt, indexOf, slice } from 'bind:String'
@@ -11,6 +9,7 @@ import * as cheerio from 'cheerio'
 export const noop = () => { }
 export const nextTick = queueMicrotask
 export const empty = freeze([])
+export const voidPromise = Promise.resolve()
 
 export const iterator: typeof Symbol.iterator = Symbol.iterator
 export const join = (iter: Iterable<any>, separator = ',') => {
