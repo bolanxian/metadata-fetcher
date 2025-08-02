@@ -1,18 +1,18 @@
 
 import { defineComponent, shallowReactive, toRaw, watch, watchEffect, createVNode as h, onMounted, onServerPrefetch } from 'vue'
 import type { Component, Prop } from 'vue'
-import { Row, Col, Input, ButtonGroup, Button, Select, Option, Modal, Message, Menu, Submenu, MenuItem, Poptip, SkeletonItem } from 'view-ui-plus'
-import { toDataURL } from 'qrcode'
+import { Row, Col, Input, ButtonGroup, Button, Select, Option, Modal, Message, Menu, Submenu, MenuItem } from 'view-ui-plus'
 import { getOwn, test, split } from 'bind:utils'
 import { assign, entries } from 'bind:Object'
 import { from, join } from 'bind:Array'
 import { trim, slice, startsWith, replaceAll } from 'bind:String'
-import { nextTick, resolveAsHttp } from '../bind'
-import { type Config, config, config as defaultConfig, writeConfig } from '../config'
-import { render as _render, renderBatch } from '../render'
+import { nextTick, resolveAsHttp } from '@/bind'
+import { type Config, config, config as defaultConfig, writeConfig } from '@/config'
+import { render as _render, renderBatch } from '@/render'
 import { resolve, xparse, $fetch, getPluginComponent } from '@/meta-fetch/mod'
 import type { ResolvedInfo, ParsedInfo } from '@/meta-fetch/mod'
 import { Dialog } from './dialog'
+import { QRCode } from './qrcode'
 import './bilibili.vue'
 
 const TARGET = import.meta.env.TARGET
@@ -413,84 +413,5 @@ const Config = defineComponent({
         ]
       }) : null
     ]
-  }
-})
-
-const QRCodeProps: Record<'icon' | 'text', Prop<string>> = { icon: null!, text: null! }
-const QRCode = defineComponent(SSR ? {
-  props: QRCodeProps,
-  render() {
-    return h(Poptip, {
-      trigger: 'hover', placement: 'bottom-start', disabled: !this.text
-    }, {
-      default: () => [h(Button, { icon: this.icon })],
-      content: () => [h(SkeletonItem, {
-        style: 'margin:5px 0', animated: !!this.text,
-        width: 240, height: 240, type: 'rect'
-      })]
-    })
-  }
-} : {
-  props: QRCodeProps,
-  setup(props, ctx) {
-    const data = shallowReactive<{
-      isShow: boolean
-      trigger: 'hover' | 'click'
-      text: null | string
-      urlPromise: null | Promise<string>
-      url: null | string
-    }>({
-      isShow: false,
-      trigger: 'hover',
-      text: null,
-      urlPromise: null,
-      url: null
-    })
-    watchEffect((onCleanup) => {
-      if (!data.isShow) { return }
-      const text = props.text!
-      if (data.text === text) { return }
-      data.text = text
-      data.url = data.urlPromise = null
-      if (!text) { return }
-      data.urlPromise = (async () => {
-        let aborted = false
-        onCleanup(() => { aborted = true })
-        await new Promise(ok => { setTimeout(ok, 200) })
-        if (aborted) { return '' }
-        const url = await toDataURL(text, {
-          type: 'image/png',
-          margin: 0, scale: 1,
-        })
-        if (aborted) { return '' }
-        return data.url = url
-      })()
-    })
-    onMounted(() => {
-      data.trigger = matchMedia('(hover: hover)').matches ? 'hover' : 'click'
-    })
-    const $poptip = {
-      trigger: 'hover', placement: 'bottom-start', disabled: true,
-      onOnPopperShow() { data.isShow = true },
-      onOnPopperHide() { data.isShow = false }
-    }
-    return () => h(Poptip, (
-      $poptip.disabled = !props.text,
-      $poptip.trigger = data.trigger,
-      $poptip
-    ), {
-      default: () => [h(Button, { icon: props.icon })],
-      content: () => [
-        data.url != null
-          ? h('img', {
-            style: 'margin:5px 0;image-rendering:pixelated;object-fit:contain',
-            width: 240, height: 240, src: data.url, title: props.text,
-          })
-          : h(SkeletonItem, {
-            style: 'margin:5px 0', animated: !!props.text,
-            width: 240, height: 240, type: 'rect'
-          })
-      ]
-    })
   }
 })

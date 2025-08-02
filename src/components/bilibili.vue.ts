@@ -21,7 +21,7 @@ export const enum DescInfoType {
   ORDINARY = 1,
   USER_HREF = 2,
 }
-/*<component>*/
+
 const $a = { referrerpolicy: 'no-referrer', target: '_blank' }
 const $img = { referrerpolicy: 'no-referrer' }
 

@@ -11,7 +11,7 @@ export { S, P, createBatchParams } from './components/app.vue'
 export { handleRequest as handleRequestBbdown } from './utils/bbdown'
 export { illustId, illustName } from './utils/illust-name'
 
-import { type AppConfig, createSSRApp } from 'vue'
+import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { keys } from 'bind:Object'
 import { slice, startsWith, replaceAll } from 'bind:String'
@@ -20,10 +20,6 @@ import { config } from './config'
 import App, { Data, type Store } from './components/app.vue'
 import { getOwn } from 'bind:utils'
 const { stringify } = JSON
-
-const errorHandler: AppConfig['errorHandler'] = (err, instance, info) => {
-  reportError(err)
-}
 
 const meta = (name: string, content = 'content') => {
   return function* (record: Record<string, string | null | undefined>) {
@@ -82,9 +78,20 @@ function* xbuildMeta({ mode, parsed, [Data]: data, config }: Store): Generator<s
 export const renderToHtml = async (mode: string, input: string) => {
   const store: Store = { mode, input, resolved: null, data: null, parsed: null, batchResolved: null, output: '', config }
   const app = createSSRApp(App, { store }), context = {}
-  app.config.errorHandler = errorHandler
+  let status = 200, noError = true
+  app.config.errorHandler = (err, instance, info) => {
+    status = 500; noError = false
+    reportError(err)
+  }
   const appHTML = await renderToString(app, context)
+  if (noError) {
+    if (mode === 'default') {
+      if (input && store.parsed == null) { status = 404 }
+    } else if (startsWith(mode, 'batch:')) {
+      if (store.parsed == null) { status = 404 }
+    }
+  }
   const attrs = ` data-store='${escapeAttrApos(stringify(store, void 0, 2))}'`
   const head = join(xbuildMeta(store), '\n')
-  return { head, attrs, app: appHTML, context }
+  return { status, head, attrs, app: appHTML, context }
 }

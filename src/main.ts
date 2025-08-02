@@ -2,7 +2,7 @@
 import '@/meta-fetch/mod'
 import { Temporal } from 'temporal-polyfill'
 import { createApp, createSSRApp } from 'vue'
-import { on } from 'bind:utils'
+import { on, off } from 'bind:utils'
 import { assign } from 'bind:Object'
 import { ready } from './init'
 import App from './components/app.vue'
@@ -22,7 +22,14 @@ if (PAGES) {
 }
 await new Promise<FocusEvent | void>(ok => {
   if (document.hasFocus()) { return ok() }
-  on(document, 'focus', ok, { once: !0, capture: !0 })
+  const options = { once: !0, capture: !0 }
+  const done = (e?: FocusEvent) => {
+    ok(e)
+    clearTimeout(timer)
+    off(document, 'focus', done, options)
+  }
+  const timer = setTimeout(done, 200)
+  on(document, 'focus', done, options)
 })
 const app = (!PAGES && root.children.length > 0 ? createSSRApp : createApp)(App, { store })
 const vm = app.mount(root)

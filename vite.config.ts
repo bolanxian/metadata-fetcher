@@ -104,11 +104,6 @@ export const { ${func.join(', ')} } = Vue
       }
       return map.get(id)
     },
-    transform(code, id, options) {
-      if (target === 'koishi' && id.endsWith('.vue.ts')) {
-        return `${code.slice(0, code.indexOf('/*<component>*/'))}export default null`
-      }
-    },
     transformIndexHtml(html, ctx) {
       if (target === 'pages') {
         return [{ tag: 'link', injectTo: 'head', attrs: { rel: 'icon', href: './favicon.svg' } }]

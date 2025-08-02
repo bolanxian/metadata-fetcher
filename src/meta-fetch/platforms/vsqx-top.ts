@@ -36,19 +36,13 @@ definePlugin({
       return $.data
     })
   },
-  parse(data, info) {
-    let { url } = info
-    let shortUrl = url
-    const id = data.b_av
-    if (id != null) {
-      const info = resolve(id)
-      info != null ? { shortUrl, url } = info : null
-    }
+  parse(data, { shortUrl, url }) {
+    const relatedUrl = resolve(data.b_av ?? '')?.url
     return {
       title: data.music_name,
       ownerName: data.p_name,
       publishDate: replace(DATE_REG, data.up_time, DATE_STR),
-      shortUrl, url,
+      shortUrl, url, relatedUrl,
       thumbnailUrl: `https://vsqx-cover.vsqx.top/${data.vsqx_uid}.jpg`,
       description: data.music_desc
     }

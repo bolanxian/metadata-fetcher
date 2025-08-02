@@ -66,21 +66,21 @@ export const bilibiliVideo = definePlugin<Data>({
   path: 'bilibili/video',
   resolve(path) {
     if (path.length !== 1) { return }
-    let id = path[0], rawId
+    let id = path[0], cacheId
     if (test(BV.REG_AV, id)) {
-      id = rawId = `av${slice(id, 2)}`
+      id = cacheId = `av${slice(id, 2)}`
     } else if (test(BV.REG_BV, id)) {
-      rawId = `BV1${slice(id, 3)}`
-      id = `raw!${rawId}`
+      cacheId = `BV1${slice(id, 3)}`
+      id = `raw!${cacheId}`
     } else {
       return
     }
     return {
-      id, displayId: rawId, cacheId: rawId,
-      shortUrl: toShortUrl(id), url: toUrl(id)
+      id, displayId: cacheId, cacheId,
+      shortUrl: toShortUrl(cacheId), url: toUrl(cacheId)
     }
   },
-  async fetch({ id, url }) {
+  async fetch({ cacheId: id, url }) {
     let data: any, extraData: any
     return {
       ...await json(cache, id, async () => {
@@ -92,10 +92,9 @@ export const bilibiliVideo = definePlugin<Data>({
             if (status >= 300 && status < 400) {
               const redirect = resp.headers.get('location')
               if (redirect != null) {
-                const ret = await loadAsRedirect(id, redirect)
+                const ret = await loadAsJson(id)
                 if (ret.error != null) { extraData = ret; return }
-                ret.error = {}
-                return ret
+                return { error: {}, redirect, videoData: ret.videoData, tags: ret.tags }
               }
             }
             throw new TypeError(`Request failed with status code ${status}`)
@@ -104,6 +103,11 @@ export const bilibiliVideo = definePlugin<Data>({
         }
         const $ = cheerio.load(text, { baseURI: url })
         data = fromHTML($, REG_INIT)
+        if (data == null) {
+          const ret = await loadAsJson(id)
+          if (ret.error != null) { extraData = ret; return }
+          return { error: {}, videoData: ret.videoData, tags: ret.tags }
+        }
         let { error, videoData, tags } = data
         if (hasOwn(error, "trueCode") && hasOwn(error, "message")) {
           error = { code: error.trueCode, message: error.message }
@@ -116,7 +120,7 @@ export const bilibiliVideo = definePlugin<Data>({
   },
   parse(data, info) {
     if (data.error.message != null) { return }
-    let { displayId: id, shortUrl, url } = info
+    let { cacheId: id, shortUrl, url } = info
     const { videoData } = data
     const { aid } = videoData
     if (aid != null) {
@@ -151,7 +155,9 @@ export const bilibiliVideo = definePlugin<Data>({
     }
   }
 })
-const loadAsRedirect = async (id: string, redirect: string) => {
+const loadAsJson = async (id: string): Promise<
+  { error: {} } | { error: null, videoData: any, tags: any }
+> => {
   let query: string | undefined
   if (test(BV.REG_AV, id)) {
     query = `aid=${slice(id, 2)}`
@@ -159,17 +165,17 @@ const loadAsRedirect = async (id: string, redirect: string) => {
     query = `bvid=${id}`
   }
   if (query == null) {
-    return { error: { code: -400, message: '请求错误' }, redirect }
+    return { error: { code: -400, message: '请求错误' } }
   }
   const $view = await (await $fetch(`https://api.bilibili.com/x/web-interface/view?${query}`, jsonInit)).json()
   if ($view.data == null) {
-    return { error: $view, redirect }
+    return { error: $view }
   }
   const $tags = await (await $fetch(`https://api.bilibili.com/x/tag/archive/tags?${query}`, jsonInit)).json()
   if ($tags.data == null) {
-    return { error: $tags, redirect }
+    return { error: $tags }
   }
-  return { error: null, redirect, videoData: $view.data, tags: $tags.data }
+  return { error: null, videoData: $view.data, tags: $tags.data }
 }
 
 definePlugin({

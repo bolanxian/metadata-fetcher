@@ -31,6 +31,7 @@ export interface ParsedInfo {
   shortUrl?: string
   url?: string
   thumbnailUrl?: string
+  relatedUrl?: string
   keywords?: string
   description?: string
 }

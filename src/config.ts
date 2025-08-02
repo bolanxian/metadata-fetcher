@@ -27,12 +27,13 @@ ownerName=UP主：
 publishDate=日期：
 shortUrl||url=链接：
 thumbnailUrl=封面：
-description=简介：
+relatedUrl=相关链接：
+description="简介：\\n"
 `,
   batch: {
     '.id': { name: 'ID', template: '[${displayId}]${url}' },
     list: { name: '借物表', template: '${title}${_}${displayId}${_}${ownerName}' },
-    name: { name: '文件名', template: '[${ownerName|filename}][${id}]${title|filename}' },
+    name: { name: '文件名', template: '[${ownerName|filename}][${cacheId}]${title|filename}' },
     escape: { name: '', template: '［${displayId|escape}］${title}' },
   },
   nicoUrlType: 'watch'
@@ -77,7 +78,9 @@ export const init = async () => {
         const cp = await import('node:child_process')
         const stream = await import('node:stream')
         const { stdout } = cp.spawn('./dist/reg-utils', ['browser'], { stdio: ['ignore', 'pipe', 'inherit'] })
-        const data = await new Response(stream.Readable.toWeb(stdout) as any).json()
+        const text = await new Response(stream.Readable.toWeb(stdout) as any).text()
+        if (!text) { throw null }
+        const data = parse(text)
         const browsers: NonNullable<Config['browsers']> = { __proto__: null! }
         for (const key of keys(data)) {
           if (key[0] === '$') { continue }
@@ -86,8 +89,12 @@ export const init = async () => {
         }
         config.browsers = browsers
         config.defaultBrowser = data.$default
+      } catch (e) {
+        config.browsers = {}
+        if (e != null) { error(e) }
+      } finally {
         await writeConfig(config)
-      } catch (e) { error(e) }
+      }
     }
   }
 }
