@@ -1,5 +1,7 @@
 # Metadata Fetcher
 
+元数据获取&借物表生成  
+
 ### 支持
 | 运行环境 | 托盘图标 | WebUI | CLI |
 | - | - | - | - |
@@ -9,22 +11,21 @@
 
 ### CLI / WebUI
 ```batch
-: 构建
+::构建
 npm run build
 
-: 运行 WebUI
+::运行 WebUI
 npm run serve
 npm run serve:bun
 
-: 获取元数据
-deno task fetch ...
-: 批量模式
-deno task batch <".id" | "list" | "name" | ...> ...
+::获取元数据
+deno task fetch [...]
+::批量模式
+deno task batch <".id" | "list" | "name" | ...> [...]
 ```
 
 ### Koishi 插件
 ```batch
-: 构建
 deno task build:koishi
 npm pack -w koishi-plugin-metadata-fetcher
 
