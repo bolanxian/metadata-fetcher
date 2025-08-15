@@ -13,8 +13,8 @@ import { instantToString } from '@/utils/temporal'
 
 export { REG_AV, REG_BV } from '@/utils/bv-encode'
 export const REG_B23 = /^(?:b23\.tv|bili2{0,2}3{0,2}\.cn)\/([-\w]+)(?=$|[?#])/
-export const REG_FULL = /^(?:m|www)\.bilibili\.com\/video\/(\w+)\/?(?=$|[?#])/
-export const REG_WL = /^www\.bilibili\.com\/list\/watchlater\/?\?(?:\S*?&)??bvid=(\w+)/
+export const REG_FULL = /^(?:m\.|www\.)?bilibili\.com\/video\/(\w+)\/?(?=$|[?#])/
+export const REG_WL = /^(?:www\.)?bilibili\.com\/list\/watchlater\/?\?(?:\S*?&)??bvid=(\w+)/
 export const REG_INIT = /^\s*window\.__INITIAL_STATE__\s*=\s*(?={)/
 export const toShortUrl = (id: string) => `https://b23.tv/${id}`
 export const toUrl = (id: string) => `https://www.bilibili.com/video/${id}/`
