@@ -66,7 +66,8 @@ function* xbuildMeta({ mode, parsed, [Data]: data, config }: Store): Generator<s
   if (startsWith(mode, 'batch:') && parsed != null) {
     const type = slice(mode, 6)
     const batchName = getOwn(config.batch, type)?.name || type
-    title = `批量模式[${escapeText(batchName)}]：${escapeText(parsed.title)}\u3000等 ${data!.batchLength} 项 - ${name}`
+    const batchLength = data!.batchLength! > 1 ? `\u3000和另外 ${data!.batchLength! - 1} 项` : ''
+    title = `批量模式[${escapeText(batchName)}]：${escapeText(parsed.title)}${batchLength} - ${name}`
   }
   yield `<title>${title}</title>`
   yield* metaProperty({
@@ -75,21 +76,24 @@ function* xbuildMeta({ mode, parsed, [Data]: data, config }: Store): Generator<s
   })
 }
 
-export const renderToHtml = async (mode: string, input: string) => {
+export const renderToHtml = async (mode: string, input: string): Promise<{
+  status: number, head: string, attrs: string, app: string, context: {}
+}> => {
   const store: Store = { mode, input, resolved: null, data: null, parsed: null, batchResolved: null, output: '', config }
   const app = createSSRApp(App, { store }), context = {}
-  let status = 200, noError = true
+  let status: number | undefined
   app.config.errorHandler = (err, instance, info) => {
-    status = 500; noError = false
+    status = 500
     reportError(err)
   }
   const appHTML = await renderToString(app, context)
-  if (noError) {
+  if (status == null) {
     if (mode === 'default') {
       if (input && store.parsed == null) { status = 404 }
     } else if (startsWith(mode, 'batch:')) {
       if (store.parsed == null) { status = 404 }
     }
+    status ??= 200
   }
   const attrs = ` data-store='${escapeAttrApos(stringify(store, void 0, 2))}'`
   const head = join(xbuildMeta(store), '\n')
