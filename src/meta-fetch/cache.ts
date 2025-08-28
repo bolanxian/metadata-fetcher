@@ -1,6 +1,6 @@
 
 import { LRUCache } from 'lru-cache'
-import { replace } from 'bind:String'
+import { replaceAll } from 'bind:String'
 type FS = typeof import('node:fs/promises')
 
 export type TryGetFn = () => Promise<string | undefined>
@@ -14,6 +14,7 @@ export let initCache = (_cache: ICache) => {
   initCache = null!
   cache = _cache
 }
+const resolveName = (name: string) => replaceAll(name, '/', '!')
 
 export class NoCache implements ICache {
   async get(name: string): Promise<string | undefined> { return }
@@ -43,7 +44,7 @@ export class FsCache implements ICache {
     this.#prefix = prefix
     type Fetcher = LRUCache.Fetcher<string, string, TryGetFn | undefined>
     const fetchMethod: Fetcher = async (name, staleValue, { signal, context }) => {
-      name = replace(name, '/', '!')
+      name = resolveName(name)
       const path = `${prefix}/${name}`
       try {
         return await this.#readFile(path, { encoding: 'utf8', signal })
@@ -60,15 +61,15 @@ export class FsCache implements ICache {
     this.#lru = new LRUCache({ max: 200, fetchMethod })
   }
   async get(name: string) {
-    name = replace(name, '/', '!')
+    name = resolveName(name)
     return await this.#lru.fetch(name)
   }
   async tryGet(name: string, fn: TryGetFn) {
-    name = replace(name, '/', '!')
+    name = resolveName(name)
     return await this.#lru.fetch(name, { context: fn })
   }
   async set(name: string, value: string) {
-    name = replace(name, '/', '!')
+    name = resolveName(name)
     const path = `${this.#prefix}/${name}`
     this.#lru.set(name, value)
     await this.#writeFile(path, value)
@@ -84,13 +85,13 @@ export class WebCache implements ICache {
     this.#cache = cache
   }
   async get(name: string) {
-    name = replace(name, '/', '!')
+    name = resolveName(name)
     const resp = await this.#cache.match(`/${name}`)
     if (resp == null) { return }
     return await resp.text()
   }
   async tryGet(name: string, fn: TryGetFn) {
-    name = replace(name, '/', '!')
+    name = resolveName(name)
     let resp = await this.#cache.match(`/${name}`)
     if (resp == null) {
       const data = await fn()
@@ -101,21 +102,22 @@ export class WebCache implements ICache {
     return await resp.text()
   }
   async set(name: string, value: string) {
-    name = replace(name, '/', '!')
+    name = resolveName(name)
     await this.#cache.put(`/${name}`, new Response(value))
   }
 }
 
 const { parse, stringify } = JSON
-export const json = async<R extends {} = any>(
-  cache: ICache, id: string, fn: () => Promise<R | undefined> | R | undefined
-): Promise<R | undefined> => {
+export const json = async<R = any>(
+  cache: ICache, id: string, fn: () => Promise<R>
+): Promise<R> => {
   const name = `${id}.json`
   let data: R | undefined
   const text = await cache.tryGet(name, async () => {
     data = await fn()
-    if (data != null) { return stringify(data) }
+    if (data !== void 0) { return stringify(data) }
   })
-  if (data != null) { return data }
+  if (data !== void 0) { return data }
   if (text != null) { return parse(text) }
+  return (void 0)!
 }

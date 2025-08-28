@@ -32,7 +32,7 @@ export const controlCharToPicture = (str: string) => replace(/[\x00-\x1F\x7F]/g,
   return $0 === '\x7F' ? '\u2421' : fromCharCode(charCodeAt($0, 0) + 0x2400)
 })
 export const REG_PROTOCOL = /^https?:\/*|^(?:https?)?:?\/{2,}/
-export const REG_DOMAIN = /^((?!-)[-0-9A-Za-z]{1,63}(?<!-)\.){1,63}[A-Za-z]{2,63}$/
+export const REG_DOMAIN = /^(?:(?!-)[-0-9a-z]{1,63}(?<!-)\.){1,63}(?=[a-z])[-0-9a-z]{2,63}(?<=[a-z])$/i
 export const resolveAsHttp = (input: string) => {
   if (test(REG_PROTOCOL, input)) {
     return replace(REG_PROTOCOL, input, '')

@@ -9,15 +9,16 @@ import { defineDiscover } from '../discover'
 import { definePlugin } from '../plugin'
 export const REG_NICO = /^((?:sm|im|td|nc)(?!0\d)\d+)$/
 
-const getUser = async (userId: string) => {
+type User = Record<'userId' | 'nickname' | 'description', string>
+const getUser = async (userId: string): Promise<User | null> => {
   const id = `nico!user!${userId}`
   const url = `https://account.nicovideo.jp/api/public/v1/users.json?userIds=${userId}`
-  return await json(cache, id, async () => {
+  return await json<User | null>(cache, id, async () => {
     const $user = await (await $fetch(url, jsonInit)).json()
     if ($user?.meta?.status !== 200) {
       throw new TypeError(`Request json<${id}> failed.`, { cause: $user })
     }
-    return $user.data[0]
+    return $user.data[0] ?? null
   })
 }
 const getWorks = async (id: string) => {
@@ -37,13 +38,14 @@ defineDiscover({
     /^nico\.ms\/([a-z]{2}\d+)/,
     /^www\.nicovideo\.jp\/watch\/(sm\d+)/,
     /^seiga\.nicovideo\.jp\/seiga\/(im\d+)/,
+    /^sp\.seiga\.nicovideo\.jp\/seiga\/#!\/(im\d+)/,
     /^3d\.nicovideo\.jp\/works\/(td\d+)/,
     /^commons\.nicovideo\.jp\/material\/(nc\d+)/,
     /^commons\.nicovideo\.jp\/works\/([a-z]{2}\d+)/
   ],
   handle: m => `niconico/works/${m[1]}`
 })
-definePlugin<{ work: any, user: any }>({
+definePlugin<{ work: any, user: User | null }>({
   name: 'Niconico Works',
   path: 'niconico/works',
   resolve(path) {
@@ -61,23 +63,20 @@ definePlugin<{ work: any, user: any }>({
     const shortUrl = `https://nico.ms/${id}`
     return { id, displayId: id, cacheId: id, shortUrl, url }
   },
-  async fetch(info) {
-    const { id } = info
+  async fetch({ id }) {
     const work = await getWorks(id)
     const user = await getUser(work.userId)
     return { work, user }
   },
-  parse({ work, user }, info) {
-    const { shortUrl, url } = info
-    const { title, updated, thumbnailURL, contentKind, description } = work
-    const { nickname } = user
+  parse({ work, user }, { shortUrl, url }) {
+    const { title, updated, thumbnailURL, contentKind, description: desc } = work
     return {
       title,
-      ownerName: nickname,
+      ownerName: user?.nickname,
       publishDate: updated,
       shortUrl, url,
       thumbnailUrl: thumbnailURL,
-      description: contentKind !== 'commons' ? htmlToText(description) : description
+      description: contentKind !== 'commons' ? htmlToText(desc) : desc
     }
   }
 })

@@ -2,16 +2,25 @@
 import { type VNode, type Prop, defineComponent, shallowReactive, watchEffect, onMounted, createVNode as h, withDirectives } from 'vue'
 import { Alert, ButtonGroup, Button, Card, CellGroup, Cell, Divider, Drawer, Icon, Tag } from 'view-ui-plus'
 import lineClamp from 'view-ui-plus/src/directives/line-clamp'
-import { hasOwn } from 'bind:utils'
-import { from, join } from 'bind:Array'
+import { hasOwn, getOwn } from 'bind:utils'
+import { keys, values } from 'bind:Object'
+import { from } from 'bind:Array'
 import { BBDown } from './bbdown'
-import { toHttps } from '@/bind'
+import { join, toHttps } from '@/bind'
 import { instantToString, formatDuration } from '@/utils/temporal'
 import { definePluginComponent } from '@/meta-fetch/plugin'
 import { type Data, toUrl, toSpaceUrl, bilibiliVideo } from '@/meta-fetch/platforms/bilibili-video'
 
-export const copyrightMap = new Map([[1, '自制'], [2, '转载']])
-export const copyrightValues = join([...copyrightMap.values()], ',')
+export const errorMap = {
+  '-400': '请求错误',
+  '-403': '权限不足',
+  '-404': '无视频',
+  62002: '稿件不可见',
+  62004: '稿件审核中',
+  62012: '仅UP主自己可见'
+}
+export const copyrightMap = { 1: '自制', 2: '转载' }
+export const copyrightValues = join(values(copyrightMap), ',')
 export const enum ArgueType {
   NEUTRAL = 0,
   GENERAL_NEGATIVE = 1,
@@ -85,13 +94,14 @@ export default definePluginComponent(bilibiliVideo, defineComponent({
     })
     onMounted(() => { state.drawer = null })
     let data:
-      & Record<'error' | 'thumb' | 'date' | 'copyright', string | null>
+      & Record<'error' | 'id' | 'thumb' | 'date' | 'copyright', string | null>
       & Record<'pagesTitle' | 'episodesTitle', string>
       & Record<'channel' | 'subChannel' | 'channel_v2' | 'subChannel_v2', Channel | null>
     watchEffect(() => {
       const $data = props.data
       data = {
-        error: '',
+        error: null,
+        id: null,
         thumb: null,
         date: null,
         copyright: null,
@@ -104,22 +114,24 @@ export default definePluginComponent(bilibiliVideo, defineComponent({
       }
       if ($data == null) { return }
       const { error, channelKv, videoData } = $data
-      data.error = error.message
-      if (data.error != null) { return }
+      if (error != null && keys(error).length !== 0) {
+        data.error = getOwn(errorMap, +error.code) ?? error.message ?? '未知错误'
+        return
+      }
+      data.id = `av${videoData.aid}`
       data.thumb = toHttps(videoData.pic ?? '')
       data.date = instantToString(videoData.pubdate * 1000, true)
-      data.copyright = copyrightMap.get(videoData.copyright) ?? '未知'
+      data.copyright = getOwn(copyrightMap, +videoData.copyright) ?? '未知'
       data.pagesTitle = `分P[${videoData.pages.length}]`
       if (videoData.ugc_season != null) {
         const { title, ep_count } = videoData.ugc_season
         data.episodesTitle = `${title}[${ep_count}]`
       }
       !([data.channel, data.subChannel] = resolveChannel(videoData, channelKv))
-      hasOwn(videoData, 'tid_v2') && hasOwn(videoData, 'tname_v2') ? (
-        [data.channel_v2, data.subChannel_v2] = resolveChannel({
-          tid: videoData.tid_v2, tname: videoData.tname_v2
-        }, channelKv)
-      ) : null
+      if (hasOwn(videoData, 'tid_v2') && hasOwn(videoData, 'tname_v2')) {
+        const dummyData = { tid: videoData.tid_v2, tname: videoData.tname_v2 }
+        !([data.channel_v2, data.subChannel_v2] = resolveChannel(dummyData, channelKv))
+      }
     })
     const handle = {
       drawerParts() { state.drawer = 'parts' },
@@ -143,12 +155,17 @@ export default definePluginComponent(bilibiliVideo, defineComponent({
 
     return () => {
       if (data.error != null) {
+        const { error } = props.data!
         return [
-          h(Card, null, () => [h(Alert, { type: 'error', showIcon: true }, () => [data.error])])
+          h(Card, null, () => [
+            h(Alert, {
+              type: 'error', showIcon: true,
+              title: `${error.code}:${error.message}`
+            }, () => [data.error])
+          ])
         ]
       }
-      const { tags, videoData } = props.data!
-      const id = `av${videoData.aid}`
+      const { id } = data, { tags, videoData } = props.data!
       return [
         h(Card, null, {
           title: () => [
@@ -193,7 +210,7 @@ export default definePluginComponent(bilibiliVideo, defineComponent({
                 ])
               ]) : null,
               h(Tag, { color: 'cyan', title: `视频类型[${copyrightValues}]` }, () => [data.copyright]),
-              h('a', { ...$a, href: toUrl(id) }, [
+              h('a', { ...$a, href: toUrl(id!) }, [
                 h(Tag, { color: 'blue' }, () => [id])
               ]),
               h('a', { ...$a, href: toUrl(videoData.bvid) }, [

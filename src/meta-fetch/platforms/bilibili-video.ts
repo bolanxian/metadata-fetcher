@@ -2,6 +2,7 @@
 import * as cheerio from 'cheerio'
 import { hasOwn, test } from 'bind:utils'
 import { slice } from 'bind:String'
+import { keys } from 'bind:Object'
 import { cache, json } from '../cache'
 import { $fetch, htmlInit, jsonInit } from '../fetch'
 import { defineDiscover } from '../discover'
@@ -83,6 +84,7 @@ export const bilibiliVideo = definePlugin<Data>({
   async fetch({ cacheId: id, url }) {
     let data: any, extraData: any
     return {
+      error: null, redirect: null, videoData: null, tags: null,
       ...await json(cache, id, async () => {
         let text = await cache.get(`${id}.html`)
         if (text == null) {
@@ -94,7 +96,7 @@ export const bilibiliVideo = definePlugin<Data>({
               if (redirect != null) {
                 const ret = await loadAsJson(id)
                 if (ret.error != null) { extraData = ret; return }
-                return { error: {}, redirect, videoData: ret.videoData, tags: ret.tags }
+                return { redirect, videoData: ret.videoData, tags: ret.tags }
               }
             }
             throw new TypeError(`Request failed with status code ${status}`)
@@ -106,29 +108,23 @@ export const bilibiliVideo = definePlugin<Data>({
         if (data == null) {
           const ret = await loadAsJson(id)
           if (ret.error != null) { extraData = ret; return }
-          return { error: {}, videoData: ret.videoData, tags: ret.tags }
+          return { videoData: ret.videoData, tags: ret.tags }
         }
         let { error, videoData, tags } = data
-        if (hasOwn(error, "trueCode") && hasOwn(error, "message")) {
-          error = { code: error.trueCode, message: error.message }
+        if (keys(error).length !== 0) {
+          error = { code: error.trueCode || error.code, message: error.message }
+          extraData = { error }; return
         }
-        return { error, videoData, tags }
+        return { videoData, tags }
       }),
-      channelKv: channelKv ??= await json(cache, 'bili!channel', () => data?.channelKv),
+      channelKv: channelKv ??= await json(cache, 'bili!channel', () => data?.channelKv) ?? null,
       ...extraData
     }
   },
   parse(data, info) {
-    if (data.error.message != null) { return }
-    let { cacheId: id, shortUrl, url } = info
-    const { videoData } = data
-    const { aid } = videoData
-    if (aid != null) {
-      id = `av${aid}`
-      shortUrl = toShortUrl(id)
-      url = toUrl(id)
-    }
-    let thumb = toHttps(videoData.pic ?? '')
+    const { error, videoData } = data
+    if (error != null && keys(error).length !== 0) { return }
+    const { shortUrl, url } = info
 
     const keywords = []
     for (const tag of data.tags) {
@@ -141,7 +137,7 @@ export const bilibiliVideo = definePlugin<Data>({
     if (hasOwn(videoData, 'staff')) {
       const owners = []
       for (const { title, name } of videoData.staff) {
-        owners[owners.length] = `${title != null ? `[${title}]` : ''}${name}`
+        owners[owners.length] = `[${title}]${name}`
       }
       ownerName = join(owners, '；')
     }
@@ -149,7 +145,8 @@ export const bilibiliVideo = definePlugin<Data>({
       title: videoData.title,
       ownerName,
       publishDate: instantToString(videoData.pubdate * 1000),
-      shortUrl, url, thumbnailUrl: thumb,
+      shortUrl, url,
+      thumbnailUrl: toHttps(videoData.pic ?? ''),
       keywords: join(keywords, ','),
       description: htmlToText(videoData.desc, true)
     }
