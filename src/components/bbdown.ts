@@ -1,13 +1,17 @@
 
-import { Terminal as Xterm } from '@xterm/xterm'
-import { WebglAddon } from '@xterm/addon-webgl'
 import { type VNode, type Prop, defineComponent, watch, createVNode as h, shallowReactive } from 'vue'
 import { Row, Col, Input, Modal, Button, ButtonGroup, Radio, RadioGroup, Checkbox } from 'view-ui-plus'
-import { encodeText, on } from 'bind:utils'
+import { $then, on, encodeText } from 'bind:utils'
 import { keys } from 'bind:Object'
 import { type BBDownOptions, create, echo } from '../utils/bbdown'
 import { removeLast } from '../bind'
 const TARGET = import.meta.env.TARGET
+
+type Xterm = InstanceType<typeof Xterm>
+let Xterm: typeof import('@xterm/xterm').Terminal
+let WebglAddon: typeof import('@xterm/addon-webgl').WebglAddon
+let ready: Promise<void>
+
 const $rowAttrs = { style: 'margin-bottom:24px' }
 const $colAttrs0 = { span: 3, style: 'text-align:right;padding-right:8px;line-height:32px;' }
 const $colAttrs1 = { span: 3, style: 'text-align:right;padding-right:8px;line-height:25px;' }
@@ -55,6 +59,12 @@ export const BBDown = defineComponent(TARGET != 'client' ? {
   },
   mounted() {
     const vm = this
+    ready ??= $then(import('@/deps/dep-xterm'), $ => {
+      ({ Terminal: Xterm, WebglAddon } = $)
+    })
+    $then(ready, _ => {
+      vm.status = 'ready'
+    })
     watch(() => vm.id, id => vm.currentId = id!)
     watch(() => vm.status, status => {
       switch (status) {
@@ -72,7 +82,6 @@ export const BBDown = defineComponent(TARGET != 'client' ? {
         case 'intl': opts.useIntlApi = true; break
       }
     })
-    vm.status = 'ready'
   },
   methods: {
     handleModal() { this.status = 'modal' },

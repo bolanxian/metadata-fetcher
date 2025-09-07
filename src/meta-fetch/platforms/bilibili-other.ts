@@ -37,13 +37,13 @@ definePlugin({
     const id = path[0]
     if (!test(REG_CV, id)) { return }
     return {
-      id, displayId: id, cacheId: `${id}.html`,
+      id, displayId: id, cacheId: id,
       shortUrl: '', url: `https://www.bilibili.com/read/${id}/`
     }
   },
   async fetch(info) {
     const { url, cacheId } = info
-    const text = await cache.tryGet(cacheId, async () => {
+    const text = await cache.tryGet(`${cacheId}.html`, async () => {
       const resp = await $fetch(url, htmlInit)
       const { status } = resp
       if (status !== 200) {

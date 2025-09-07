@@ -51,7 +51,7 @@ export const resolve = (input: string): ResolvedInfo | null => {
 export const tryRedirectInner = async (info: ResolvedInfo): Promise<ResolvedInfo | null> => {
   const url = await redirect(info.url)
   if (url == null) { return null }
-  const resolved = resolve(url)
+  const resolved = resolve(new URL(url, info.url).href)
   return resolved
 }
 export const tryRedirect = (info: ResolvedInfo): Promise<ResolvedInfo | null> | undefined => {

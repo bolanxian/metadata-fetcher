@@ -3,7 +3,38 @@ import process from 'node:process'
 import { type Plugin, defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { bindScript } from 'bind-script/plugin.vite'
-import { resolve } from 'node:path'
+import { resolve } from 'node:path/posix'
+
+const destroyModulePreload = (): Plugin => {
+  const name = 'Destroy `vite:build-import-analysis`'
+  const { exec } = RegExp.prototype, { apply } = Reflect
+  // from vite@6.2.5/dist/node/chunks/dep-Pj_jxEzN.js:50550
+  const target = /((?:\bconst\s+|\blet\s+|\bvar\s+|,\s*)(\{[^{}.=]+\})\s*=\s*await\s+import\([^)]+\))|(\(\s*await\s+import\([^)]+\)\s*\)(\??\.[\w$]+))|\bimport\([^)]+\)(\s*\.then\(\s*(?:function\s*)?\(\s*\{([^{}.=]+)\}\))/g
+  RegExp.prototype.exec = function (this: RegExp, string: string) {
+    if (this.source === target.source && this.flags === target.flags) {
+      this.exec = (string: string) => null
+      RegExp.prototype.exec = exec
+      return this.exec(string)
+    }
+    return apply(exec, this, [string])
+  }
+  return {
+    name,
+    apply: 'build',
+    transform: {
+      order: 'post',
+      handler(code, id) {
+        if (id.startsWith('\0vite/preload-helper')) {
+          return `export let __vitePreload`
+        }
+        if (id.startsWith('\0vite/modulepreload-polyfill')) { return '' }
+        if (code.includes('__vitePreload(')) {
+          return code.replace(/__vitePreload\(\(\) => ([^,]+?),__VITE_IS_MODERN__\?"?__VITE_PRELOAD__"?\:void 0,import\.meta\.url\)/, '$1')
+        }
+      }
+    }
+  }
+}
 
 const externalAssets = (): Plugin => {
   const reg = /\/(ionicons)-[-\w]{8}\.((?!woff2)\S+)$/
@@ -50,8 +81,7 @@ const buildTarget = (): Plugin => {
     apply: 'build',
     config(config, { isSsrBuild }) {
       target = !isSsrBuild ? (process.env.VITE_TARGET as typeof target) ?? 'client' : 'server'
-      let outDir = config.build?.outDir
-      let assetsDir = '.assets'
+      let external: typeof config.build.rollupOptions.external
       if (target == 'client') {
         map.delete('qrcode')
         map.delete('@xterm/xterm')
@@ -59,26 +89,25 @@ const buildTarget = (): Plugin => {
         map.set('cheerio', 'export let load')
       } else if (target == 'pages') {
         map.delete('qrcode')
-        outDir = '../dist-pages'
-        assetsDir = 'assets'
+        config.build.outDir = '../dist-pages'
+        config.build.assetsDir = 'assets'
       } else if (target == 'koishi') {
-        outDir = '../koishi-plugin'
+        const $ = config.resolve.alias
+        config.build.outDir = '../koishi-plugin'
+        config.build.lib = {
+          entry: 'main.koishi.ts',
+          formats: ['cjs'],
+          fileName: () => 'index.js'
+        }
+        external = ['koishi', 'cheerio', 'temporal-polyfill']
+        map.set(`${$['@']}/deps/temporal`, 'export * from "@/deps/temporal.koishi"')
       }
       return {
         define: {
           'import.meta.env.TARGET': JSON.stringify(target)
         },
         build: {
-          rollupOptions: {
-            external: target == 'koishi' ? ['koishi', 'cheerio', 'temporal-polyfill'] : [],
-          },
-          lib: target == 'koishi' ? {
-            entry: 'main.koishi.ts',
-            formats: ['cjs'],
-            fileName: () => 'index.js'
-          } : void 0,
-          outDir,
-          assetsDir
+          rollupOptions: { external }
         }
       }
     },
@@ -125,12 +154,13 @@ export default defineConfig({
   },
   build: {
     outDir: '../dist',
+    assetsDir: '.assets',
     emptyOutDir: false,
     target: 'esnext',
     modulePreload: { polyfill: false },
     cssCodeSplit: false,
     minify: false,
-    //ssrManifest:'manifest.ssr.json',
+    // ssrManifest: '_manifest.ssr.json',
     chunkSizeWarningLimit: 1024,
     rollupOptions: {
       external: [/^(?=node:)/],
@@ -142,6 +172,7 @@ export default defineConfig({
   ssr: { noExternal: /^(?!node:)/ },
   plugins: [
     vue(),
+    destroyModulePreload(),
     externalAssets(),
     buildTarget(),
     bindScript(),

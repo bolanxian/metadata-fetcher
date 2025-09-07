@@ -1,9 +1,7 @@
 
 import '@/meta-fetch/mod'
-import { Temporal } from 'temporal-polyfill'
 import { createApp, createSSRApp } from 'vue'
 import { on, off } from 'bind:utils'
-import { assign } from 'bind:Object'
 import { ready } from './init'
 import App from './components/app.vue'
 const PAGES = import.meta.env.TARGET == 'pages'
@@ -33,4 +31,4 @@ await new Promise<FocusEvent | void>(ok => {
 })
 const app = (!PAGES && root.children.length > 0 ? createSSRApp : createApp)(App, { store })
 const vm = app.mount(root)
-assign(window, { vm, Temporal })
+{ (window as any).vm = vm }

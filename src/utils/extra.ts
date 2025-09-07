@@ -1,7 +1,7 @@
 
 import { type Prop, defineComponent, onBeforeUnmount, onMounted, shallowReactive, createVNode as h } from 'vue'
 import { Card, Cell, CellGroup } from 'view-ui-plus'
-import { Temporal } from 'temporal-polyfill'
+import { Temporal } from '@/deps/temporal'
 import { getOwn, on } from 'bind:utils'
 import { toFixed } from 'bind:Number'
 import { from } from 'bind:Array'
@@ -180,7 +180,7 @@ definePlugin<{ title: string, since: string, date: string }[]>({
     ]
   },
   parse(data, info) {
-    let desc = '\n'
+    let desc = ''
     for (const { title, since, date } of data) {
       desc += `${title}：${date}（${since}）\n`
     }

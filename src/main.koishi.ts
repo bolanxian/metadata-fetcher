@@ -58,17 +58,17 @@ const fields: Field.Extension<Tables[typeof name]> = {
 
 const cache: LRUCache<string, ParsedInfo, { context: Context, resolved: ResolvedInfo }> = new LRUCache({
   max: 20,
-  async fetchMethod(id, staleValue, { signal, context: { context: ctx, resolved } }) {
-    const [_parsed]: Tables[typeof name][] = await ctx.database.get(name, { id })
+  async fetchMethod(cacheId, staleValue, { signal, context: { context: ctx, resolved } }) {
+    const [_parsed]: Tables[typeof name][] = await ctx.database.get(name, { id: cacheId })
     if (_parsed != null) {
       const { shortUrl, url } = resolved
       return { ..._parsed, id: void 0, shortUrl, url }
     }
-    const [, , redirectedPromise, , parsedPromise] = xparse(id)
+    const [, , redirectedPromise, , parsedPromise] = xparse(resolved.id)
     if (redirectedPromise != null) {
       const resolved = await redirectedPromise
       if (resolved != null) {
-        return await cache.fetch(resolved.id, { context: { context: ctx, resolved } })
+        return await cache.fetch(resolved.cacheId, { context: { context: ctx, resolved } })
       }
       return
     }
@@ -76,7 +76,7 @@ const cache: LRUCache<string, ParsedInfo, { context: Context, resolved: Resolved
     if (parsed != null) {
       const { title, ownerName, publishDate, thumbnailUrl, relatedUrl, keywords, description } = parsed
       await ctx.database.create(name, {
-        id, title, ownerName, publishDate, thumbnailUrl, relatedUrl, keywords, description
+        id: cacheId, title, ownerName, publishDate, thumbnailUrl, relatedUrl, keywords, description
       })
       return parsed
     }
@@ -86,7 +86,7 @@ const empty = Promise.resolve(Object.freeze([] as []))
 const parse = async (ctx: Context, input: string): Promise<readonly [ResolvedInfo?, ParsedInfo?]> => {
   const [, resolved] = xparse(input)
   if (resolved == null) { return empty }
-  const parsed = await cache.fetch(resolved.id, { context: { context: ctx, resolved } })
+  const parsed = await cache.fetch(resolved.cacheId, { context: { context: ctx, resolved } })
   return [resolved, parsed]
 }
 async function* renderList(

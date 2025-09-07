@@ -1,4 +1,5 @@
-import { Temporal } from 'temporal-polyfill'
+
+import { Temporal } from '@/deps/temporal'
 const { Now, Instant, Duration } = Temporal
 import { call } from 'bind:core'
 import { match, replace } from 'bind:utils'
