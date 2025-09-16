@@ -1,6 +1,8 @@
 
 import { LRUCache } from 'lru-cache'
-import { replaceAll } from 'bind:String'
+import { empty } from '@/bind'
+import { replaceAll, indexOf, slice } from 'bind:String'
+import { keys } from 'bind:Array'
 type FS = typeof import('node:fs/promises')
 
 export type TryGetFn = () => Promise<string | undefined>
@@ -8,6 +10,7 @@ export interface ICache {
   get(name: string): Promise<string | undefined>
   tryGet(name: string, fn: TryGetFn): Promise<string | undefined>
   set(name: string, value: string): Promise<void>
+  keys(): Iterator<string>
 }
 export let cache: ICache = null!
 export let initCache = (_cache: ICache) => {
@@ -22,6 +25,7 @@ export class NoCache implements ICache {
     return await fn()
   }
   async set(name: string, value: string): Promise<void> { }
+  keys() { return keys(empty as any) as Iterator<string> }
 }
 export class FsCache implements ICache {
   #readFile: FS['readFile']
@@ -74,6 +78,15 @@ export class FsCache implements ICache {
     this.#lru.set(name, value)
     await this.#writeFile(path, value)
   }
+  *keys() {
+    for (let key of this.#lru.keys()) {
+      if (key[0] !== '_') {
+        const i = indexOf(key, '.')
+        if (i > 0) { key = slice(key, 0, i) }
+        yield key
+      }
+    }
+  }
 }
 export class WebCache implements ICache {
   #cache: Cache = null!
@@ -105,6 +118,7 @@ export class WebCache implements ICache {
     name = resolveName(name)
     await this.#cache.put(`/${name}`, new Response(value))
   }
+  keys() { return keys(empty as any) as Iterator<string> }
 }
 
 const { parse, stringify } = JSON
