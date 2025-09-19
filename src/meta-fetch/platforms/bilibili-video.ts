@@ -36,7 +36,10 @@ defineDiscover({
     } else {
       return
     }
-    return `bilibili/video/${id}`
+    return [
+      `bilibili/video/${id}`,
+      `bilibili/video/${BV.encode(id) ?? ''}`
+    ]
   }
 })
 defineDiscover({
@@ -56,7 +59,10 @@ defineDiscover({
       case 'raw': id = m[2]; break
       default: return
     }
-    return `bilibili/video/${id}`
+    return [
+      `bilibili/video/${id}`,
+      `bilibili/video/${BV.decode(id) ?? ''}`
+    ]
   }
 })
 

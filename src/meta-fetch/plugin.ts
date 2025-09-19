@@ -6,7 +6,7 @@ import { $then } from 'bind:utils'
 import { freeze } from 'bind:Object'
 import { get, set } from 'bind:WeakMap'
 import { redirect } from './fetch'
-import { resolveDiscover } from './discover'
+import { xresolveDiscover } from './discover'
 import { type RouteMap, defineRoute, resolveRoute } from './router'
 
 export interface Plugin<T extends {} = {}> {
@@ -42,11 +42,15 @@ export const pluginToComponent: WeakMap<
 export const pluginList: Plugin[] = []
 export const routeMap: RouteMap<ResolvedInfo> = {}
 
+export function* xresolve(input: string): Generator<ResolvedInfo> {
+  for (const discover of xresolveDiscover(input)) {
+    const route = resolveRoute(routeMap, discover)
+    if (route != null) { yield route }
+  }
+}
 export const resolve = (input: string): ResolvedInfo | null => {
-  const discover = resolveDiscover(input)
-  if (discover == null) { return null }
-  const route = resolveRoute(routeMap, discover)
-  return route ?? null
+  for (const route of xresolve(input)) { return route }
+  return null
 }
 export const tryRedirectInner = async (info: ResolvedInfo): Promise<ResolvedInfo | null> => {
   const url = await redirect(info.url)

@@ -9,13 +9,13 @@ export type Discover = Readonly<{
   name: string
   discover?: readonly RegExp[]
   discoverHttp?: readonly RegExp[]
-  handle: (m: RegExpMatchArray, reg: RegExp) => string | undefined
+  handle: (m: RegExpMatchArray, reg: RegExp) => Iterable<string> | string | undefined
 }>
 export const discoverList: Discover[] = []
 export const discoverMap: Map<RegExp, Discover> = new Map()
 export const discoverHttpMap: Map<RegExp, Discover> = new Map()
 
-export const resolveDiscover = (input: string) => {
+export function* xresolveDiscover(input: string) {
   if (!(input.length > 0)) { return }
   let map = discoverMap
   const maybeHttp = resolveAsHttp(input)
@@ -25,10 +25,16 @@ export const resolveDiscover = (input: string) => {
   }
   for (const reg of keys(map)) {
     const m = match(reg, input)
-    if (m != null) {
-      const discover = get(map, reg)!
-      return discover.handle(m, reg)
-    }
+    if (m == null) { continue }
+    const discover = get(map, reg)!.handle(m, reg)
+    if (discover == null) { continue }
+    if (typeof discover === 'string') { yield discover }
+    else { yield* discover }
+  }
+}
+export const resolveDiscover = (input: string) => {
+  for (const discover of xresolveDiscover(input)) {
+    return discover
   }
 }
 export const defineDiscover = (discover: Discover) => {
