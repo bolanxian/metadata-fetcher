@@ -1,11 +1,14 @@
-import { type Prop, defineComponent, shallowReactive, watchEffect, createVNode as h, onMounted } from 'vue'
+import { type Prop, type WatchEffect, defineComponent, shallowReactive, watchEffect, createVNode as h, onMounted } from 'vue'
 import { Button, Poptip, SkeletonItem } from 'view-ui-plus'
-import { toDataURL } from 'qrcode'
+import { $then } from 'bind:utils'
+type OnCleanup = Parameters<WatchEffect>[0]
 const TARGET = import.meta.env.TARGET
-const SSR = TARGET == 'server'
+
+let toDataURL: typeof import('qrcode').toDataURL
+let ready: Promise<void>
 
 const QRCodeProps: Record<'icon' | 'text', Prop<string>> = { icon: null!, text: null! }
-export const QRCode = defineComponent(SSR ? {
+export const QRCode = defineComponent(TARGET == 'server' ? {
   props: QRCodeProps,
   render() {
     return h(Poptip, {
@@ -41,18 +44,23 @@ export const QRCode = defineComponent(SSR ? {
       data.text = text
       data.url = data.urlPromise = null
       if (!text) { return }
-      data.urlPromise = (async () => {
-        let aborted = false
-        onCleanup(() => { aborted = true })
-        await new Promise(ok => { setTimeout(ok, 200) })
-        if (aborted) { data.text = null; return '' }
-        const url = await toDataURL(text, {
-          type: 'image/png',
-          margin: 0, scale: 1,
-        })
-        return data.url = url
-      })()
+      data.urlPromise = createDataURL(text, onCleanup)
     })
+    const createDataURL = async (text: string, onCleanup: OnCleanup) => {
+      let aborted = false
+      onCleanup(() => { aborted = true })
+      ready ??= $then(import('@/deps/dep-qrcode'), $ => {
+        ({ toDataURL } = $)
+      })
+      await new Promise(ok => { setTimeout(ok, 200) })
+      await ready
+      if (aborted) { data.text = null; return '' }
+      const url = await toDataURL(text, {
+        type: 'image/png',
+        margin: 0, scale: 1,
+      })
+      return data.url = url
+    }
     onMounted(() => {
       data.trigger = matchMedia('(hover: hover)').matches ? 'hover' : 'click'
     })

@@ -2,7 +2,8 @@
 export { default as $string } from 'bind:String'
 export { default as $array } from 'bind:Array'
 import { test, replace } from 'bind:utils'
-import { fromCharCode, charCodeAt, indexOf, slice } from 'bind:String'
+import { toString } from 'bind:Number'
+import { fromCharCode, codePointAt, charCodeAt, indexOf, padStart, slice, toUpperCase } from 'bind:String'
 import { freeze } from 'bind:Object'
 import * as cheerio from 'cheerio'
 
@@ -22,15 +23,26 @@ export const join = (iter: Iterable<any>, separator = ',') => {
   }
   return ''
 }
+
 /** [\x21-\x7E] to [\uFF01-\uFF5E] */
 export const charToFullwidth = ($0: string) => fromCharCode(charCodeAt($0, 0) + 0xFEE0)
 const REG_NOT_FIRST_32 = /(?<=^.{32}).+$/su
 export const onlyFirst32 = (input: string, ellipsis = '…') => replace(REG_NOT_FIRST_32, input, ellipsis)
 const REG_LAST = /.$/su
 export const removeLast = (input: string) => replace(REG_LAST, input, '')
+
 export const controlCharToPicture = (str: string) => replace(/[\x00-\x1F\x7F]/g, str, $0 => {
   return $0 === '\x7F' ? '\u2421' : fromCharCode(charCodeAt($0, 0) + 0x2400)
 })
+const REG_ALL = /./sug
+export const escapeJsonSingle = ($0: string) => {
+  const codePoint = toUpperCase(toString(codePointAt($0, 0)!, 16))
+  return codePoint.length > 4
+    ? `\\u{${codePoint}}`
+    : `\\u${padStart(codePoint, 4, '0')}`
+}
+export const escapeJson = (input: string) => replace(REG_ALL, input, escapeJsonSingle)
+
 export const REG_PROTOCOL = /^https?:\/*|^(?:https?)?:?\/{2,}/
 export const REG_DOMAIN = /^(?:(?!-)[-0-9a-z]{1,63}(?<!-)\.){1,63}(?=[a-z])[-0-9a-z]{2,63}(?<=[a-z])$/i
 export const resolveAsHttp = (input: string) => {
@@ -61,8 +73,8 @@ const escapeMap = {
   '>': '&gt;',
   '\xA0': '&nbsp;',
 }
-export const escapeAttrApos = createEscaper(/['&\xA0]/g, escapeMap)
-export const escapeAttr = createEscaper(/["&\xA0]/g, escapeMap)
+export const escapeAttrApos = createEscaper(/['&<>\xA0]/g, escapeMap)
+export const escapeAttr = createEscaper(/["&<>\xA0]/g, escapeMap)
 export const escapeText = createEscaper(/[&<>\xA0]/g, escapeMap)
 export const htmlToText = import.meta.env.TARGET != 'client' ? (html: string, pre = false) => {
   if (!pre) { html = replace(/\r?\n/g, html, '') }

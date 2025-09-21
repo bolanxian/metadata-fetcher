@@ -101,9 +101,9 @@ export const BBDown = defineComponent(TARGET != 'client' ? {
         term.write(`\x1B[1;33m开始下载 ${vm.currentId}\x1B[0m\r\n`)
         term.onData(e => {
           switch (e) {
-            case '\x03': // Ctrl+C
+            case '\x03': if (vm.status === 'terminal') { // Ctrl+C
               vm.status = 'abort'
-              break
+            } break
             case '\r': if (interactive) { // Enter
               const input = `${vm.input}\r\n`
               socket.send(encodeText(input))

@@ -15,7 +15,7 @@ import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
 import { keys } from 'bind:Object'
 import { slice, startsWith, replaceAll } from 'bind:String'
-import { join, onlyFirst32, escapeText, escapeAttr, escapeAttrApos } from './bind'
+import { join, onlyFirst32, escapeJson, escapeText, escapeAttr, escapeAttrApos } from './bind'
 import { config } from './config'
 import App, { Data, type Store } from './components/app.vue'
 import { getOwn } from 'bind:utils'
@@ -24,7 +24,7 @@ const { stringify } = JSON
 const meta = (name: string, content = 'content') => {
   return function* (record: Record<string, string | null | undefined>) {
     for (const key of keys(record)) {
-      const value = record[key]
+      const value = getOwn(record, key)
       if (value == null) { continue }
       yield `<meta ${name}="${escapeAttr(key)}" ${content}="${escapeAttr(value)}">`
     }
@@ -42,6 +42,7 @@ function* xbuildMeta({ mode, parsed, [Data]: data, config }: Store): Generator<s
     }
     yield `<title>${escapeText(parsed.title)} - ${name}</title>`
     yield* metaName({
+      'escaped:title': escapeJson(parsed.title),
       title: parsed.title,
       author: parsed.ownerName,
       description,

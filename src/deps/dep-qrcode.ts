@@ -1,0 +1,1 @@
+export { toDataURL } from 'qrcode'
