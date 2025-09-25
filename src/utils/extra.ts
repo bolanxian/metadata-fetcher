@@ -1,10 +1,11 @@
 
-import { type Prop, defineComponent, onBeforeUnmount, onMounted, shallowReactive, createVNode as h } from 'vue'
+import { defineComponent, onBeforeUnmount, onMounted, shallowReactive, createVNode as h } from 'vue'
 import { Card, Cell, CellGroup } from 'view-ui-plus'
 import { Temporal } from '@/deps/temporal'
 import { getOwn, on } from 'bind:utils'
 import { toFixed } from 'bind:Number'
 import { from } from 'bind:Array'
+import { values } from 'bind:Object'
 import { discoverList, defineDiscover } from '@/meta-fetch/discover'
 import { definePlugin, definePluginComponent } from '@/meta-fetch/plugin'
 const TARGET = import.meta.env.TARGET
@@ -71,10 +72,10 @@ const info = SSR || CSR ? definePlugin<{}>({
   parse: () => ({ title: '系统信息' })
 }) : null!
 SSR || CSR ? definePluginComponent(info, defineComponent(SSR ? {
-  props: null! as { data: Prop<{}> },
+  props: null!,
   render: () => [null]
 } : {
-  props: null! as { data: Prop<{}> },
+  props: null!,
   setup(props, ctx) {
     type VersionInfo = Record<'name' | 'version', string>
     type Info = {
@@ -143,6 +144,41 @@ ${toFixed((memory.used / memory.total) * 100, 2)}%\
         ]
       }),
     ]) : null]
+  }
+})) : null!
+
+SSR || CSR ? defineDiscover({
+  name: '',
+  discover: [/^software$/],
+  handle: m => 'extra/software/'
+}) : null!
+type Software = Record<string, { name: string, version: string, path: string }>
+const software = SSR || CSR ? definePlugin<Software>({
+  name: '', path: 'extra/software',
+  resolve(path) {
+    if (!(path.length === 1 && path[0] === '')) { return }
+    const id = 'software'
+    return { id, displayId: id, cacheId: id, shortUrl: '', url: '' }
+  },
+  async fetch() {
+    if (!SSR) { return }
+    const cp = await import('node:child_process')
+    const stream = await import('node:stream')
+    const { stdout } = cp.spawn('./dist/reg-utils', ['software'], { stdio: ['ignore', 'pipe', 'inherit'] })
+    const text = await new Response(stream.Readable.toWeb(stdout) as any).text()
+    const data = parse(text)
+    return data
+  },
+  parse: () => ({ title: '软件' })
+}) : null!
+SSR || CSR ? definePluginComponent(software, defineComponent({
+  props: { data: null! },
+  setup(props, ctx) {
+    return () => h(Card, null, () => [
+      h(CellGroup, null, () => from(values(props.data!), $ => h(Cell, {
+        title: $.name, label: $.version
+      })))
+    ])
   }
 })) : null!
 

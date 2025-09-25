@@ -92,7 +92,6 @@ const buildTarget = (): Plugin => {
         config.build.outDir = '../dist-pages'
         config.build.assetsDir = 'assets'
       } else if (target == 'koishi') {
-        const $ = config.resolve.alias
         config.build.outDir = '../koishi-plugin'
         config.build.lib = {
           entry: 'main.koishi.ts',
@@ -100,7 +99,6 @@ const buildTarget = (): Plugin => {
           fileName: () => 'index.js'
         }
         external = ['koishi', 'cheerio', 'temporal-polyfill']
-        map.set(`${$['@']}/deps/temporal`, 'export * from "@/deps/temporal.koishi"')
       }
       return {
         define: {
