@@ -1,37 +1,46 @@
 
 import '@/meta-fetch/mod'
-import { createApp, createSSRApp } from 'vue'
-import { on, off } from 'bind:utils'
+import { type ComponentPublicInstance, createApp, createSSRApp } from 'vue'
+import { $then } from 'bind:utils'
+import { defineProperty } from 'bind:Object'
 import { ready } from './init'
-import App from './components/app.vue'
+import App, { type Store } from './components/app.vue'
 const TARGET = import.meta.env.TARGET
 const CSR = TARGET == 'client'
-const PAGES = TARGET == 'pages'
-
-const root = document.querySelector('#app')!
-let store
-if (CSR) {
-  try {
-    store = JSON.parse(root.getAttribute('data-store') ?? 'null')
-    root.removeAttribute('data-store')
-  } catch (error) {
-    reportError(error)
+const tagName = 'metadata-fetcher'
+declare global {
+  interface HTMLElementTagNameMap {
+    [tagName]: MetadataFetcher
   }
 }
-if (document.visibilityState !== 'visible') {
-  await new Promise<Event | void>(ok => {
-    const type = 'visibilitychange'
-    const done = (e: Event) => {
-      if (document.visibilityState !== 'visible') { return }
-      ok(e)
-      off(document, type, done)
+
+export class MetadataFetcher extends HTMLElement {
+  static {
+    customElements.define(tagName, this)
+    defineProperty(window, 'vm', {
+      get() {
+        const el = document.getElementsByTagName(tagName)[0]
+        return el != null ? el.#vm : null
+      }
+    })
+  }
+  #vm: ComponentPublicInstance = null!
+  get _vm() { return this.#vm }
+  constructor() {
+    super()
+    let store: Store | undefined
+    if (CSR) {
+      try {
+        store = JSON.parse(this.getAttribute('data-store') ?? 'null')
+        this.removeAttribute('data-store')
+      } catch (error) {
+        reportError(error)
+      }
     }
-    on(document, type, done)
-  })
+    const create = CSR && this.children.length > 0 ? createSSRApp : createApp
+    $then(ready, _ => {
+      const app = create(App, { store })
+      this.#vm = app.mount(this)
+    })
+  }
 }
-if (PAGES) {
-  await ready
-}
-const app = (!PAGES && root.children.length > 0 ? createSSRApp : createApp)(App, { store })
-const vm = app.mount(root)
-{ (window as any).vm = vm }

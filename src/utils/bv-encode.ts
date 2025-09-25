@@ -5,7 +5,7 @@ import { test } from 'bind:utils'
 import { indexOf, slice } from 'bind:String'
 const int = BigInt, { asUintN } = int
 
-export const REG_AV = /^([aA][vV](?!0(?!$))\d{1,16})$/
+export const REG_AV = /^(av(?!0(?!$))\d{1,16})$/i
 export const REG_BV = /^([bB][vV]1(?:(?![_0OIl])\w){9})$/
 
 const BASE = 58n

@@ -1,10 +1,15 @@
 
-export { T as Temporal }
+import { $then } from 'bind:utils'
+export { T as Temporal }; let T
 export let Intl, toTemporalInstant
-let T
+export let ready
 if (typeof Temporal === 'object' && Temporal != null) {
   T = Temporal
+} else if (import.meta.env.TARGET == 'koishi') {
+  void ({ Temporal: T, Intl, toTemporalInstant } = require('temporal-polyfill'))
 } else {
-  ({ Temporal: T, Intl, toTemporalInstant } = await import('./dep-temporal'))
-  globalThis.TemporalPolyfill = T
+  ready = $then(import('./dep-temporal'), $ => {
+    void ({ Temporal: T, Intl, toTemporalInstant } = $)
+    globalThis.TemporalPolyfill = T
+  })
 }
