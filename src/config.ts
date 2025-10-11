@@ -12,6 +12,8 @@ const configName = '_config.json'
 export interface Config {
   browsers: null | Record<string, { name: string, args: string[] }>
   defaultBrowser: null | string
+  /** 指定允许的`Origin`。使用空格分隔可指定多个值。 */
+  allowOrigin: string
   separator: string
   template: string
   batch: Record<string, { name: string, template: string }>
@@ -20,6 +22,7 @@ export interface Config {
 export const config: Config = {
   browsers: null,
   defaultBrowser: null,
+  allowOrigin: '',
   separator: '\uFF0F',
   template: `\
 title=标题：

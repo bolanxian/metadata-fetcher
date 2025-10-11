@@ -1,6 +1,6 @@
 
-import { pipeTo, on } from 'bind:utils'
-import { includes, replaceAll } from 'bind:String'
+import { pipeTo, test, on } from 'bind:utils'
+import { replaceAll } from 'bind:String'
 import { join } from 'bind:Array'
 import { defaultUserAgent as userAgent } from '@/meta-fetch/mod'
 const { error } = console
@@ -84,7 +84,7 @@ export function* xargs(opts: BBDownOptions): Generator<string, void, void> {
 }
 
 export const escape = (str: string) => {
-  if (includes(str, ' ') || includes(str, '"')) {
+  if (!test(/^[-=\w]*$/, str)) {
     str = `"${replaceAll(str, '"', '\\"')}"`
   }
   return str
