@@ -1,10 +1,10 @@
 
 import * as cheerio from 'cheerio'
-import { hasOwn, test, replace } from 'bind:utils'
+import { hasOwn, test, match, replace } from 'bind:utils'
 import { slice, indexOf } from 'bind:String'
 import { find, map, join } from 'bind:Array'
 import { fromHTML } from '@/utils/find-json-object'
-import { parseRfc2822Date } from '@/utils/temporal'
+import { formatDuration, parseRfc2822Date } from '@/utils/temporal'
 import { defineDiscover } from '../discover'
 import { definePlugin } from '../plugin'
 import { $fetch, htmlInit } from '../fetch'
@@ -17,12 +17,12 @@ defineDiscover({
   discover: [REG_YOUTUBE],
   discoverHttp: [
     /^youtu\.be\/([-\w]+)/,
-    /^(?:www\.)?youtube\.com\/(?:shorts|embed)\/([-\w]+)/,
-    /^(?:www\.)?youtube\.com\/watch\?(?:\S*?&)??v=([-\w]+)/
+    /^(?:m\.|www\.)?youtube\.com\/(?:shorts|embed)\/([-\w]+)/,
+    /^(?:m\.|www\.)?youtube\.com\/watch\?(?:\S*?&)??v=([-\w]+)/
   ],
   handle: m => `youtube/video/${m[1]}`
 })
-definePlugin({
+definePlugin<[any, any]>({
   name: 'Youtube',
   path: 'youtube/video',
   resolve(path) {
@@ -47,17 +47,16 @@ definePlugin({
     })
     if (text == null) { return }
     const $ = cheerio.load(text, { baseURI: info.url })
-    return fromHTML($, /^\s*var\s+ytInitialData\s*=\s*(?={)/)
+    const data = fromHTML($, /^\s*var\s+ytInitialData\s*=\s*(?={)/)
+    const contents = data.contents.twoColumnWatchNextResults.results.results.contents
+    return map([
+      'videoPrimaryInfoRenderer',
+      'videoSecondaryInfoRenderer'
+    ], name => find(contents, $ => hasOwn($, name))[name]) as any
   },
-  parse(data, info) {
+  parse(videoDesc, info) {
     const { id, shortUrl, url } = info
-
-    const videoDesc = ((contents) => {
-      return map([
-        'videoPrimaryInfoRenderer',
-        'videoSecondaryInfoRenderer'
-      ], name => find(contents, $ => hasOwn($, name))[name]) as any[]
-    })(data.contents.twoColumnWatchNextResults.results.results.contents)
+    const videoId = match(REG_YOUTUBE, id)![1]
 
     const _date = videoDesc[0].dateText.simpleText
     let date = parseRfc2822Date(_date)
@@ -79,7 +78,14 @@ definePlugin({
           return ep.url
         }
         if ((ep = inner.watchEndpoint) != null) {
-          return `https://youtu.be/${ep.videoId}`
+          if (videoId === ep.videoId) {
+            return formatDuration(ep.startTimeSeconds)
+          }
+          let suffix = ''
+          if (ep.startTimeSeconds > 0) {
+            suffix = `?t=${ep.startTimeSeconds}s`
+          }
+          return `https://youtu.be/${ep.videoId}${suffix}`
         }
         if ((ep = inner.reelWatchEndpoint) != null) {
           return `https://youtu.be/${ep.videoId}`
