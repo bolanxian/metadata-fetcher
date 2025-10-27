@@ -1,10 +1,9 @@
 
 import * as cheerio from 'cheerio'
 import { hasOwn, test, match, replace } from 'bind:utils'
-import { slice, indexOf } from 'bind:String'
 import { find, map, join } from 'bind:Array'
 import { fromHTML } from '@/utils/find-json-object'
-import { formatDuration, parseRfc2822Date } from '@/utils/temporal'
+import { parseRfc2822Date } from '@/utils/temporal'
 import { defineDiscover } from '../discover'
 import { definePlugin } from '../plugin'
 import { $fetch, htmlInit } from '../fetch'
@@ -57,50 +56,60 @@ definePlugin<[any, any]>({
   parse(videoDesc, info) {
     const { id, shortUrl, url } = info
     const videoId = match(REG_YOUTUBE, id)![1]
+    const thumbnailUrl = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
 
-    const _date = videoDesc[0].dateText.simpleText
+    let title = '', ownerName = ''
+    for (const { text } of videoDesc[0].title.runs) {
+      title += text
+    }
+    for (const { text } of videoDesc[1].owner.videoOwnerRenderer.title.runs) {
+      ownerName += text
+    }
+    const _date: string = videoDesc[0].dateText.simpleText
     let date = parseRfc2822Date(_date)
-    if (date != null) { date = `${date}(${_date})` }
+    date = date != null ? `${date}(${_date})` : _date
 
-    const description = (({ content, commandRuns }) => {
-      if (commandRuns == null) { return content }
-      return replace(RegExp(
-        join(map(commandRuns, $ => `(?<=^.{${+$.startIndex}}).{${+$.length}}`), '|'), 'sg'
-      ), content, (_, index) => {
-        const command = find(commandRuns, $ => $.startIndex === index)
-        const inner = command.onTap.innertubeCommand
-        let ep: any
-        if ((ep = inner.urlEndpoint) != null) {
-          const url = new URL(ep.url)
-          if (url.host === host && url.pathname === '/redirect') {
-            return url.searchParams.get('q') ?? ep.url
-          }
-          return ep.url
+    const _desc = videoDesc[1].attributedDescription
+    const description = _desc.commandRuns == null ? _desc.content : replace(RegExp(
+      join(map(_desc.commandRuns, $ => `(?<=^.{${+$.startIndex}}).{${+$.length}}`), '|'), 'sg'
+    ), _desc.content, (_, index) => {
+      const command = find(_desc.commandRuns, $ => $.startIndex === index)
+      const inner = command.onTap.innertubeCommand
+      let ep: any, url: string | undefined
+      if ((ep = inner.watchEndpoint) != null) {
+        if (videoId === ep.videoId) { return _ }
+        let suffix = ''
+        if (ep.startTimeSeconds > 0) {
+          suffix = `?t=${ep.startTimeSeconds}s`
         }
-        if ((ep = inner.watchEndpoint) != null) {
-          if (videoId === ep.videoId) {
-            return formatDuration(ep.startTimeSeconds)
-          }
-          let suffix = ''
-          if (ep.startTimeSeconds > 0) {
-            suffix = `?t=${ep.startTimeSeconds}s`
-          }
-          return `https://youtu.be/${ep.videoId}${suffix}`
+        return `https://youtu.be/${ep.videoId}${suffix}`
+      }
+      if ((ep = inner.reelWatchEndpoint) != null) {
+        return `https://youtu.be/${ep.videoId}`
+      }
+      if ((ep = inner.urlEndpoint) != null) {
+        url = ep.url
+      } else if ((ep = inner.commandMetadata?.webCommandMetadata) != null) {
+        switch (ep.webPageType) {
+          case 'WEB_PAGE_TYPE_CHANNEL':
+            url = ep.url; break
         }
-        if ((ep = inner.reelWatchEndpoint) != null) {
-          return `https://youtu.be/${ep.videoId}`
+      }
+      if (url != null) {
+        const inst = new URL(url, `https://${host}/`)
+        if (inst.host === host && inst.pathname === '/redirect') {
+          url = inst.searchParams.get('q') ?? inst.href
+        } else {
+          url = inst.href
         }
-        return _
-      })
-    })(videoDesc[1].attributedDescription)
+        return url
+      }
+      return _
+    })
 
     return {
-      title: videoDesc[0].title.runs[0].text,
-      ownerName: videoDesc[1].owner.videoOwnerRenderer.title.runs[0].text,
-      publishDate: date ?? _date,
-      shortUrl, url,
-      thumbnailUrl: `https://i.ytimg.com/vi/${slice(id, indexOf(id, '!') + 1)}/hqdefault.jpg`,
-      description
+      title, ownerName, publishDate: date,
+      shortUrl, url, thumbnailUrl, description
     }
   }
 })
