@@ -54,11 +54,12 @@ export const QRCode = defineComponent(TARGET == 'server' ? {
       })
       await new Promise(ok => { setTimeout(ok, 200) })
       await ready
-      if (aborted) { data.text = null; return '' }
+      if (aborted) { return '' }
       const url = await toDataURL(text, {
         type: 'image/png',
         margin: 0, scale: 1,
       })
+      if (aborted) { return '' }
       return data.url = url
     }
     onMounted(() => {

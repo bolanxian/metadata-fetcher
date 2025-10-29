@@ -71,6 +71,7 @@ const buildTarget = (): Plugin => {
   map.set('undici', 'export let stream')
   map.set('encoding-sniffer', 'export let decodeBuffer, DecodeStream')
   map.set('qrcode', 'export let toDataURL')
+  map.set('cheerio', 'export let load')
   map.set('@xterm/xterm', 'export let Terminal')
   map.set('@xterm/addon-webgl', 'export let WebglAddon')
 
@@ -82,11 +83,12 @@ const buildTarget = (): Plugin => {
     config(config, { isSsrBuild }) {
       target = !isSsrBuild ? (process.env.VITE_TARGET as typeof target) ?? 'client' : 'server'
       let external: typeof config.build.rollupOptions.external
-      if (target == 'client') {
+      if (target == 'server') {
+        map.delete('cheerio')
+      } else if (target == 'client') {
         map.delete('qrcode')
         map.delete('@xterm/xterm')
         map.delete('@xterm/addon-webgl')
-        map.set('cheerio', 'export let load')
       } else if (target == 'pages') {
         map.delete('qrcode')
         config.build.outDir = '../dist-pages'
