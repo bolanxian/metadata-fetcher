@@ -209,7 +209,7 @@ export default definePluginComponent(bilibiliVideo, defineComponent({
                   data.subChannel_v2?.name
                 ])
               ]) : null,
-              h(Tag, { color: 'cyan', title: `视频类型[${copyrightValues}]` }, () => [data.copyright]),
+              h(Tag, { color: 'cyan', title: `视频类型[${copyrightValues}]=${videoData.copyright}` }, () => [data.copyright]),
               h('a', { ...$a, href: toUrl(id!) }, [
                 h(Tag, { color: 'blue' }, () => [id])
               ]),
@@ -218,19 +218,19 @@ export default definePluginComponent(bilibiliVideo, defineComponent({
               ]),
             ]),
             h('div', null, from(tags, (tag: any) => {
+              const title = `${tag.tag_name}\ntag_type=${tag.tag_type}`
+              let type: string | null = null
               switch (tag.tag_type ?? null) {
-                case 'bgm':
-                  return h('a', { ...$a, href: tag.jump_url }, [
-                    h(Tag, { color: 'primary' }, () => [h(Icon, { type: 'ios-musical-notes' }), tag.tag_name])
-                  ])
-                case 'topic':
-                  return h('a', { ...$a, href: tag.jump_url }, [
-                    h(Tag, { color: 'primary' }, () => [h(Icon, { type: 'ios-paper-plane' }), tag.tag_name])
-                  ])
-                case 'old_channel': case null:
-                  return h(Tag, null, () => [tag.tag_name])
+                case 'bgm': type = 'ios-musical-notes'; break
+                case 'topic': type = 'ios-paper-plane'; break
+                // case 'old_channel':
               }
-              return null
+              if (type != null) {
+                return h('a', { ...$a, href: tag.jump_url, title }, [
+                  h(Tag, { color: 'primary' }, () => [h(Icon, { type }), tag.tag_name])
+                ])
+              }
+              return h(Tag, { title }, () => [tag.tag_name])
             })),
             h('img', {
               ...$img, style: 'margin-top:16px;width:100%',
