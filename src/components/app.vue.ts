@@ -8,7 +8,7 @@ import { from, join } from 'bind:Array'
 import { trim, slice, startsWith, replaceAll } from 'bind:String'
 import { nextTick, resolveAsHttp } from '@/bind'
 import { type Config, config, config as defaultConfig, writeConfig } from '@/config'
-import { render as _render, renderBatch } from '@/render'
+import { type OnParsed, render as _render, renderBatch } from '@/render'
 import { resolve, xparse, $fetch, getPluginComponent } from '@/meta-fetch/mod'
 import type { ResolvedInfo, ParsedInfo } from '@/meta-fetch/mod'
 import { Dialog } from './dialog'
@@ -28,7 +28,7 @@ export interface Store {
 
   resolved: ResolvedInfo | null
   data: {} | null
-  parsed: ParsedInfo | null
+  parsed: ResolvedInfo & ParsedInfo | null
 
   batchResolved: string | null
   [Data]?: Data
@@ -112,7 +112,7 @@ export default defineComponent({
         store.input && onServerPrefetch(async () => {
           store.batchResolved = resolveBatch(store.input)
           const args = split(S, store.input)
-          const onParsed = (parsed: ParsedInfo) => { store.parsed ??= parsed }
+          const onParsed: OnParsed = (parsed) => { store.parsed ??= parsed }
           data.batchLength = args.length
           let output = ''
           for await (const line of renderBatch(args, data.batchType!, onParsed)) {

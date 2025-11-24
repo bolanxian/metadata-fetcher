@@ -25,6 +25,7 @@ export const config: Config = {
   allowOrigin: '',
   separator: '\uFF0F',
   template: `\
+displayId=
 title=标题：
 ownerName=UP主：
 publishDate=日期：

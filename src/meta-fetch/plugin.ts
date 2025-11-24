@@ -28,8 +28,6 @@ export interface ParsedInfo {
   title: string
   ownerName?: string
   publishDate?: string
-  shortUrl?: string
-  url?: string
   thumbnailUrl?: string
   relatedUrl?: string
   keywords?: string
@@ -61,14 +59,16 @@ export const tryRedirectInner = async (info: ResolvedInfo): Promise<ResolvedInfo
 export const tryRedirect = (info: ResolvedInfo): Promise<ResolvedInfo | null> | undefined => {
   if (info.id[0] === '@') { return tryRedirectInner(info) }
 }
-export const parse = async (info: ResolvedInfo): Promise<ParsedInfo | null> => {
+export const parse = async (info: ResolvedInfo): Promise<ResolvedInfo & ParsedInfo | null> => {
   const plugin: Plugin = get(resolvedToPlugin, info)
   const data = await plugin.fetch(info)
   if (data == null) { return null }
-  return plugin.parse(data, info) ?? null
+  const parsed = plugin.parse(data, info)
+  if (parsed == null) { return null }
+  return { ...info, ...parsed }
 }
 export const xparse: (input: string) => [
-  Plugin?, ResolvedInfo?, Promise<ResolvedInfo | null>?, Promise<{} | null>?, Promise<ParsedInfo | null>?
+  Plugin?, ResolvedInfo?, Promise<ResolvedInfo | null>?, Promise<{} | null>?, Promise<ResolvedInfo & ParsedInfo | null>?
 ] = function* (input: string) {
   if (!(input.length > 2)) { return }
   const resolved = resolve(input)
@@ -81,8 +81,11 @@ export const xparse: (input: string) => [
   if (redirectedPromise != null) { return }
   const dataPromise = $then(voidPromise, () => plugin.fetch(resolved))
   yield dataPromise
-  const parsedPromise = $then(dataPromise, data => {
-    return data != null ? plugin.parse(data, resolved) : null
+  const parsedPromise: ReturnType<typeof parse> = $then(dataPromise, data => {
+    if (data == null) { return null }
+    const parsed = plugin.parse(data, resolved)
+    if (parsed == null) { return null }
+    return { ...resolved, ...parsed }
   })
   $then(parsedPromise, null, noop)
   yield parsedPromise

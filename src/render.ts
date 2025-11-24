@@ -3,7 +3,7 @@ import { getOwn, replace } from 'bind:utils'
 import { includes, trim, split, indexOf, slice } from 'bind:String'
 import { charToFullwidth, controlCharToPicture } from './bind'
 import { config } from './config'
-import { type ParsedInfo, resolve, parse, xparse } from '@/meta-fetch/mod'
+import { type ResolvedInfo, type ParsedInfo, resolve, parse, xparse } from '@/meta-fetch/mod'
 
 export type Result<T, E extends {}> = { error: E, cause?: any } | { error: null, value: T }
 export type BatchResult = Result<string, string>
@@ -49,6 +49,7 @@ export const renderLine = (data: Record<string, string>, template: string) => {
 renderLine.escape = (str: string) => replace(/(?<=^(?=av)|^a(?=v)|^(?=BV)|^B(?=V))./g, str, charToFullwidth)
 renderLine.filename = (str: string) => replace(/[\\/:*?"<>|]/g, str, charToFullwidth)
 
+export type OnParsed = (parsed: ResolvedInfo & ParsedInfo) => void
 export const renderBatchSingle = (
   arg: string, template: string, sep: Record<string, string>,
 ): BatchResult => {
@@ -59,8 +60,7 @@ export const renderBatchSingle = (
   return { error: null, value: renderLine(data, template) }
 }
 export const renderBatchSingleWithParse = async (
-  arg: string, template: string, sep: Record<string, string>,
-  onParsed?: (parsed: ParsedInfo) => void
+  arg: string, template: string, sep: Record<string, string>, onParsed?: OnParsed
 ): Promise<BatchResult> => {
   let data: Record<string, string>
   let [, resolved, redirected, , parsedPromise] = xparse(arg)
@@ -75,12 +75,12 @@ export const renderBatchSingleWithParse = async (
   let parsed: ParsedInfo | null | undefined, cause: any
   try { parsed = await parsedPromise } catch (e) { cause = e }
   if (parsed == null) { return { error: `Not Found : ${resolved.id}`, cause } }
-  onParsed?.(parsed)
+  onParsed?.({ ...resolved, ...parsed })
   data = { ...sep, ...resolved, ...parsed }
   return { error: null, value: renderLine(data, template) }
 }
 export async function* renderBatch(
-  args: string[], key: string, onParsed?: (parsed: ParsedInfo) => void
+  args: string[], key: string, onParsed?: OnParsed
 ): AsyncGenerator<BatchResult> {
   const batch = getOwn(config.batch, key)
   if (batch == null) { yield { error: `Unknown Template : ${key}` }; return }
