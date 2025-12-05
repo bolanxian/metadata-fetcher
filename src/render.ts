@@ -53,16 +53,14 @@ export type OnParsed = (parsed: ResolvedInfo & ParsedInfo) => void
 export const renderBatchSingle = (
   arg: string, template: string, sep: Record<string, string>,
 ): BatchResult => {
-  let data: Record<string, string>
   const resolved = resolve(arg)
   if (resolved == null) { return { error: `Unknown Input : ${arg}` } }
-  data = { ...sep, ...resolved }
+  const data = { ...sep, ...resolved }
   return { error: null, value: renderLine(data, template) }
 }
 export const renderBatchSingleWithParse = async (
   arg: string, template: string, sep: Record<string, string>, onParsed?: OnParsed
 ): Promise<BatchResult> => {
-  let data: Record<string, string>
   let [, resolved, redirected, , parsedPromise] = xparse(arg)
   if (resolved == null) { return { error: `Unknown Input : ${arg}` } }
   if (redirected != null) {
@@ -75,8 +73,8 @@ export const renderBatchSingleWithParse = async (
   let parsed: ParsedInfo | null | undefined, cause: any
   try { parsed = await parsedPromise } catch (e) { cause = e }
   if (parsed == null) { return { error: `Not Found : ${resolved.id}`, cause } }
-  onParsed?.({ ...resolved, ...parsed })
-  data = { ...sep, ...resolved, ...parsed }
+  const data = { ...sep, ...resolved, ...parsed }
+  onParsed?.(data)
   return { error: null, value: renderLine(data, template) }
 }
 export async function* renderBatch(

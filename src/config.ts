@@ -37,7 +37,7 @@ description="简介：\\n"
   batch: {
     '.id': { name: 'ID', template: '[${displayId}]${url}' },
     list: { name: '借物表', template: '${title}${_}${displayId}${_}${ownerName}' },
-    name: { name: '文件名', template: '[${ownerName|filename}][${cacheId}]${title|filename}' },
+    name: { name: '文件名', template: '[${ownerName|filename}][${id}]${title|filename}' },
     escape: { name: '', template: '［${displayId|escape}］${title}' },
   },
   nicoUrlType: 'watch'

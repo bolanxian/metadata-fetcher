@@ -5,7 +5,8 @@ import { cache, json } from '../cache'
 import { $fetch, jsonInit } from '../fetch'
 import { defineDiscover } from '../discover'
 import { definePlugin } from '../plugin'
-const REG_PIXIV = /^pixiv[!:](\d+)(?:[!-](\d+))??$/
+const REG_PIXIV = /^pixiv[!:](\d+)(?:[!-](\d+))?$/
+const PAGE_COUNT = Symbol.for('meta-fetch:pixiv-pageCount')
 
 defineDiscover({
   name: 'Pixiv',
@@ -62,20 +63,19 @@ definePlugin({
     })
   },
   parse(data, info) {
-    const { shortUrl, url } = info
-    const { title, userName, uploadDate, description } = data
+    const { title } = data
     const tags: string[] = []
     for (const { tag } of data.tags.tags) {
       tags[tags.length] = tag
     }
     return {
+      [PAGE_COUNT]: data.pageCount,
       title,
-      ownerName: userName,
-      publishDate: uploadDate,
-      shortUrl, url,
+      ownerName: data.userName,
+      publishDate: data.uploadDate,
       thumbnailUrl: '',
       keywords: join(tags, ','),
-      description: htmlToText(description)
+      description: htmlToText(data.description)
     }
   }
 })
