@@ -15,8 +15,12 @@ declare module 'view-ui-plus/src/directives/line-clamp' {
   export default directive
 }
 declare module 'bind:WeakMap' {
-  const T: typeof WeakMap & import('bind:core').Binder<WeakMap<any,any>>
+  const T: typeof WeakMap & import('bind:core').Binder<WeakMap<any, any>>
   export = T
+}
+declare module 'meta:*' {
+  const meta: (record: Record<string, string | null | undefined>) => IterableIterator<string>
+  export default meta
 }
 interface ImportMetaEnv {
   readonly TARGET: 'client' | 'server' | 'pages' | 'koishi'

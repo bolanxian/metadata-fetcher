@@ -13,26 +13,17 @@ export { illustId, illustName } from './utils/illust-name'
 
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
-import { keys } from 'bind:Object'
 import { slice, startsWith, replaceAll } from 'bind:String'
+import { getOwn } from 'bind:utils'
 import { join, onlyFirst32, escapeJson, escapeText, escapeAttr, escapeAttrApos } from './bind'
+import metaName from 'meta:name'
+import metaItemprop from 'meta:itemprop'
+import metaProperty from 'meta:property'
 import { config } from './config'
 import App, { Data, type Store } from './components/app.vue'
-import { getOwn } from 'bind:utils'
 const { stringify } = JSON
 
-const meta = (name: string, content = 'content') => {
-  return function* (record: Record<string, string | null | undefined>) {
-    for (const key of keys(record)) {
-      const value = getOwn(record, key)
-      if (value == null) { continue }
-      yield `<meta ${name}="${escapeAttr(key)}" ${content}="${escapeAttr(value)}">`
-    }
-  }
-}
-const metaName = meta('name')
-const metaItemprop = meta('itemprop')
-const metaProperty = meta('property')
+const urlKeys = ['shortUrl', 'url', 'relatedUrl']
 function* xbuildMeta({ mode, parsed, [Data]: data, config }: Store): Generator<string, void, unknown> {
   if (mode === 'default' && parsed != null) {
     let { description } = parsed
@@ -41,9 +32,10 @@ function* xbuildMeta({ mode, parsed, [Data]: data, config }: Store): Generator<s
       description = replaceAll(description, '\n', ' ')
     }
     yield `<title>${escapeText(parsed.title)} - ${name}</title>`
+    yield `<meta \
+name="title" content="${escapeAttr(parsed.title)}" \
+data-content-escaped="${escapeJson(parsed.title)}">`
     yield* metaName({
-      'escaped:title': escapeJson(parsed.title),
-      title: parsed.title,
       author: parsed.ownerName,
       description,
       keywords: parsed.keywords,
@@ -61,6 +53,10 @@ function* xbuildMeta({ mode, parsed, [Data]: data, config }: Store): Generator<s
       'og:image': parsed.thumbnailUrl,
       'og:description': description,
     })
+    for (const key of urlKeys) {
+      const url = getOwn(parsed, key)
+      if (url) { yield `<link rel="alternate" data-key="${key}" href="${escapeAttr(url)}">` }
+    }
     return
   }
   let title = name

@@ -141,7 +141,30 @@ export const { ${func.join(', ')} } = Vue
   }
 }
 
-// https://vitejs.dev/config/
+const meta = (): Plugin => {
+  return {
+    name: 'meta',
+    resolveId(source) {
+      if (source.startsWith('meta:')) { return source }
+    },
+    load(id, options) {
+      if (!id.startsWith('meta:')) { return }
+      const [, name, content = 'content'] = id.match(/^meta:([^/]+)(?:\/([^/]+))?$/)!
+      return `\
+import { keys } from 'bind:Object'
+import { getOwn } from 'bind:utils'
+import { escapeAttr } from '@/bind'
+export default function* (record) {
+  for (const key of keys(record)) {
+    const value = getOwn(record, key)
+    if (value == null) { continue }
+    yield \`<meta ${name}="\${escapeAttr(key)}" ${content}="\${escapeAttr(value)}">\`
+  }
+}`
+    }
+  }
+}
+
 export default defineConfig({
   appType: 'spa',
   base: './',
@@ -175,6 +198,7 @@ export default defineConfig({
     destroyModulePreload(),
     externalAssets(),
     buildTarget(),
+    meta(),
     bindScript(),
     {
       name: 'view-ui-plus',
