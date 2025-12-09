@@ -62,22 +62,23 @@ const renderArgue = ({ argue_info: info }: any, inner: VNode): (VNode | null)[] 
 }
 type Channel = { name: string, url: string, desc?: string }
 const resolveChannel = (videoData: { tid: number, tname: string }, channelKv: any): [Channel | null, Channel | null] => {
+  const { tid, tname } = videoData
   if (channelKv != null) {
     for (const channel of channelKv) {
       if (!hasOwn(channel, 'sub')) { continue }
       for (const sub of channel.sub) {
-        if (sub.tid === videoData.tid && sub.name === videoData.tname) {
+        if (sub.tid === tid && (tname ? sub.name === tname : true)) {
           return [channel, sub]
         }
       }
     }
     for (const channel of channelKv) {
-      if (channel.tid === videoData.tid && channel.name === videoData.tname) {
+      if (channel.tid === tid && (tname ? channel.name === tname : true)) {
         return [channel, null]
       }
     }
   }
-  return [null, { name: videoData.tname, url: '' }]
+  return [null, { name: tname, url: '' }]
 }
 
 export default definePluginComponent(bilibiliVideo, defineComponent({

@@ -133,8 +133,8 @@ export default defineComponent({
           if (resolved == null) { return }
           component = getPluginComponent(plugin!)
           store.resolved = redirected != null ? await redirected : resolved
-          store.data = await dataPromise!
-          if ((store.parsed = await parsedPromise!) != null) {
+          store.data = await dataPromise ?? null
+          if ((store.parsed = await parsedPromise ?? null) != null) {
             store.output = _render(store.parsed, store.config.template)
           }
         })
@@ -350,7 +350,8 @@ const Config = defineComponent({
       if (data.status === 'pending') { handleProcess() }
     })
     const $rowAttrs = { style: 'margin-bottom:24px' }
-    const $colAttrs0 = { span: 5, style: 'text-align:right;padding-right:8px;line-height:32px;' }
+    const $colAttrs0 = { span: 6, style: 'text-align:right;padding-right:8px;line-height:32px;' }
+    const $colAttrs1 = { span: 18 }
     return () => [
       h(Button, {
         style: 'margin:20px 0',
@@ -358,7 +359,7 @@ const Config = defineComponent({
         onClick: handleModal
       }, () => ['设置']),
       data.status !== void 0 ? h(Modal, {
-        width: 384, closable: !1, maskClosable: !1, transfer: true,
+        width: 512, closable: !1, maskClosable: !1, transfer: true,
         title: '设置',
         modelValue: data.status != null,
         onOnHidden: handleHidden
@@ -379,7 +380,7 @@ const Config = defineComponent({
         default: () => [
           h(Row, $rowAttrs, () => [
             h(Col, $colAttrs0, () => ['浏览器：']),
-            h(Col, { span: 19 }, () => [
+            h(Col, $colAttrs1, () => [
               h(Select, {
                 transfer: true,
                 disabled: config.browsers == null,
@@ -391,8 +392,21 @@ const Config = defineComponent({
             ])
           ]),
           h(Row, $rowAttrs, () => [
+            h(Col, $colAttrs0, () => ['Niconico链接：']),
+            h(Col, $colAttrs1, () => [
+              h(Select, {
+                transfer: true,
+                modelValue: config.nicoUrlType,
+                'onUpdate:modelValue'(_: any) { config.nicoUrlType = _ }
+              }, () => [
+                h(Option, { value: 'watch' }, () => ['默认']),
+                h(Option, { value: 'tree' }, () => ['ニコニ･コモンズ'])
+              ])
+            ])
+          ]),
+          h(Row, $rowAttrs, () => [
             h(Col, $colAttrs0, () => ['分隔符：']),
-            h(Col, { span: 19 }, () => [
+            h(Col, $colAttrs1, () => [
               h(Input, {
                 modelValue: config.separator,
                 'onUpdate:modelValue'(_: any) { config.separator = _ }
@@ -401,7 +415,7 @@ const Config = defineComponent({
           ]),
           h(Row, $rowAttrs, () => [
             h(Col, $colAttrs0, () => ['模板：']),
-            h(Col, { span: 19 }, () => [
+            h(Col, $colAttrs1, () => [
               h(Input, {
                 type: 'textarea',
                 autosize: { minRows: 12, maxRows: 12 },
