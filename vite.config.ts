@@ -1,74 +1,86 @@
 
 import process from 'node:process'
-import { type Plugin, defineConfig } from 'vite'
+import { type Plugin, type RenderBuiltAssetUrl, defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { bindScript } from 'bind-script/plugin.vite'
 import { resolve } from 'node:path/posix'
 
-const destroyModulePreload = (): Plugin => {
-  const name = 'Destroy `vite:build-import-analysis`'
-  const { exec } = RegExp.prototype, { apply } = Reflect
-  // from vite@6.2.5/dist/node/chunks/dep-Pj_jxEzN.js:50550
-  const target = /((?:\bconst\s+|\blet\s+|\bvar\s+|,\s*)(\{[^{}.=]+\})\s*=\s*await\s+import\([^)]+\))|(\(\s*await\s+import\([^)]+\)\s*\)(\??\.[\w$]+))|\bimport\([^)]+\)(\s*\.then\(\s*(?:function\s*)?\(\s*\{([^{}.=]+)\}\))/g
-  RegExp.prototype.exec = function (this: RegExp, string: string) {
-    if (this.source === target.source && this.flags === target.flags) {
-      this.exec = (string: string) => null
-      RegExp.prototype.exec = exec
-      return this.exec(string)
+const viewUiPlus = (): Plugin => {
+  const filter = { id: /^view-ui-plus$/ }
+  return {
+    name: 'view-ui-plus',
+    enforce: 'pre',
+    apply: 'build',
+    resolveId: { filter, handler(id) { return id } },
+    load: { filter, handler(id) { return `export * from 'view-ui-plus/src/components/index'` } },
+    transform: {
+      filter: { id: /\/node_modules\/view-ui-plus\/src\/utils\/dom\.js$/ },
+      handler(code, id) { return `export { on, off } from 'bind:utils'` }
     }
-    return apply(exec, this, [string])
   }
+}
+
+const destroyBuildImportAnalysis = (): Plugin => {
+  const name = 'Destroy `vite:build-import-analysis`'
+  const preloadHelperIdRE = /^\0vite\/preload-helper\.js$/
+  const filter = { id: preloadHelperIdRE }
+  const dynamicImportPrefixRE = /(?<!\w)__vitePreload(?=\s*\()/
+  const transformChunkRE = /(?<!\w)__vitePreload\(\(\) => ([^,]+?),\s*__VITE_IS_MODERN__\?__VITE_PRELOAD__:void 0,\s*import\.meta\.url\)/g
   return {
     name,
+    enforce: 'pre',
     apply: 'build',
-    transform: {
-      order: 'post',
-      handler(code, id) {
-        if (id.startsWith('\0vite/preload-helper')) {
-          return `export let __vitePreload`
-        }
-        if (id.startsWith('\0vite/modulepreload-polyfill')) { return '' }
-        if (code.includes('__vitePreload(')) {
-          return code.replace(/__vitePreload\(\(\) => ([^,]+?),__VITE_IS_MODERN__\?"?__VITE_PRELOAD__"?\:void 0,import\.meta\.url\)/, '$1')
-        }
-      }
+    resolveId: { filter, handler(id) { return id } },
+    load: { filter, handler(id) { return `export let __vitePreload` } },
+    renderChunk(code, chunk) {
+      if (!dynamicImportPrefixRE.test(code)) { return }
+      return code.replace(transformChunkRE, '$1')
     }
   }
 }
 
 const externalAssets = (): Plugin => {
-  const reg = /\/(ionicons)-[-\w]{8}\.((?!woff2)\S+)$/
+  const reg = /\/(ionicons)-[-\w]{8}\.(\S+?)(?:$|\?)/
+  const fontType = 'woff2'
+  const inject = []
+  const renderBuiltUrl: RenderBuiltAssetUrl = (fileName, { type, hostId, hostType }) => {
+    if (type === 'asset' && hostType === 'css') {
+      const m = fileName.match(reg)
+      if (m != null) {
+        if (m[2] !== fontType) { return 'about:invalid' }
+        const href = `./${fileName}`
+        inject[inject.length] = {
+          tag: 'link', injectTo: 'head', attrs: {
+            rel: 'preload', crossorigin: !0, href,
+            as: 'font', type: `font/${fontType}`
+          }
+        }
+      }
+    }
+    return { relative: true }
+  }
   return {
     name: 'external-assets',
     apply: 'build',
     config(config, env) {
-      return {
-        experimental: {
-          renderBuiltUrl(fileName, { type, hostId, hostType }) {
-            if (type === 'asset' && hostType === 'css') {
-              const m = fileName.match(reg)
-              if (m != null) { return 'about:invalid' }
-            }
-            return { relative: true }
-          }
-        }
-      }
+      return { experimental: { renderBuiltUrl } }
     },
     generateBundle(options, bundle) {
       for (const fileName of Object.keys(bundle)) {
         const m = fileName.match(reg)
-        if (m != null) { delete bundle[fileName] }
+        if (m != null && m[2] !== fontType) { delete bundle[fileName] }
       }
-    }
+    },
+    transformIndexHtml(html, ctx) { return inject }
   }
 }
 
 const buildTarget = (): Plugin => {
-  const map = new Map()
+  const map = new Map<string, string>()
   for (const name of ['countup.js', 'numeral', 'dayjs', 'js-calendar', 'view-ui-plus/src/utils/date']) {
     map.set(name, 'export default null')
   }
-  map.set('undici', 'export let stream')
+  map.set('undici', 'export let Client, interceptors, errors')
   map.set('encoding-sniffer', 'export let decodeBuffer, DecodeStream')
   map.set('qrcode', 'export let toDataURL')
   map.set('cheerio', 'export let load')
@@ -111,17 +123,18 @@ const buildTarget = (): Plugin => {
         }
       }
     },
-    resolveId(source) {
+    resolveId(source, importer, options) {
       if (map.has(source)) { return source }
       if (target === 'server' && source === 'vue') {
         return source
       }
     },
-    load(id) {
+    load(id, options) {
       if (id === 'vue') {
         return this.resolve(id).then(async ({ id }) => {
           const Vue = await import(`file:///${id}`)
           const { func, other } = Object.groupBy(Object.keys(Vue), key => {
+            if (!/^(?=[A-Z_a-z])\w+$/.test(key)) { return '.' }
             return typeof Vue[key] === 'function' ? 'func' : 'other'
           })
           return `\
@@ -133,24 +146,27 @@ export const { ${func.join(', ')} } = Vue
       }
       return map.get(id)
     },
-    transformIndexHtml(html, ctx) {
-      if (target === 'pages') {
-        return [{ tag: 'link', injectTo: 'head', attrs: { rel: 'icon', href: './favicon.svg' } }]
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, ctx) {
+        if (target === 'pages') {
+          return [{ tag: 'link', injectTo: 'head', attrs: { rel: 'icon', href: './favicon.svg' } }]
+        }
       }
     }
   }
 }
 
 const meta = (): Plugin => {
+  const filter = { id: /^meta:/ }
   return {
     name: 'meta',
-    resolveId(source) {
-      if (source.startsWith('meta:')) { return source }
-    },
-    load(id, options) {
-      if (!id.startsWith('meta:')) { return }
-      const [, name, content = 'content'] = id.match(/^meta:([^/]+)(?:\/([^/]+))?$/)!
-      return `\
+    resolveId: { filter, handler(id) { return id } },
+    load: {
+      filter,
+      handler(id, options) {
+        const [, name, content = 'content'] = id.match(/^meta:([^/]+)(?:\/([^/]+))?$/)!
+        return `\
 import { keys } from 'bind:Object'
 import { getOwn } from 'bind:utils'
 import { escapeAttr } from '@/bind'
@@ -161,14 +177,15 @@ export default function* (record) {
     yield \`<meta ${name}="\${escapeAttr(key)}" ${content}="\${escapeAttr(value)}">\`
   }
 }`
+      }
     }
   }
 }
 
 export default defineConfig({
   appType: 'spa',
-  base: './',
   root: 'src',
+  base: './',
   publicDir: '../public',
   cacheDir: '../node_modules/.vite',
   resolve: {
@@ -180,10 +197,9 @@ export default defineConfig({
     assetsDir: '.assets',
     emptyOutDir: false,
     target: 'esnext',
-    modulePreload: { polyfill: false },
+    modulePreload: false,
     cssCodeSplit: false,
     minify: false,
-    // ssrManifest: '_manifest.ssr.json',
     chunkSizeWarningLimit: 1024,
     rollupOptions: {
       external: [/^(?=node:)/],
@@ -194,27 +210,12 @@ export default defineConfig({
   },
   ssr: { noExternal: /^(?!node:)/ },
   plugins: [
+    bindScript(),
     vue(),
-    destroyModulePreload(),
+    viewUiPlus(),
+    destroyBuildImportAnalysis(),
     externalAssets(),
     buildTarget(),
     meta(),
-    bindScript(),
-    {
-      name: 'view-ui-plus',
-      enforce: 'pre',
-      apply: 'build',
-      resolveId(source) {
-        if (source === 'view-ui-plus') { return source }
-      },
-      load(id) {
-        if (id === 'view-ui-plus') {
-          return `\
-export * from 'view-ui-plus/src/components/index'
-import pkg from 'view-ui-plus/package.json'
-export const version = pkg.version`
-        }
-      }
-    }
   ]
 })

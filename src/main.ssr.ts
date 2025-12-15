@@ -10,6 +10,7 @@ export { config, readConfig, writeConfig } from './config'
 export { S, P, createBatchParams } from './components/app.vue'
 export { handleRequest as handleRequestBbdown } from './utils/bbdown'
 export { illustId, illustName } from './utils/illust-name'
+export { default as checkVersion } from './utils/check-version.js?raw'
 
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'

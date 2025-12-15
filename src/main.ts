@@ -1,7 +1,6 @@
 
 import '@/meta-fetch/mod'
 import { type ComponentPublicInstance, createApp, createSSRApp } from 'vue'
-import { $then } from 'bind:utils'
 import { defineProperty } from 'bind:Object'
 import { ready } from './init'
 import App, { type Store } from './components/app.vue'
@@ -14,6 +13,7 @@ declare global {
   }
 }
 
+await ready
 export class MetadataFetcher extends HTMLElement {
   static {
     customElements.define(tagName, this)
@@ -38,9 +38,7 @@ export class MetadataFetcher extends HTMLElement {
       }
     }
     const create = CSR && this.children.length > 0 ? createSSRApp : createApp
-    $then(ready, _ => {
-      const app = create(App, { store })
-      this.#vm = app.mount(this)
-    })
+    const app = create(App, { store })
+    this.#vm = app.mount(this)
   }
 }
