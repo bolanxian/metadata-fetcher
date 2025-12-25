@@ -1,11 +1,18 @@
 import { type Prop, type WatchEffect, defineComponent, shallowReactive, watchEffect, createVNode as h, onMounted } from 'vue'
 import { Button, Poptip, SkeletonItem } from 'view-ui-plus'
 import { $then } from 'bind:utils'
+import { canHover } from '@/bind'
 type OnCleanup = Parameters<WatchEffect>[0]
 const TARGET = import.meta.env.TARGET
 
 let toDataURL: typeof import('qrcode').toDataURL
 let ready: Promise<void>
+const load = () => {
+  ready ??= $then(import('@/deps/dep-qrcode'), $ => {
+    ({ toDataURL } = $)
+  })
+}
+if (TARGET == 'pages') { load() }
 
 const QRCodeProps: Record<'icon' | 'text', Prop<string>> = { icon: null!, text: null! }
 export const QRCode = defineComponent(TARGET == 'server' ? {
@@ -49,9 +56,7 @@ export const QRCode = defineComponent(TARGET == 'server' ? {
     const createDataURL = async (text: string, onCleanup: OnCleanup) => {
       let aborted = false
       onCleanup(() => { aborted = true })
-      ready ??= $then(import('@/deps/dep-qrcode'), $ => {
-        ({ toDataURL } = $)
-      })
+      if (TARGET != 'pages') { load() }
       await new Promise(ok => { setTimeout(ok, 200) })
       await ready
       if (aborted) { return '' }
@@ -62,9 +67,7 @@ export const QRCode = defineComponent(TARGET == 'server' ? {
       if (aborted) { return '' }
       return data.url = url
     }
-    onMounted(() => {
-      data.trigger = matchMedia('(hover: hover)').matches ? 'hover' : 'click'
-    })
+    onMounted(() => { data.trigger = canHover ? 'hover' : 'click' })
     const $poptip = {
       trigger: 'hover', placement: 'bottom-start', disabled: true,
       onOnPopperShow() { data.isShow = true },

@@ -6,11 +6,14 @@ import { toString } from 'bind:Number'
 import { fromCharCode, codePointAt, charCodeAt, indexOf, padStart, slice, toUpperCase } from 'bind:String'
 import { freeze } from 'bind:Object'
 import * as cheerio from 'cheerio'
+const TARGET = import.meta.env.TARGET
+const CLIENT = TARGET == 'client' || TARGET == 'pages'
 
 export const noop = () => { }
 export const nextTick = queueMicrotask
 export const empty = freeze([])
 export const voidPromise = Promise.resolve()
+export const canHover = CLIENT ? matchMedia('(hover: hover)').matches : null!
 
 export const iterator: typeof Symbol.iterator = Symbol.iterator
 export const join = (iter: Iterable<any>, separator = ',') => {

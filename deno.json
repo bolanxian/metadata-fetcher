@@ -7,14 +7,13 @@
     "build:koishi": "export VITE_TARGET=koishi && npm run build:client --",
     "build:pages": "export VITE_TARGET=pages && npm run build:client --",
     "build:pages:min": "deno task build:pages --minify",
-    "serve": "deno serve --quiet -S=cpus,systemMemoryInfo,osRelease -E -N -R=. -W=./__cache__ --allow-run=bbdown --port 6702 ./lib/server.js",
-    "fetch": " deno run --quiet -E=NODE_ENV -N -R=. -W=./__cache__ ./lib/main.js fetch",
-    "batch": " deno run --quiet -E=NODE_ENV -N -R=. -W=./__cache__ ./lib/main.js batch",
-    "id": "    deno run --quiet -E=NODE_ENV -N -R=. -W=./__cache__ ./lib/main.js id",
-    "list": "  deno run --quiet -E=NODE_ENV -N -R=. -W=./__cache__ ./lib/main.js list",
-    "name": "  deno run --quiet -E=NODE_ENV -N -R=. -W=./__cache__ ./lib/main.js name",
-    "escape": "deno run --quiet -E=NODE_ENV -N -R=. -W=./__cache__ ./lib/main.js escape",
-    "test": "  deno test --no-check -E=NODE_ENV -R=. -W=./__cache__ ./lib/main.test.js --",
-    "bench": "deno bench --no-check -E=NODE_ENV -R=. -W=./__cache__ ./lib/main.js --"
+    "serve": "deno serve --quiet -S=cpus,systemMemoryInfo,osRelease -E -N -R=. -W=./__cache__ --allow-run --port 6702 ./lib/server.js",
+    "fetch": " deno run --quiet --no-prompt --no-remote -E -N -R=. -W=./__cache__ ./lib/main.js fetch",
+    "batch": " deno run --quiet --no-prompt --no-remote -E -N -R=. -W=./__cache__ ./lib/main.js batch",
+    "id": "    deno run --quiet --no-prompt --no-remote -E -N -R=. -W=./__cache__ ./lib/main.js id",
+    "list": "  deno run --quiet --no-prompt --no-remote -E -N -R=. -W=./__cache__ ./lib/main.js list",
+    "name": "  deno run --quiet --no-prompt --no-remote -E -N -R=. -W=./__cache__ ./lib/main.js name",
+    "test": "  deno test --no-check -E -R=. -W=./__cache__ ./lib/main.test.js --",
+    "bench": "deno bench --no-check -E -R=. -W=./__cache__ ./lib/main.js --"
   }
 }

@@ -1,9 +1,11 @@
 
 import process from 'node:process'
+import { resolve, extname } from 'node:path/posix'
 import { type Plugin, type RenderBuiltAssetUrl, defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { bindScript } from 'bind-script/plugin.vite'
-import { resolve } from 'node:path/posix'
+import { $string } from 'bind-script/src/utils'
+const compare: (a: string, b: string) => number = $string.localeCompare
 
 const viewUiPlus = (): Plugin => {
   const filter = { id: /^view-ui-plus$/ }
@@ -16,6 +18,31 @@ const viewUiPlus = (): Plugin => {
     transform: {
       filter: { id: /\/node_modules\/view-ui-plus\/src\/utils\/dom\.js$/ },
       handler(code, id) { return `export { on, off } from 'bind:utils'` }
+    }
+  }
+}
+
+const meta = (): Plugin => {
+  const filter = { id: /^meta:/ }
+  return {
+    name: 'meta',
+    resolveId: { filter, handler(id) { return id } },
+    load: {
+      filter,
+      handler(id, options) {
+        const [, name, content = 'content'] = id.match(/^meta:([^/]+)(?:\/([^/]+))?$/)!
+        return `\
+import { keys } from 'bind:Object'
+import { getOwn } from 'bind:utils'
+import { escapeAttr } from '@/bind'
+export default function* (record) {
+  for (const key of keys(record)) {
+    const value = getOwn(record, key)
+    if (value == null) { continue }
+    yield \`<meta ${name}="\${escapeAttr(key)}" ${content}="\${escapeAttr(value)}">\`
+  }
+}`
+      }
     }
   }
 }
@@ -80,6 +107,7 @@ const buildTarget = (): Plugin => {
   for (const name of ['countup.js', 'numeral', 'dayjs', 'js-calendar', 'view-ui-plus/src/utils/date']) {
     map.set(name, 'export default null')
   }
+  map.set('vue', `export * from '@vue/runtime-dom'`)
   map.set('undici', 'export let Client, interceptors, errors')
   map.set('encoding-sniffer', 'export let decodeBuffer, DecodeStream')
   map.set('qrcode', 'export let toDataURL')
@@ -92,7 +120,7 @@ const buildTarget = (): Plugin => {
     name: 'target',
     enforce: 'pre',
     apply: 'build',
-    config(config, { isSsrBuild }) {
+    config(config, { mode, isSsrBuild }) {
       target = !isSsrBuild ? (process.env.VITE_TARGET as typeof target) ?? 'client' : 'server'
       let external: typeof config.build.rollupOptions.external
       if (target == 'server') {
@@ -116,7 +144,8 @@ const buildTarget = (): Plugin => {
       }
       return {
         define: {
-          'import.meta.env.TARGET': JSON.stringify(target)
+          'import.meta.env.TARGET': JSON.stringify(target),
+          'process.env.NODE_ENV': JSON.stringify(mode),
         },
         build: {
           rollupOptions: { external }
@@ -125,58 +154,36 @@ const buildTarget = (): Plugin => {
     },
     resolveId(source, importer, options) {
       if (map.has(source)) { return source }
-      if (target === 'server' && source === 'vue') {
-        return source
-      }
     },
     load(id, options) {
-      if (id === 'vue') {
-        return this.resolve(id).then(async ({ id }) => {
-          const Vue = await import(`file:///${id}`)
-          const { func, other } = Object.groupBy(Object.keys(Vue), key => {
-            if (!/^(?=[A-Z_a-z])\w+$/.test(key)) { return '.' }
-            return typeof Vue[key] === 'function' ? 'func' : 'other'
-          })
-          return `\
-export { ${other.join(', ')} } from ${JSON.stringify(id)}
-import * as Vue from ${JSON.stringify(id)}
-export const { ${func.join(', ')} } = Vue
-`
-        })
-      }
       return map.get(id)
+    },
+    transform: {
+      filter: { id: /\.vue$/ },
+      order: 'post',
+      handler(code, id, options) {
+        if (target !== 'server') { return }
+        return code.replace(/const _sfc_setup = _sfc_main\.setup|_sfc_main\.setup = (?=\(props, ctx\) => {)/g, ';')
+      },
     },
     transformIndexHtml: {
       order: 'post',
       handler(html, ctx) {
-        if (target === 'pages') {
-          return [{ tag: 'link', injectTo: 'head', attrs: { rel: 'icon', href: './favicon.svg' } }]
+        const tags = []
+        for (const id of ctx?.chunk.imports ?? []) {
+          tags[tags.length] = {
+            tag: 'link', injectTo: 'head',
+            attrs: { rel: 'modulepreload', crossorigin: !0, href: id }
+          }
         }
-      }
-    }
-  }
-}
-
-const meta = (): Plugin => {
-  const filter = { id: /^meta:/ }
-  return {
-    name: 'meta',
-    resolveId: { filter, handler(id) { return id } },
-    load: {
-      filter,
-      handler(id, options) {
-        const [, name, content = 'content'] = id.match(/^meta:([^/]+)(?:\/([^/]+))?$/)!
-        return `\
-import { keys } from 'bind:Object'
-import { getOwn } from 'bind:utils'
-import { escapeAttr } from '@/bind'
-export default function* (record) {
-  for (const key of keys(record)) {
-    const value = getOwn(record, key)
-    if (value == null) { continue }
-    yield \`<meta ${name}="\${escapeAttr(key)}" ${content}="\${escapeAttr(value)}">\`
-  }
-}`
+        if (target === 'pages') {
+          tags[tags.length] = { tag: 'link', injectTo: 'head', attrs: { rel: 'icon', href: './favicon.svg' } }
+        }
+        const compare2: typeof compare = (a, b) => compare(extname(a), extname(b)) || compare(a, b)
+        for (const href of Object.keys(ctx.bundle).toSorted(compare2)) {
+          tags[tags.length] = { tag: 'link', injectTo: 'head', attrs: { 'rel': '@app-asset', href } }
+        }
+        return tags
       }
     }
   }
@@ -204,18 +211,25 @@ export default defineConfig({
     rollupOptions: {
       external: [/^(?=node:)/],
       output: {
-        minifyInternalExports: false
+        minifyInternalExports: false,
+        manualChunks: (id, meta) => {
+          if (id.includes('/node_modules/@vue/')) { return 'dep-vue' }
+          if (id.includes('/node_modules/cheerio/')) { return 'dep-cheerio' }
+        }
       }
     }
   },
-  ssr: { noExternal: /^(?!node:)/ },
+  ssr: {
+    resolve: { conditions: ['module', 'import', 'default'] },
+    noExternal: true
+  },
   plugins: [
     bindScript(),
     vue(),
     viewUiPlus(),
+    meta(),
     destroyBuildImportAnalysis(),
     externalAssets(),
     buildTarget(),
-    meta(),
   ]
 })
