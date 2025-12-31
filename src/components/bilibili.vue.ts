@@ -3,10 +3,10 @@ import { type VNode, type Prop, defineComponent, shallowReactive, watchEffect, o
 import { Alert, ButtonGroup, Button, Card, CellGroup, Cell, Divider, Drawer, Icon, Tag } from 'view-ui-plus'
 import lineClamp from 'view-ui-plus/src/directives/line-clamp'
 import { hasOwn, getOwn } from 'bind:utils'
-import { keys, values } from 'bind:Object'
+import { keys } from 'bind:Object'
 import { from } from 'bind:Array'
 import { BBDown } from './bbdown'
-import { join, toHttps } from '@/bind'
+import { toHttps } from '@/bind'
 import { instantToString, formatDuration } from '@/utils/temporal'
 import { definePluginComponent } from '@/meta-fetch/plugin'
 import { type Data, toUrl, toSpaceUrl, bilibiliVideo } from '@/meta-fetch/platforms/bilibili-video'
@@ -20,7 +20,7 @@ export const errorMap = {
   62012: '仅UP主自己可见'
 }
 export const copyrightMap = { 1: '自制', 2: '转载' }
-export const copyrightValues = join(values(copyrightMap), ',')
+export const copyrightValues = JSON.stringify(copyrightMap)
 export const enum ArgueType {
   NEUTRAL = 0,
   GENERAL_NEGATIVE = 1,
@@ -32,15 +32,25 @@ export const enum DescInfoType {
 }
 
 const $a = { referrerpolicy: 'no-referrer', target: '_blank' }
-const $img = { referrerpolicy: 'no-referrer' }
+const $img = { referrerpolicy: 'no-referrer', fetchpriority: 'low' }
 
-const renderArgue = ({ argue_info: info }: any, inner: VNode): (VNode | null)[] => {
-  const msg = info?.argue_msg
+const renderHoner = (videoData: any): VNode[] | null => {
+  const honor: any[] = getOwn(videoData.honor_reply, 'honor')
+  if (!(honor?.length > 0)) { return null }
+  const ret: VNode[] = []
+  for (const { desc } of honor) {
+    ret[ret.length] = h(Tag, { color: 'magenta' }, () => [desc])
+  }
+  return ret
+}
+const renderArgue = (videoData: any, inner: VNode): (VNode | null)[] => {
+  const argue = getOwn(videoData, 'argue_info')
+  const msg: string = getOwn(argue, 'argue_msg')
   if (!msg) { return [null, inner, null] }
   let before = false
   let color = 'default'
   let type: string = null!
-  switch (info.argue_type) {
+  switch (argue.argue_type) {
     case ArgueType.STRONG_NEGATIVE:
       before = true; color = 'error'; type = 'ios-alert'
       break
@@ -51,13 +61,13 @@ const renderArgue = ({ argue_info: info }: any, inner: VNode): (VNode | null)[] 
       type = 'ios-alert-outline'
       break
   }
-  const argue = h(Tag, { color }, () => [
+  const $argue = h(Tag, { color }, () => [
     type != null ? h(Icon, { type }) : null, msg
   ])
   return [
-    before ? argue : null,
+    before ? $argue : null,
     inner,
-    before ? null : argue
+    before ? null : $argue
   ]
 }
 type Channel = { name: string, url: string, desc?: string }
@@ -210,7 +220,7 @@ export default definePluginComponent(bilibiliVideo, defineComponent({
                   data.subChannel_v2?.name
                 ])
               ]) : null,
-              h(Tag, { color: 'cyan', title: `视频类型[${copyrightValues}]=${videoData.copyright}` }, () => [data.copyright]),
+              h(Tag, { color: 'cyan', title: `视频类型=${videoData.copyright}\n${copyrightValues}` }, () => [data.copyright]),
               h('a', { ...$a, href: toUrl(id!) }, [
                 h(Tag, { color: 'blue' }, () => [id])
               ]),
@@ -218,6 +228,7 @@ export default definePluginComponent(bilibiliVideo, defineComponent({
                 h(Tag, { color: 'blue' }, () => [videoData.bvid])
               ]),
             ]),
+            h('div', null, renderHoner(videoData)),
             h('div', null, from(tags, (tag: any) => {
               const title = `${tag.tag_name}\ntag_type=${tag.tag_type}`
               let type: string | null = null

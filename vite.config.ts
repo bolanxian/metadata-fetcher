@@ -1,7 +1,9 @@
 
 import process from 'node:process'
+import { hash } from 'node:crypto'
 import { resolve, extname } from 'node:path/posix'
-import { type Plugin, type RenderBuiltAssetUrl, defineConfig } from 'vite'
+import type { Plugin, RenderBuiltAssetUrl, HtmlTagDescriptor } from 'vite'
+import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { bindScript } from 'bind-script/plugin.vite'
 import { $string } from 'bind-script/src/utils'
@@ -69,17 +71,17 @@ const destroyBuildImportAnalysis = (): Plugin => {
 const externalAssets = (): Plugin => {
   const reg = /\/(ionicons)-[-\w]{8}\.(\S+?)(?:$|\?)/
   const fontType = 'woff2'
-  const inject = []
+  const inject: HtmlTagDescriptor[] = []
   const renderBuiltUrl: RenderBuiltAssetUrl = (fileName, { type, hostId, hostType }) => {
     if (type === 'asset' && hostType === 'css') {
       const m = fileName.match(reg)
       if (m != null) {
         if (m[2] !== fontType) { return 'about:invalid' }
         const href = `./${fileName}`
+        const type = `font/${fontType}`
         inject[inject.length] = {
           tag: 'link', injectTo: 'head', attrs: {
-            rel: 'preload', crossorigin: !0, href,
-            as: 'font', type: `font/${fontType}`
+            rel: 'preload', crossorigin: !0, href, as: 'font', type
           }
         }
       }
@@ -164,24 +166,38 @@ const buildTarget = (): Plugin => {
       handler(code, id, options) {
         if (target !== 'server') { return }
         return code.replace(/const _sfc_setup = _sfc_main\.setup|_sfc_main\.setup = (?=\(props, ctx\) => {)/g, ';')
-      },
+      }
     },
     transformIndexHtml: {
       order: 'post',
       handler(html, ctx) {
-        const tags = []
+        const tags: HtmlTagDescriptor[] = []
         for (const id of ctx?.chunk.imports ?? []) {
           tags[tags.length] = {
             tag: 'link', injectTo: 'head',
-            attrs: { rel: 'modulepreload', crossorigin: !0, href: id }
+            attrs: { rel: 'modulepreload', crossorigin: !0, href: `./${id}` }
           }
         }
         if (target === 'pages') {
-          tags[tags.length] = { tag: 'link', injectTo: 'head', attrs: { rel: 'icon', href: './favicon.svg' } }
+          tags[tags.length] = {
+            tag: 'link', injectTo: 'head',
+            attrs: { rel: 'icon', href: './favicon.svg' }
+          }
         }
+        const algo = 'sha256'
         const compare2: typeof compare = (a, b) => compare(extname(a), extname(b)) || compare(a, b)
         for (const href of Object.keys(ctx.bundle).toSorted(compare2)) {
-          tags[tags.length] = { tag: 'link', injectTo: 'head', attrs: { 'rel': '@app-asset', href } }
+          const asset = ctx.bundle[href]
+          let data: string | Uint8Array
+          switch (asset.type) {
+            case 'chunk': data = asset.code; break
+            case 'asset': data = asset.source; break
+          }
+          const integrity = `${algo}-${hash(algo, data, 'base64')}`.replace(/=+$/, '')
+          tags[tags.length] = {
+            tag: 'link', injectTo: 'head',
+            attrs: { 'rel': '@app-asset', href, integrity }
+          }
         }
         return tags
       }
