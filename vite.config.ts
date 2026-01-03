@@ -6,11 +6,18 @@ import type { Plugin, RenderBuiltAssetUrl, HtmlTagDescriptor } from 'vite'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { bindScript } from 'bind-script/plugin.vite'
-import { $string } from 'bind-script/src/utils'
+import { $string, test } from 'bind-script/src/utils'
 const compare: (a: string, b: string) => number = $string.localeCompare
+const emptyModule = `/** @unreachable */\nexport default null`
 
 const viewUiPlus = (): Plugin => {
   const filter = { id: /^view-ui-plus$/ }
+  const prefix = '/node_modules/view-ui-plus/src/'
+  const names = `\
+Row,Col,Menu,Submenu,MenuItem,Card,CellGroup,Cell,\
+Input,Checkbox,Select,Option,RadioGroup,Radio,ButtonGroup,Button,\
+Alert,Divider,Drawer,Icon,Message,Modal,Poptip,SkeletonItem,Tag\
+`
   return {
     name: 'view-ui-plus',
     enforce: 'pre',
@@ -18,8 +25,16 @@ const viewUiPlus = (): Plugin => {
     resolveId: { filter, handler(id) { return id } },
     load: { filter, handler(id) { return `export * from 'view-ui-plus/src/components/index'` } },
     transform: {
-      filter: { id: /\/node_modules\/view-ui-plus\/src\/utils\/dom\.js$/ },
-      handler(code, id) { return `export { on, off } from 'bind:utils'` }
+      filter: { id: /\/node_modules\/view-ui-plus\// },
+      handler(code, id) {
+        if (id.endsWith(`${prefix}utils/index.js`)) { return `export const isClient = !import.meta.env.SSR` }
+        if (id.endsWith(`${prefix}utils/date.js`)) { return emptyModule }
+        if (id.endsWith(`${prefix}utils/dom.js`)) { return `export { on, off } from 'bind:utils'` }
+        if (id.endsWith(`${prefix}components/index.js`)) {
+          const re = RegExp(`^export \\{ default as (${names.replaceAll(',', '|')}) \\} from `)
+          return code.split('\n').filter(line => test(re, line)).join('\n')
+        }
+      }
     }
   }
 }
@@ -106,16 +121,17 @@ const externalAssets = (): Plugin => {
 
 const buildTarget = (): Plugin => {
   const map = new Map<string, string>()
-  for (const name of ['countup.js', 'numeral', 'dayjs', 'js-calendar', 'view-ui-plus/src/utils/date']) {
-    map.set(name, 'export default null')
+  const pre = '/** @unreachable */\n'
+  for (const name of ['countup.js', 'numeral', 'dayjs', 'js-calendar', 'lodash.throttle']) {
+    map.set(name, emptyModule)
   }
   map.set('vue', `export * from '@vue/runtime-dom'`)
-  map.set('undici', 'export let Client, interceptors, errors')
-  map.set('encoding-sniffer', 'export let decodeBuffer, DecodeStream')
-  map.set('qrcode', 'export let toDataURL')
-  map.set('cheerio', 'export let load')
-  map.set('@xterm/xterm', 'export let Terminal')
-  map.set('@xterm/addon-webgl', 'export let WebglAddon')
+  map.set('undici', `${pre}export let Client, interceptors, errors`)
+  map.set('encoding-sniffer', `${pre}export let decodeBuffer, DecodeStream`)
+  map.set('qrcode', `${pre}export let toDataURL`)
+  map.set('cheerio', `${pre}export let load`)
+  map.set('@xterm/xterm', `${pre}export let Terminal`)
+  map.set('@xterm/addon-webgl', `${pre}export let WebglAddon`)
 
   let target: 'client' | 'server' | 'pages' | 'koishi'
   return {
