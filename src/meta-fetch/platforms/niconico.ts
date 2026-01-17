@@ -3,7 +3,7 @@ import { test } from 'bind:utils'
 import { slice } from 'bind:String'
 import { htmlToText } from '@/bind'
 import { config } from '@/config'
-import { cache, json } from '../cache'
+import { cache } from '../cache'
 import { $fetch, jsonInit } from '../fetch'
 import { defineDiscover } from '../discover'
 import { definePlugin } from '../plugin'
@@ -22,7 +22,7 @@ export const toUrl = (id: string, type = slice(id, 0, 2)): string => {
 const getUser = async (userId: string): Promise<User | null> => {
   const id = `nico!user!${userId}`
   const url = `https://account.nicovideo.jp/api/public/v1/users.json?userIds=${userId}`
-  return await json<User | null>(cache, id, async () => {
+  return await cache.json<User | null>(id, async () => {
     const $user = await (await $fetch(url, jsonInit)).json()
     if ($user?.meta?.status !== 200) {
       throw new TypeError(`Request json<${id}> failed.`, { cause: $user })
@@ -41,7 +41,7 @@ const transformWork = (id: string, work: any) => {
 }
 const getWork = async (id: string) => {
   const url = `https://public-api.commons.nicovideo.jp/v1/works/${id}?with_meta=1`
-  const work = await json(cache, id, async () => {
+  const work = await cache.json(id, async () => {
     const $work = await (await $fetch(url, jsonInit)).json()
     if ($work?.meta?.status !== 200) {
       throw new TypeError(`Request json<${id}> failed.`, { cause: $work })

@@ -3,7 +3,7 @@ import * as cheerio from 'cheerio'
 import { hasOwn, test } from 'bind:utils'
 import { slice } from 'bind:String'
 import { keys } from 'bind:Object'
-import { cache, json } from '../cache'
+import { cache } from '../cache'
 import { $fetch, htmlInit, jsonInit } from '../fetch'
 import { defineDiscover } from '../discover'
 import { definePlugin, redirectPlugin } from '../plugin'
@@ -91,7 +91,7 @@ export const bilibiliVideo = definePlugin<Data>({
     let data: any, extraData: any
     return {
       error: null, redirect: null, videoData: null, tags: null,
-      ...await json(cache, id, async () => {
+      ...await cache.json(id, async () => {
         let text = await cache.get(`${id}.html`)
         if (text == null) {
           const resp = await $fetch(url, htmlInit)
@@ -123,7 +123,7 @@ export const bilibiliVideo = definePlugin<Data>({
         }
         return { videoData, tags }
       }),
-      channelKv: channelKv ??= await json(cache, 'bili!channel', () => data?.channelKv) ?? null,
+      channelKv: channelKv ??= await cache.json('bili!channel', () => data?.channelKv) ?? null,
       ...extraData
     }
   },

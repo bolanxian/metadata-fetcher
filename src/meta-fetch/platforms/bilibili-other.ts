@@ -6,7 +6,7 @@ import { toHttps } from '@/bind'
 import { defineDiscover } from '../discover'
 import { definePlugin, redirectPlugin } from '../plugin'
 import { $fetch, htmlInit } from '../fetch'
-import { cache, json } from '../cache'
+import { cache } from '../cache'
 import { REG_INIT } from './bilibili-video'
 import { fromHTML } from '@/utils/find-json-object'
 export const REG_CV = /^cv((?!0\d)\d+)$/
@@ -58,7 +58,7 @@ definePlugin({
     }
   },
   async fetch({ id, url }) {
-    return await json(cache, id, async () => {
+    return await cache.json(id, async () => {
       let text = await cache.get(`${id}.html`)
       if (text == null) {
         const resp = await $fetch(url, htmlInit)

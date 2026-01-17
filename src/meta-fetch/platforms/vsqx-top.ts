@@ -1,7 +1,7 @@
 
 import { test, replace } from 'bind:utils'
 import { slice } from 'bind:String'
-import { cache, json } from '../cache'
+import { cache } from '../cache'
 import { $fetch, jsonInit } from '../fetch'
 import { defineDiscover } from '../discover'
 import { definePlugin, resolve } from '../plugin'
@@ -30,7 +30,7 @@ definePlugin({
   },
   async fetch({ id }) {
     const url = `https://www.vsqx.top/api/app/project_msg/${slice(id, 2)}`
-    return await json(cache, id, async () => {
+    return await cache.json(id, async () => {
       const $ = await (await $fetch(url, jsonInit)).json()
       if (!$.success) { throw new TypeError($.message || 'Unknown Error') }
       return $.data

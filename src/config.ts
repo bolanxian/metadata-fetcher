@@ -32,6 +32,7 @@ publishDate=日期：
 shortUrl||url=链接：
 thumbnailUrl=封面：
 relatedUrl=相关链接：
+keywords=标签：
 description="简介：\\n"
 `,
   batch: {

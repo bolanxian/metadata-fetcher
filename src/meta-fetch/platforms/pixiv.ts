@@ -1,7 +1,7 @@
 
-import { test, match } from 'bind:utils'
+import { getOwn, test, match } from 'bind:utils'
 import { join, htmlToText } from '@/bind'
-import { cache, json } from '../cache'
+import { cache } from '../cache'
 import { $fetch, jsonInit } from '../fetch'
 import { defineDiscover } from '../discover'
 import { definePlugin } from '../plugin'
@@ -48,14 +48,13 @@ definePlugin({
   },
   async fetch({ id, cacheId }) {
     const pid = match(REG_PIXIV, id)![1]
-    return json(cache, cacheId, async () => {
+    return cache.json(cacheId, async () => {
       const url = `https://www.pixiv.net/ajax/illust/${pid}`
       const data = await (await $fetch(url, jsonInit)).json()
       if (data.error) {
         throw new TypeError(`Request json<${id}> failed.`, { cause: data })
       }
       const { body } = data
-      delete body.userIllusts
       delete body.zoneConfig
       delete body.noLoginData
       delete body.extraData
@@ -68,12 +67,20 @@ definePlugin({
     for (const { tag } of data.tags.tags) {
       tags[tags.length] = tag
     }
+    let thumb: string | null = data.urls.thumb
+    if (thumb == null) {
+      const illusts = getOwn(data, 'userIllusts')
+      if (illusts != null) {
+        const pid = match(REG_PIXIV, info.id)![1]
+        thumb = getOwn(illusts, pid)?.url
+      }
+    }
     return {
       [PAGE_COUNT]: data.pageCount,
       title,
       ownerName: data.userName,
       publishDate: data.uploadDate,
-      thumbnailUrl: '',
+      thumbnailUrl: thumb ?? void 0,
       keywords: join(tags, ','),
       description: htmlToText(data.description)
     }

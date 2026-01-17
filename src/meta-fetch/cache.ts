@@ -4,22 +4,34 @@ import { empty } from '@/bind'
 import { replaceAll, indexOf, slice } from 'bind:String'
 import { keys } from 'bind:Array'
 type FS = typeof import('node:fs/promises')
+const { parse, stringify } = JSON
 
 export type TryGetFn = () => Promise<string | undefined>
-export interface ICache {
-  get(name: string): Promise<string | undefined>
-  tryGet(name: string, fn: TryGetFn): Promise<string | undefined>
-  set(name: string, value: string): Promise<void>
-  keys(): Iterator<string>
-}
-export let cache: ICache = null!
-export let initCache = (_cache: ICache) => {
+export let cache: BaseCache = null!
+export let initCache = (_cache: BaseCache) => {
   initCache = null!
   cache = _cache
 }
 const resolveName = (name: string) => replaceAll(name, '/', '!')
 
-export class NoCache implements ICache {
+export abstract class BaseCache {
+  abstract get(name: string): Promise<string | undefined>
+  abstract tryGet(name: string, fn: TryGetFn): Promise<string | undefined>
+  abstract set(name: string, value: string): Promise<void>
+  abstract keys(): Iterator<string>
+  async json<R = any>(id: string, fn: () => Promise<R>): Promise<R> {
+    const name = `${id}.json`
+    let data: R | undefined
+    const text = await this.tryGet(name, async () => {
+      data = await fn()
+      if (data !== void 0) { return stringify(data) }
+    })
+    if (data !== void 0) { return data }
+    if (text != null) { return parse(text) }
+    return (void 0)!
+  }
+}
+export class NoCache extends BaseCache {
   async get(name: string): Promise<string | undefined> { return }
   async tryGet(name: string, fn: TryGetFn): Promise<string | undefined> {
     return await fn()
@@ -27,11 +39,12 @@ export class NoCache implements ICache {
   async set(name: string, value: string): Promise<void> { }
   keys() { return keys(empty as any) as Iterator<string> }
 }
-export class FsCache implements ICache {
+export class FsCache extends BaseCache {
   #readFile: FS['readFile']
   #writeFile: FS['writeFile']
   #prefix: string
   #lru: LRUCache<string, string, TryGetFn | undefined>
+  get lru() { return this.#lru }
   static async create(prefix: string) {
     const fs = await import('node:fs/promises')
     try {
@@ -43,6 +56,7 @@ export class FsCache implements ICache {
     return new this(fs, prefix)
   }
   constructor(fs: FS, prefix: string) {
+    super()
     this.#readFile = fs.readFile
     this.#writeFile = fs.writeFile
     this.#prefix = prefix
@@ -88,13 +102,14 @@ export class FsCache implements ICache {
     }
   }
 }
-export class WebCache implements ICache {
+export class WebCache extends BaseCache {
   #cache: Cache = null!
   static async create() {
     const cache = await caches.open('metadata-fetcher')
     return new this(cache)
   }
   constructor(cache: Cache) {
+    super()
     this.#cache = cache
   }
   async get(name: string) {
@@ -121,17 +136,3 @@ export class WebCache implements ICache {
   keys() { return keys(empty as any) as Iterator<string> }
 }
 
-const { parse, stringify } = JSON
-export const json = async<R = any>(
-  cache: ICache, id: string, fn: () => Promise<R>
-): Promise<R> => {
-  const name = `${id}.json`
-  let data: R | undefined
-  const text = await cache.tryGet(name, async () => {
-    data = await fn()
-    if (data !== void 0) { return stringify(data) }
-  })
-  if (data !== void 0) { return data }
-  if (text != null) { return parse(text) }
-  return (void 0)!
-}

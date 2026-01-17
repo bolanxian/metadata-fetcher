@@ -2,7 +2,7 @@
 import { on, off } from 'bind:utils'
 import { init as initConfig } from './config'
 import { ready as readyTemporal } from '@/utils/temporal'
-import type { ICache } from '@/meta-fetch/mod'
+import type { BaseCache } from '@/meta-fetch/mod'
 import { init, NoCache, FsCache, WebCache } from '@/meta-fetch/mod'
 import './utils/extra'
 
@@ -24,7 +24,7 @@ export const ready = (async () => {
     })
   }
   let $fetch = SSR ? fetch : null!
-  let cache: ICache
+  let cache: BaseCache
   if (SSR) {
     cache = await FsCache.create('./__cache__')
   } else if (PAGES) {
