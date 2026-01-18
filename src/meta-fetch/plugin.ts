@@ -3,7 +3,8 @@ import type { DefineComponent, ExtractPropTypes, Prop } from 'vue'
 import { noop, voidPromise } from '@/bind'
 import { call } from 'bind:core'
 import { $then } from 'bind:utils'
-import { freeze } from 'bind:Object'
+import { freeze, keys, fromEntries } from 'bind:Object'
+import { from } from 'bind:Array'
 import { get, set } from 'bind:WeakMap'
 import { redirect } from './fetch'
 import { xresolveDiscover } from './discover'
@@ -90,7 +91,23 @@ export const xparse: (input: string) => [
   $then(parsedPromise, null, noop)
   yield parsedPromise
 } as any
-export const definePlugin = <T extends {}>(plugin: Plugin<T>) => {
+export const definePlugin = <T extends {}>(plugin: Omit<Plugin<T>, 'parse'> & {
+  parse: Plugin<T>['parse'] | {
+    [K in keyof ParsedInfo]: (data: T, info: ResolvedInfo) => ParsedInfo[K]
+  }
+}): Plugin<T> => {
+  if (typeof plugin.parse !== 'function') {
+    const handleMap = plugin.parse, handleKeys = keys(handleMap) as (keyof ParsedInfo)[]
+    const defaultMap: ParsedInfo = fromEntries(from(handleKeys, key => [key, void 0])) as any
+    plugin.parse = (data, info) => {
+      const result: ParsedInfo = { ...defaultMap }
+      for (const key of handleKeys) {
+        try { result[key] = handleMap[key]!(data, info)! }
+        catch (e) { reportError(e) }
+      }
+      return result
+    }
+  }
   freeze(plugin)
   const { resolve } = plugin
   defineRoute(routeMap, plugin.path, path => {
@@ -100,8 +117,8 @@ export const definePlugin = <T extends {}>(plugin: Plugin<T>) => {
       return info
     }
   })
-  pluginList[pluginList.length] = plugin
-  return plugin
+  pluginList[pluginList.length] = plugin as Plugin<T>
+  return plugin as Plugin<T>
 }
 export const definePluginComponent = <T extends {}>(
   plugin: Plugin<T>, component: Component<T>

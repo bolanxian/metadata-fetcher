@@ -53,63 +53,70 @@ definePlugin<[any, any]>({
       'videoSecondaryInfoRenderer'
     ], name => find(contents, $ => hasOwn($, name))[name]) as any
   },
-  parse(videoDesc, info) {
-    const { id, shortUrl, url } = info
-    const videoId = match(REG_YOUTUBE, id)![1]
-    const thumbnailUrl = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
-
-    let title = '', ownerName = ''
-    for (const { text } of videoDesc[0].title.runs) {
-      title += text
-    }
-    for (const { text } of videoDesc[1].owner.videoOwnerRenderer.title.runs) {
-      ownerName += text
-    }
-    const _date: string = videoDesc[0].dateText.simpleText
-    let date = parseRfc2822Date(_date)
-    date = date != null ? `${date}(${_date})` : _date
-
-    const _desc = videoDesc[1].attributedDescription
-    const description = _desc.commandRuns == null ? _desc.content : replace(RegExp(
-      join(map(_desc.commandRuns, $ => `(?<=^.{${+$.startIndex}}).{${+$.length}}`), '|'), 'sg'
-    ), _desc.content, (_, index) => {
-      const command = find(_desc.commandRuns, $ => $.startIndex === index)
-      const inner = command.onTap.innertubeCommand
-      let ep: any, url: string | undefined
-      if ((ep = inner.watchEndpoint) != null) {
-        if (videoId === ep.videoId) { return _ }
-        let suffix = ''
-        if (ep.startTimeSeconds > 0) {
-          suffix = `?t=${ep.startTimeSeconds}s`
+  parse: {
+    title(data, info) {
+      let title = ''
+      for (const { text } of data[0].title.runs) {
+        title += text
+      }
+      return title
+    },
+    ownerName(data, info) {
+      let ownerName = ''
+      for (const { text } of data[1].owner.videoOwnerRenderer.title.runs) {
+        ownerName += text
+      }
+      return ownerName
+    },
+    publishDate(data, info) {
+      const _date: string = data[0].dateText.simpleText
+      let date = parseRfc2822Date(_date)
+      return date != null ? `${date}(${_date})` : _date
+    },
+    thumbnailUrl(_, { id }) {
+      const videoId = match(REG_YOUTUBE, id)![1]
+      return `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`
+    },
+    description(videoDesc, { id }) {
+      const videoId = match(REG_YOUTUBE, id)![1]
+      const _desc = videoDesc[1].attributedDescription
+      const description = _desc?.commandRuns == null ? _desc?.content : replace(RegExp(
+        join(map(_desc.commandRuns, $ => `(?<=^.{${+$.startIndex}}).{${+$.length}}`), '|'), 'sg'
+      ), _desc.content, (_, index) => {
+        const command = find(_desc.commandRuns, $ => $.startIndex === index)
+        const inner = command.onTap.innertubeCommand
+        let ep: any, url: string | undefined
+        if ((ep = inner.watchEndpoint) != null) {
+          if (videoId === ep.videoId) { return _ }
+          let suffix = ''
+          if (ep.startTimeSeconds > 0) {
+            suffix = `?t=${ep.startTimeSeconds}s`
+          }
+          return `https://youtu.be/${ep.videoId}${suffix}`
         }
-        return `https://youtu.be/${ep.videoId}${suffix}`
-      }
-      if ((ep = inner.reelWatchEndpoint) != null) {
-        return `https://youtu.be/${ep.videoId}`
-      }
-      if ((ep = inner.urlEndpoint) != null) {
-        url = ep.url
-      } else if ((ep = inner.commandMetadata?.webCommandMetadata) != null) {
-        switch (ep.webPageType) {
-          case 'WEB_PAGE_TYPE_CHANNEL':
-            url = ep.url; break
+        if ((ep = inner.reelWatchEndpoint) != null) {
+          return `https://youtu.be/${ep.videoId}`
         }
-      }
-      if (url != null) {
-        const inst = new URL(url, `https://${host}/`)
-        if (inst.host === host && inst.pathname === '/redirect') {
-          url = inst.searchParams.get('q') ?? inst.href
-        } else {
-          url = inst.href
+        if ((ep = inner.urlEndpoint) != null) {
+          url = ep.url
+        } else if ((ep = inner.commandMetadata?.webCommandMetadata) != null) {
+          switch (ep.webPageType) {
+            case 'WEB_PAGE_TYPE_CHANNEL':
+              url = ep.url; break
+          }
         }
-        return url
-      }
-      return _
-    })
-
-    return {
-      title, ownerName, publishDate: date,
-      shortUrl, url, thumbnailUrl, description
+        if (url != null) {
+          const inst = new URL(url, `https://${host}/`)
+          if (inst.host === host && inst.pathname === '/redirect') {
+            url = inst.searchParams.get('q') ?? inst.href
+          } else {
+            url = inst.href
+          }
+          return url
+        }
+        return _
+      })
+      return description
     }
   }
 })
