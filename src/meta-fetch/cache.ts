@@ -5,21 +5,15 @@ import { replaceAll, indexOf, slice } from 'bind:String'
 import { keys } from 'bind:Array'
 type FS = typeof import('node:fs/promises')
 const { parse, stringify } = JSON
-
-export type TryGetFn = () => Promise<string | undefined>
-export let cache: BaseCache = null!
-export let initCache = (_cache: BaseCache) => {
-  initCache = null!
-  cache = _cache
-}
 const resolveName = (name: string) => replaceAll(name, '/', '!')
 
+export type TryGetFn = () => Promise<string | undefined>
 export abstract class BaseCache {
   abstract get(name: string): Promise<string | undefined>
   abstract tryGet(name: string, fn: TryGetFn): Promise<string | undefined>
   abstract set(name: string, value: string): Promise<void>
   abstract keys(): Iterator<string>
-  async json<R = any>(id: string, fn: () => Promise<R>): Promise<R> {
+  async json<R>(id: string, fn: () => Promise<R>): Promise<R> {
     const name = `${id}.json`
     let data: R | undefined
     const text = await this.tryGet(name, async () => {

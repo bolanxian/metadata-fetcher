@@ -2,11 +2,15 @@
 import process from 'node:process'
 import { hash } from 'node:crypto'
 import { resolve, extname } from 'node:path/posix'
+import type { ExternalOption } from 'rollup'
 import type { Plugin, RenderBuiltAssetUrl, HtmlTagDescriptor } from 'vite'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+//@ts-ignore
 import { bindScript } from 'bind-script/plugin.vite'
+//@ts-ignore
 import { $string, test } from 'bind-script/src/utils'
+
 const compare: (a: string, b: string) => number = $string.localeCompare
 const emptyModule = `/** @unreachable */\nexport default null`
 
@@ -139,8 +143,8 @@ const buildTarget = (): Plugin => {
     enforce: 'pre',
     apply: 'build',
     config(config, { mode, isSsrBuild }) {
-      target = !isSsrBuild ? (process.env.VITE_TARGET as typeof target) ?? 'client' : 'server'
-      let external: typeof config.build.rollupOptions.external
+      target = !isSsrBuild ? (process.env['VITE_TARGET'] as typeof target) ?? 'client' : 'server'
+      let external: ExternalOption | undefined
       if (target == 'server') {
         map.delete('cheerio')
       } else if (target == 'client') {
@@ -149,11 +153,11 @@ const buildTarget = (): Plugin => {
         map.delete('@xterm/addon-webgl')
       } else if (target == 'pages') {
         map.delete('qrcode')
-        config.build.outDir = '../dist-pages'
-        config.build.assetsDir = 'assets'
+        config.build!.outDir = '../dist-pages'
+        config.build!.assetsDir = 'assets'
       } else if (target == 'koishi') {
-        config.build.outDir = '../koishi-plugin'
-        config.build.lib = {
+        config.build!.outDir = '../koishi-plugin'
+        config.build!.lib = {
           entry: 'main.koishi.ts',
           formats: ['cjs'],
           fileName: () => 'index.js'
@@ -188,7 +192,7 @@ const buildTarget = (): Plugin => {
       order: 'post',
       handler(html, ctx) {
         const tags: HtmlTagDescriptor[] = []
-        for (const id of ctx?.chunk.imports ?? []) {
+        for (const id of ctx.chunk?.imports ?? []) {
           tags[tags.length] = {
             tag: 'link', injectTo: 'head',
             attrs: { rel: 'modulepreload', crossorigin: !0, href: `./${id}` }
@@ -202,8 +206,8 @@ const buildTarget = (): Plugin => {
         }
         const algo = 'sha256'
         const compare2: typeof compare = (a, b) => compare(extname(a), extname(b)) || compare(a, b)
-        for (const href of Object.keys(ctx.bundle).toSorted(compare2)) {
-          const asset = ctx.bundle[href]
+        for (const href of Object.keys(ctx.bundle!).toSorted(compare2)) {
+          const asset = ctx.bundle![href]!
           let data: string | Uint8Array
           switch (asset.type) {
             case 'chunk': data = asset.code; break

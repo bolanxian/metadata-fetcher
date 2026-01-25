@@ -2,21 +2,34 @@
 import type { DefineComponent, ExtractPropTypes, Prop } from 'vue'
 import { noop, voidPromise } from '@/bind'
 import { call } from 'bind:core'
-import { $then } from 'bind:utils'
+import { type Override, $then } from 'bind:utils'
 import { freeze, keys, fromEntries } from 'bind:Object'
-import { from } from 'bind:Array'
+import { from, filter } from 'bind:Array'
 import { get, set } from 'bind:WeakMap'
+import type { BaseCache } from './cache'
 import { redirect } from './fetch'
 import { xresolveDiscover } from './discover'
 import { type RouteMap, defineRoute, resolveRoute } from './router'
+
+export const assert: { <T>(arg: any): asserts arg is T } = null!
+export let cache: BaseCache = null!
+export let initCache = ($cache: BaseCache) => {
+  initCache = null!
+  cache = $cache
+}
 
 export interface Plugin<T extends {} = {}> {
   name: string
   path: string
   resolve(path: string[]): ResolvedInfo | undefined
-  fetch(info: ResolvedInfo): Promise<T | undefined>
+  fetch(cache: BaseCache, info: ResolvedInfo): Promise<T | undefined>
   parse(data: T, info: ResolvedInfo): ParsedInfo | undefined
 }
+export type DefinePlugin<T extends {}> = Override<Plugin<T>, {
+  parse: Plugin<T>['parse'] | {
+    [K in keyof ParsedInfo]: (data: T, info: ResolvedInfo) => ParsedInfo[K] | undefined
+  }
+}>
 export type Component<T> = DefineComponent<ExtractPropTypes<{ data: Prop<T> }>, {}, any>
 export interface ResolvedInfo {
   id: string
@@ -28,16 +41,15 @@ export interface ResolvedInfo {
 export interface ParsedInfo {
   title: string
   ownerName?: string
-  publishDate?: string
+  ownerUrl?: string
   thumbnailUrl?: string
   relatedUrl?: string
+  publishDate?: string
   keywords?: string
   description?: string
 }
 export const resolvedToPlugin: WeakMap<ResolvedInfo, Plugin> = new WeakMap()
-export const pluginToComponent: WeakMap<
-  Plugin, DefineComponent<ExtractPropTypes<{ data: Prop<{}> }>, {}, any>
-> = new WeakMap()
+export const pluginToComponent: WeakMap<Plugin, Component<{}>> = new WeakMap()
 export const pluginList: Plugin[] = []
 export const routeMap: RouteMap<ResolvedInfo> = {}
 
@@ -62,15 +74,15 @@ export const tryRedirect = (info: ResolvedInfo): Promise<ResolvedInfo | null> | 
 }
 export const parse = async (info: ResolvedInfo): Promise<ResolvedInfo & ParsedInfo | null> => {
   const plugin: Plugin = get(resolvedToPlugin, info)
-  const data = await plugin.fetch(info)
+  const data = await plugin.fetch(cache, info)
   if (data == null) { return null }
   const parsed = plugin.parse(data, info)
   if (parsed == null) { return null }
   return { ...info, ...parsed }
 }
-export const xparse: (input: string) => [
+export const xparse: (input: string, cache?: BaseCache) => [
   Plugin?, ResolvedInfo?, Promise<ResolvedInfo | null>?, Promise<{} | null>?, Promise<ResolvedInfo & ParsedInfo | null>?
-] = function* (input: string) {
+] = function* (input: string, $cache = cache) {
   if (!(input.length > 2)) { return }
   const resolved = resolve(input)
   if (resolved == null) { return }
@@ -80,7 +92,7 @@ export const xparse: (input: string) => [
   const redirectedPromise = tryRedirect(resolved)
   yield redirectedPromise
   if (redirectedPromise != null) { return }
-  const dataPromise = $then(voidPromise, () => plugin.fetch(resolved))
+  const dataPromise = $then(voidPromise, () => plugin.fetch($cache, resolved))
   yield dataPromise
   const parsedPromise: ReturnType<typeof parse> = $then(dataPromise, data => {
     if (data == null) { return null }
@@ -91,16 +103,15 @@ export const xparse: (input: string) => [
   $then(parsedPromise, null, noop)
   yield parsedPromise
 } as any
-export const definePlugin = <T extends {}>(plugin: Omit<Plugin<T>, 'parse'> & {
-  parse: Plugin<T>['parse'] | {
-    [K in keyof ParsedInfo]: (data: T, info: ResolvedInfo) => ParsedInfo[K]
-  }
-}): Plugin<T> => {
+export const definePlugin = <T extends {}>(plugin: DefinePlugin<T>): Plugin<T> => {
   if (typeof plugin.parse !== 'function') {
-    const handleMap = plugin.parse, handleKeys = keys(handleMap) as (keyof ParsedInfo)[]
-    const defaultMap: ParsedInfo = fromEntries(from(handleKeys, key => [key, void 0])) as any
+    const handleMap = plugin.parse
+    const handleKeys: (keyof typeof defaultMap)[] = filter(keys(handleMap), key => key !== 'title')
+    const defaultMap: Omit<ParsedInfo, 'title'> = fromEntries(from(handleKeys, key => [key, void 0])) as any
     plugin.parse = (data, info) => {
-      const result: ParsedInfo = { ...defaultMap }
+      const title = handleMap.title(data, info)
+      if (title == null) { return }
+      const result: ParsedInfo = { title, ...defaultMap }
       for (const key of handleKeys) {
         try { result[key] = handleMap[key]!(data, info)! }
         catch (e) { reportError(e) }
@@ -108,6 +119,7 @@ export const definePlugin = <T extends {}>(plugin: Omit<Plugin<T>, 'parse'> & {
       return result
     }
   }
+  assert?.<Plugin<T>>(plugin)
   freeze(plugin)
   const { resolve } = plugin
   defineRoute(routeMap, plugin.path, path => {
@@ -117,8 +129,8 @@ export const definePlugin = <T extends {}>(plugin: Omit<Plugin<T>, 'parse'> & {
       return info
     }
   })
-  pluginList[pluginList.length] = plugin as Plugin<T>
-  return plugin as Plugin<T>
+  pluginList[pluginList.length] = plugin
+  return plugin
 }
 export const definePluginComponent = <T extends {}>(
   plugin: Plugin<T>, component: Component<T>
@@ -133,13 +145,13 @@ export const getPluginComponent = <T extends {}>(
 export const redirectPlugin: Pick<Plugin<{
   plugin: Plugin, data: any, info: ResolvedInfo
 }>, 'fetch' | 'parse'> = {
-  async fetch(_info) {
-    const url = await redirect(_info.url)
+  async fetch(cache, $info) {
+    const url = await redirect($info.url)
     if (url == null) { return }
     const info = resolve(url)
     if (info == null) { return }
     const plugin: Plugin = get(resolvedToPlugin, info)
-    const data = await plugin.fetch(info)
+    const data = await plugin.fetch(cache, info)
     return { plugin, data, info }
   },
   parse({ plugin, data, info }, _) {

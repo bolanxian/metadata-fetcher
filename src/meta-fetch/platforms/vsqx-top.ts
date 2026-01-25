@@ -1,7 +1,6 @@
 
 import { test, replace } from 'bind:utils'
 import { slice } from 'bind:String'
-import { cache } from '../cache'
 import { $fetch, jsonInit } from '../fetch'
 import { defineDiscover } from '../discover'
 import { definePlugin, resolve } from '../plugin'
@@ -23,12 +22,12 @@ definePlugin({
   path: 'vsqx.top/project',
   resolve(path) {
     if (path.length !== 1) { return }
-    const id = path[0]
+    const id: string = path[0]!
     if (!test(REG_VSQX_TOP, id)) { return }
     const url = `https://www.vsqx.top/project/${id}`
     return { id, displayId: id, cacheId: id, shortUrl: '', url }
   },
-  async fetch({ id }) {
+  async fetch(cache, { id }) {
     const url = `https://www.vsqx.top/api/app/project_msg/${slice(id, 2)}`
     return await cache.json(id, async () => {
       const $ = await (await $fetch(url, jsonInit)).json()
@@ -36,14 +35,15 @@ definePlugin({
       return $.data
     })
   },
-  parse(data, { shortUrl, url }) {
+  parse(data, info) {
     const relatedUrl = resolve(data.b_av ?? '')?.url
     return {
       title: data.music_name,
       ownerName: data.p_name,
-      publishDate: replace(DATE_REG, data.up_time, DATE_STR),
-      shortUrl, url, relatedUrl,
+      ownerUrl: `https://www.vsqx.top/space/${data.uid}`,
+      relatedUrl,
       thumbnailUrl: `https://vsqx-cover.vsqx.top/${data.vsqx_uid}.jpg`,
+      publishDate: replace(DATE_REG, data.up_time, DATE_STR),
       description: data.music_desc
     }
   }

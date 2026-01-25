@@ -1,7 +1,6 @@
 
 import { getOwn, test, match } from 'bind:utils'
 import { join, htmlToText } from '@/bind'
-import { cache } from '../cache'
 import { $fetch, jsonInit } from '../fetch'
 import { defineDiscover } from '../discover'
 import { definePlugin } from '../plugin'
@@ -33,7 +32,7 @@ definePlugin({
       case 2:
         suffix = `-${path[1]}`
       case 1:
-        pid = path[0]
+        pid = path[0]!
         break
       default: return
     }
@@ -46,7 +45,7 @@ definePlugin({
       url: `https://www.pixiv.net/artworks/${pid}`
     }
   },
-  async fetch({ id, cacheId }) {
+  async fetch(cache, { id, cacheId }) {
     const pid = match(REG_PIXIV, id)![1]
     return cache.json(cacheId, async () => {
       const url = `https://www.pixiv.net/ajax/illust/${pid}`
@@ -71,7 +70,7 @@ definePlugin({
     if (thumb == null) {
       const illusts = getOwn(data, 'userIllusts')
       if (illusts != null) {
-        const pid = match(REG_PIXIV, info.id)![1]
+        const pid = match(REG_PIXIV, info.id)![1]!
         thumb = getOwn(illusts, pid)?.url
       }
     }
@@ -79,8 +78,9 @@ definePlugin({
       [PAGE_COUNT]: data.pageCount,
       title,
       ownerName: data.userName,
-      publishDate: data.uploadDate,
+      ownerUrl: `https://www.pixiv.net/users/${data.userId}`,
       thumbnailUrl: thumb ?? void 0,
+      publishDate: data.uploadDate,
       keywords: join(tags, ','),
       description: htmlToText(data.description)
     }

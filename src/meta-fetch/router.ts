@@ -9,7 +9,7 @@ export const resolveRoute = <R extends {}>(
 ): R | undefined => {
   path = isArray(path) ? path : split(path, '/')
   let i = 0; for (; i < path.length; i++) {
-    const elem = deu(path[i])
+    const elem = deu(path[i]!)
     const next = getOwn(routeMap, elem)
     switch (typeof next) {
       case 'object': routeMap = next; break
@@ -23,10 +23,10 @@ export const defineRoute = <R extends {}>(
 ) => {
   path = isArray(path) ? path : split(path, '/')
   let i = 0, len = path.length - 1; for (; i < len; i++) {
-    const elem = deu(path[i])
+    const elem = deu(path[i]!)
     const next = routeMap[elem] ??= {}
     if (typeof next !== 'object') { return }
     routeMap = next
   }
-  routeMap[path[len]] = fn
+  routeMap[path[len]!] = fn
 }

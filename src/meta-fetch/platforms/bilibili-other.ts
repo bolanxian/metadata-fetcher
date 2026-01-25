@@ -6,9 +6,9 @@ import { toHttps } from '@/bind'
 import { defineDiscover } from '../discover'
 import { definePlugin, redirectPlugin } from '../plugin'
 import { $fetch, htmlInit } from '../fetch'
-import { cache } from '../cache'
 import { REG_INIT } from './bilibili-video'
 import { fromHTML } from '@/utils/find-json-object'
+import { instantToString } from '@/utils/temporal'
 export const REG_CV = /^cv((?!0\d)\d+)$/
 export const REG_OPUS = /^bili!opus!(\d{18,})$/
 
@@ -35,7 +35,7 @@ definePlugin({
   path: 'bilibili/article',
   resolve(path) {
     if (path.length !== 1) { return }
-    const id = path[0]
+    const id: string = path[0]!
     if (!test(REG_CV, id)) { return }
     return {
       id: `@${id}`, displayId: id, cacheId: id,
@@ -57,7 +57,7 @@ definePlugin({
       url: `https://www.bilibili.com/opus/${oid}`
     }
   },
-  async fetch({ id, url }) {
+  async fetch(cache, { id, url }) {
     return await cache.json(id, async () => {
       let text = await cache.get(`${id}.html`)
       if (text == null) {
@@ -77,10 +77,9 @@ definePlugin({
     let relatedUrl = detail.type === 1
       ? `https://www.bilibili.com/read/cv${detail.basic.rid_str}`
       : `https://t.bilibili.com/${detail.id_str}`
-    let { shortUrl, url } = info
     let content = '', thumb: string | undefined
     const title = find(detail.modules, m => m.module_type === 'MODULE_TYPE_TITLE')?.module_title.text ?? ''
-    const ownerName = find(detail.modules, m => m.module_type === 'MODULE_TYPE_AUTHOR').module_author.name
+    const author = find(detail.modules, m => m.module_type === 'MODULE_TYPE_AUTHOR').module_author
     const { paragraphs } = find(detail.modules, m => m.module_type === 'MODULE_TYPE_CONTENT').module_content
     for (const p of paragraphs) {
       switch (p.para_type) {
@@ -100,9 +99,12 @@ definePlugin({
       content += '\n'
     }
     return {
-      title, ownerName,
-      shortUrl, url, relatedUrl,
+      title,
+      ownerName: author.name,
+      ownerUrl: author.mid,
+      relatedUrl,
       thumbnailUrl: thumb,
+      publishDate: instantToString(author.pub_ts * 1000),
       description: content
     }
   }

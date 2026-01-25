@@ -4,7 +4,6 @@ import { test } from 'bind:utils'
 import { trim } from 'bind:String'
 import { from, reverse, join } from 'bind:Array'
 import { htmlToText } from '@/bind'
-import { cache } from '../cache'
 import { $fetch, htmlInit } from '../fetch'
 import { defineDiscover } from '../discover'
 import { definePlugin } from '../plugin'
@@ -29,9 +28,9 @@ definePlugin({
     const url = `https://www.lyrical-nonsense.com/global/lyrics/${path[0]}/${path[1]}/`
     return { id, displayId, cacheId: id, shortUrl: '', url }
   },
-  async fetch(info) {
-    const text = await cache.tryGet(`${info.id}.html`, async () => {
-      const resp = await $fetch(info.url, htmlInit)
+  async fetch(cache, { id, url }) {
+    const text = await cache.tryGet(`${id}.html`, async () => {
+      const resp = await $fetch(url, htmlInit)
       const { status } = resp
       if (status !== 200) {
         throw new TypeError(`Request failed with status code ${status}`)
@@ -39,11 +38,10 @@ definePlugin({
       return await resp.text()
     })
     if (text == null) { return }
-    const $ = cheerio.load(text, { baseURI: info.url })
+    const $ = cheerio.load(text, { baseURI: url })
     return { $ }
   },
-  parse(data, info) {
-    const { $ } = data, { url } = info
+  parse({ $ }, info) {
     let desc = ''
     for (const el of reverse(from($('.olyrictext')))) {
       let text = join(from($('.line-text', el), line => $(line).text()), '\n')
@@ -52,9 +50,7 @@ definePlugin({
     }
     return {
       title: $('input[type="hidden"][name="pagetitle"]').attr('value') ?? '',
-      ownerName: '',
       publishDate: $('meta[property="article:modified_time"]').attr('content') ?? '',
-      shortUrl: url, url,
       thumbnailUrl: $('meta[property="og:image"]').attr('content') ?? '',
       description: desc
     }

@@ -1,12 +1,11 @@
 
 import * as cheerio from 'cheerio'
-import { hasOwn, test } from 'bind:utils'
+import { getOwn, test } from 'bind:utils'
 import { slice } from 'bind:String'
 import { keys } from 'bind:Object'
-import { cache } from '../cache'
 import { $fetch, htmlInit, jsonInit } from '../fetch'
 import { defineDiscover } from '../discover'
-import { definePlugin, redirectPlugin } from '../plugin'
+import { definePlugin, redirectPlugin, assert } from '../plugin'
 import * as BV from '@/utils/bv-encode'
 import { fromHTML } from '@/utils/find-json-object'
 import { join, toHttps, htmlToText } from '@/bind'
@@ -26,6 +25,7 @@ defineDiscover({
   discover: [BV.REG_AV, BV.REG_BV],
   discoverHttp: [REG_B23, REG_FULL, REG_WL],
   handle: (m, reg) => {
+    assert?.<Record<0 | 1, string>>(m)
     let id: string
     if (test(BV.REG_AV, m[1])) {
       id = m[1]
@@ -51,6 +51,7 @@ defineDiscover({
     /^(raw)!([bB][vV]1\w{9})$/
   ],
   handle(m) {
+    assert?.<Record<0 | 1 | 2, string>>(m)
     let id: string
     switch (m[1]) {
       case 'b23': return `bilibili/b23/${m[2]}`
@@ -73,7 +74,8 @@ export const bilibiliVideo = definePlugin<Data>({
   path: 'bilibili/video',
   resolve(path) {
     if (path.length !== 1) { return }
-    let id = path[0], cacheId
+    assert?.<Record<0, string>>(path)
+    let id: string = path[0], cacheId: string
     if (test(BV.REG_AV, id)) {
       id = cacheId = `av${slice(id, 2)}`
     } else if (test(BV.REG_BV, id)) {
@@ -87,7 +89,7 @@ export const bilibiliVideo = definePlugin<Data>({
       shortUrl: toShortUrl(cacheId), url: toUrl(cacheId)
     }
   },
-  async fetch({ cacheId: id, url }) {
+  async fetch(cache, { cacheId: id, url }) {
     let data: any, extraData: any
     return {
       error: null, redirect: null, videoData: null, tags: null,
@@ -127,34 +129,43 @@ export const bilibiliVideo = definePlugin<Data>({
       ...extraData
     }
   },
-  parse(data, info) {
-    const { error, videoData } = data
-    if (error != null && keys(error).length !== 0) { return }
-    const { shortUrl, url } = info
-
-    const keywords = []
-    for (const tag of data.tags) {
-      if (tag.tag_type === 'old_channel') {
-        keywords[keywords.length] = tag.tag_name
+  parse: {
+    title(data, info) {
+      const { error } = data
+      if (error != null && keys(error).length !== 0) { return }
+      return data.videoData.title ?? ''
+    },
+    ownerName({ videoData }, info) {
+      const staff = getOwn(videoData, 'staff')
+      if (staff != null) {
+        const owners: string[] = []
+        for (const { title, name } of staff) {
+          owners[owners.length] = `[${title}]${name}`
+        }
+        return join(owners, '；')
       }
-    }
-
-    let ownerName = videoData.owner.name
-    if (hasOwn(videoData, 'staff')) {
-      const owners = []
-      for (const { title, name } of videoData.staff) {
-        owners[owners.length] = `[${title}]${name}`
+      return videoData.owner.name
+    },
+    ownerUrl({ videoData }, info) {
+      return toSpaceUrl(videoData.owner.mid)
+    },
+    publishDate({ videoData }, info) {
+      return instantToString(videoData.pubdate * 1000)
+    },
+    thumbnailUrl({ videoData }, info) {
+      return toHttps(videoData.pic ?? '')
+    },
+    keywords(data, info) {
+      const keywords: string[] = []
+      for (const tag of data.tags) {
+        if (tag.tag_type === 'old_channel') {
+          keywords[keywords.length] = tag.tag_name
+        }
       }
-      ownerName = join(owners, '；')
-    }
-    return {
-      title: videoData.title,
-      ownerName,
-      publishDate: instantToString(videoData.pubdate * 1000),
-      shortUrl, url,
-      thumbnailUrl: toHttps(videoData.pic ?? ''),
-      keywords: join(keywords, ','),
-      description: htmlToText(videoData.desc, true)
+      return join(keywords, ',')
+    },
+    description({ videoData }, info) {
+      return htmlToText(videoData.desc, true)
     }
   }
 })
@@ -187,7 +198,7 @@ definePlugin({
   resolve(path) {
     if (path.length !== 1) { return }
     const id = `@b23!${path[0]}`
-    const url = toShortUrl(path[0])
+    const url = toShortUrl(path[0]!)
     return { id, displayId: id, cacheId: id, shortUrl: '', url }
   },
   ...redirectPlugin

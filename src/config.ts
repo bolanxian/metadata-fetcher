@@ -1,6 +1,6 @@
 
 import { assign, keys } from 'bind:Object'
-import { cache } from './meta-fetch/cache'
+import { cache } from './meta-fetch/plugin'
 const { parse, stringify } = JSON
 const { error } = console
 
@@ -28,10 +28,11 @@ export const config: Config = {
 displayId=
 title=标题：
 ownerName=UP主：
-publishDate=日期：
+ownerUrl=UP主链接：
 shortUrl||url=链接：
 thumbnailUrl=封面：
 relatedUrl=相关链接：
+publishDate=日期：
 keywords=标签：
 description="简介：\\n"
 `,

@@ -1,5 +1,5 @@
 
-import { CheerioAPI } from 'cheerio'
+import type { CheerioAPI } from 'cheerio'
 import { match, replace } from 'bind:utils'
 import { indexOf, slice, repeat } from 'bind:String'
 

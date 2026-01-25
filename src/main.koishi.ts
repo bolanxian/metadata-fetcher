@@ -3,7 +3,7 @@ export const name = 'metadata-fetcher'
 export const inject = ['database']
 
 import { getOwn } from 'bind:utils'
-import { Context, Field, Schema, Session, Tables, h } from 'koishi'
+import { type Session, type Tables, Context, Field, Schema, h } from 'koishi'
 import { LRUCache } from 'lru-cache'
 import { join } from './bind'
 import type { ResolvedInfo, ParsedInfo } from './meta-fetch/mod'

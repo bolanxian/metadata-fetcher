@@ -23,7 +23,7 @@ export const encode = (input: string | number | bigint) => {
   let tmp = (aid | MAX) ^ XOR
   let x = ['0', '0', '0', '0', '0', '0', '0', '0', '0'], i = 0
   while (i < x.length) {
-    x[i++] = table[(tmp % BASE) as any]
+    x[i++] = table[(tmp % BASE) as any]!
     tmp /= BASE
   }
   if (tmp > 0n) { return null }
@@ -34,7 +34,7 @@ export const decode = (x: string) => {
   if (!test(REG_BV, x)) { return }
   let tmp = 0n
   for (const y of [x[9], x[7], x[5], x[6], x[4], x[8], x[3], x[10], x[11]]) {
-    let i = indexOf(table, y)
+    let i = indexOf(table, y!)
     if (i < 0) { return }
     tmp = tmp * BASE + int(i)
   }

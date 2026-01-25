@@ -7,7 +7,6 @@ import { parseRfc2822Date } from '@/utils/temporal'
 import { defineDiscover } from '../discover'
 import { definePlugin } from '../plugin'
 import { $fetch, htmlInit } from '../fetch'
-import { cache } from '../cache'
 const host = `www.youtube.com`
 const REG_YOUTUBE = /^youtube[!:]([-\w]+)$/
 
@@ -35,9 +34,9 @@ definePlugin<[any, any]>({
       url: `https://${host}/watch?v=${path[0]}`
     }
   },
-  async fetch(info) {
-    const text = await cache.tryGet(`${info.id}.html`, async () => {
-      const resp = await $fetch(info.url, htmlInit)
+  async fetch(cache, { id, url }) {
+    const text = await cache.tryGet(`${id}.html`, async () => {
+      const resp = await $fetch(url, htmlInit)
       const { status } = resp
       if (status !== 200) {
         throw new TypeError(`Request failed with status code ${status}`)
@@ -45,7 +44,7 @@ definePlugin<[any, any]>({
       return await resp.text()
     })
     if (text == null) { return }
-    const $ = cheerio.load(text, { baseURI: info.url })
+    const $ = cheerio.load(text, { baseURI: url })
     const data = fromHTML($, /^\s*var\s+ytInitialData\s*=\s*(?={)/)
     const contents = data.contents.twoColumnWatchNextResults.results.results.contents
     return map([

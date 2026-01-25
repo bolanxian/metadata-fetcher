@@ -8,7 +8,8 @@ import './platforms/$'
 import './platforms/bilibili-video'
 import.meta.glob('./platforms/*', { eager: true })
 
-import { BaseCache, initCache } from './cache'
+import type { BaseCache } from './cache'
+import { initCache } from './plugin'
 import { initFetch } from './fetch'
 
 export const defaultUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36 Edg/121.0.0.0'

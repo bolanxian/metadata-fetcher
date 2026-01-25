@@ -90,7 +90,7 @@ export const BBDown = defineComponent(TARGET != 'client' ? {
     handleHidden() { this.status = 'ready' },
     handleTerminal(vnode: VNode) {
       const vm = this
-      const term: Xterm = vnode.component!.exposeProxy!.xterm
+      const term: Xterm = vnode.component!.exposeProxy!['xterm']
       const socket = vm.socket = new WebSocket(`./.bbdown?${new URLSearchParams({
         id: vm.currentId,
         args: JSON.stringify(vm.options)
@@ -145,7 +145,7 @@ export const BBDown = defineComponent(TARGET != 'client' ? {
       })
     },
     handleAbort() {
-      const term: Xterm = (this.$refs.terminal as any).xterm
+      const term: Xterm = (this.$refs['terminal'] as any).xterm
       const prefix = term.buffer.active.cursorX > 0 ? '\r\n' : ''
       this.socket.send(`${prefix}\x1B[1;33m取消操作\x1B[0m\r\n`)
     }

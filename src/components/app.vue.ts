@@ -170,7 +170,7 @@ export default defineComponent({
       if (startsWith(name, 'batch:')) {
         location.href = `./.batch?${createBatchParams(slice(name, 6), resolveBatch(trim(store.input)))}`
       } else {
-        const id = resolve(split(S, trim(store.input), 1)[0])?.id
+        const id = resolve(split(S, trim(store.input), 1)[0]!)?.id
         if (id == null || test(P, id)) {
           location.href = `./${encodeURIComponent(id ?? '')}`
         } else {
@@ -234,7 +234,7 @@ export default defineComponent({
           assign(store.config, data)
           store.output = store.parsed != null ? _render(store.parsed, store.config.template) : ''
         } else {
-          Message.error('失败')
+          Message['error']('失败')
         }
       }
     }

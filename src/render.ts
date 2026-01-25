@@ -32,7 +32,7 @@ export const renderLine = (data: Record<string, string>, template: string) => {
     let val: string | undefined
     if (includes($1, '|')) {
       const [name, ...args] = split($1, '|')
-      val = getOwn(data, trim(name))
+      val = getOwn(data, trim(name!))
       if (val != null) {
         for (const arg of args) {
           const fn: (str: string) => string = getOwn(renderLine, trim(arg))!

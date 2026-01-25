@@ -50,7 +50,7 @@ const monthNamesShort = 'Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec'
 export const parseRfc2822Date = (input: string): string | null => {
   const m = match(/^([A-Z][a-z]{2})\s+(\d+),\s+(\d+)$/, input)
   if (m == null) { return null }
-  const month = indexOf(monthNamesShort, m[1]) / 4 + 1
+  const month = indexOf(monthNamesShort, m[1]!) / 4 + 1
   if (!(month > 0)) { return null }
-  return new PlainDate(+m[3], +month, +m[2]).toString()
+  return new PlainDate(+m[3]!, +month, +m[2]!).toString()
 }
