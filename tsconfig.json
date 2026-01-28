@@ -32,6 +32,7 @@
     "noPropertyAccessFromIndexSignature": true,
   },
   "include": [
+    "lib/**/*.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
     "src/**/*.vue",

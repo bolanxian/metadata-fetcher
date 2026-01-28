@@ -12,7 +12,7 @@ export abstract class BaseCache {
   abstract get(name: string): Promise<string | undefined>
   abstract tryGet(name: string, fn: TryGetFn): Promise<string | undefined>
   abstract set(name: string, value: string): Promise<void>
-  abstract keys(): Iterator<string>
+  abstract keys(): IterableIterator<string>
   async json<R>(id: string, fn: () => Promise<R>): Promise<R> {
     const name = `${id}.json`
     let data: R | undefined
@@ -31,7 +31,7 @@ export class NoCache extends BaseCache {
     return await fn()
   }
   async set(name: string, value: string): Promise<void> { }
-  keys() { return keys(empty as any) as Iterator<string> }
+  keys(): IterableIterator<string> { return keys(empty as any) as any }
 }
 export class FsCache extends BaseCache {
   #readFile: FS['readFile']
@@ -127,6 +127,5 @@ export class WebCache extends BaseCache {
     name = resolveName(name)
     await this.#cache.put(`/${name}`, new Response(value))
   }
-  keys() { return keys(empty as any) as Iterator<string> }
+  keys(): IterableIterator<string> { return keys(empty as any) as any }
 }
-

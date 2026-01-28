@@ -1,20 +1,20 @@
 import { cpus, release, freemem, totalmem } from 'node:os'
 import { platform, arch, versions, env, memoryUsage } from 'node:process'
-import { $string, hasOwn } from '../dist/main.ssr.js'
+import { $string, hasOwn } from '@/main.ssr'
 const { keys, values } = Object
 const { indexOf, lastIndexOf, replaceAll, slice, split, startsWith, toUpperCase } = $string
 
-const parseVersion = (value) => {
+const parseVersion = (value: string) => {
   let offset = indexOf(value, ' ')
   if (offset > 0) { value = slice(value, 0, offset) }
   offset = lastIndexOf(value, '/')
-  let name = slice(value, 0, offset)
-  let version = slice(value, offset + 1)
+  const name = slice(value, 0, offset)
+  const version = slice(value, offset + 1)
   return { name, version }
 }
 
 export const getCpu = () => {
-  const map = { __proto__: null }, ret = []
+  const map: Record<string, number> = { __proto__: null! }, ret: string[] = []
   for (const cpu of cpus()) {
     const model = replaceAll(cpu.model, '\0', '')
     map[model] = (map[model] ?? 0) + 1
@@ -41,32 +41,32 @@ export const getMemoryUsage = () => {
   return { app, used, total }
 }
 export const getOs = () => {
-  let name = platform
-  let version = release()
+  let name: string = platform
+  const version = release()
   if (startsWith(name, 'win')) {
-    let $ = split(version, '.')
+    const $ = split(version, '.')
     let suffix = ''
     if ($[0] === '10' && $[1] === '0') {
-      suffix = +$[2] >= 22000 ? ' 11' : ' 10'
+      suffix = +$[2]! >= 22000 ? ' 11' : ' 10'
     }
     name = `Windows${suffix}`
   } else {
-    name = `${toUpperCase(name[0])}${slice(name, 1)}`
+    name = `${toUpperCase(name[0]!)}${slice(name, 1)}`
   }
   return { name, arch, version }
 }
 export const getRuntime = () => {
   switch (`${+hasOwn(versions, 'deno')}:${+hasOwn(versions, 'bun')}`) {
     case '0:0': return { name: 'Node.js', version: versions.node }
-    case '1:0': return { name: 'Deno', version: versions.deno }
-    case '0:1': return { name: 'Bun', version: versions.bun }
+    case '1:0': return { name: 'Deno', version: versions['deno'] }
+    case '0:1': return { name: 'Bun', version: versions['bun'] }
   }
   return null
 }
 export const getPm = (key = 'npm_config_user_agent') => {
-  let value = hasOwn(env, key) ? env[key] : null
+  const value = hasOwn(env, key) ? env[key] : null
   if (value == null) { return null }
-  let agent = parseVersion(value)
+  const agent = parseVersion(value)
   switch (agent.name) {
     case 'npminstall': agent.name = 'cnpm'; break
     case 'yarn': agent.name = 'Yarn'; break

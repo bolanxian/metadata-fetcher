@@ -1,9 +1,12 @@
 
 export const name = 'Metadata Fetcher'
-export let [, , task, ...args] = import.meta.main || import.meta.filename === argv[1] ? argv : [, , import.meta]
+export let [, , task, ...args]: [any, any, string | ImportMeta, ...string[]]
+  = import.meta.main || import.meta.filename === argv[1]
+    ? argv as any
+    : [, , import.meta]
 
 import { argv, exit } from 'node:process'
-const MAIN = import('../dist/main.ssr.js')
+const MAIN = import('@/main.ssr')
 const { log, error } = console
 
 if (task === 'start') {
@@ -26,18 +29,18 @@ if (task === 'start') {
 */}).slice(10, -3))
   let step = 0
   try {
-    const { setConsoleOutputCP, setTitle, hideConsole, init, deinit, notification } = await import('./tray.js')
+    const { setConsoleOutputCP, setTitle, hideConsole, init, deinit, notification } = await import('./tray.ts')
     setConsoleOutputCP(65001)
     setTitle(name)
     step = 1
-    const { main, open, $, $error } = await import('./server.js')
+    const { main, open, $, $error } = await import('./server.ts')
     const { ready, $string: { startsWith } } = await MAIN
     await ready
-    const { url } = await main()
+    const { url } = await main()!
     const icon = './dist/favicon.ico'
     const onClick = () => { open(url) }
     await init(name, icon, onClick)
-    $.resettray = async ({ remoteAddr }) => {
+    $['reset-tray'] = async ({ remoteAddr }) => {
       if (!startsWith(remoteAddr, '127.')) {
         return $error(403, name)
       }
@@ -79,19 +82,19 @@ if (task === 'fetch') {
   }
 } else if (task === 'batch') {
   const [type, ..._args] = args
-  for await (const _ of renderBatch(_args, type)) { log(_.error ?? _.value) }
+  for await (const $ of renderBatch(_args, type!)) { log($.error ?? $.value) }
 } else if (task === 'serve' || task == null) {
-  const { main, open } = await import('./server.js')
-  const { url } = await main()
+  const { main, open } = await import('./server.ts')
+  const { url } = await main()!
   await open(url)
   addEventListener('error', e => {
-    error(e.error)
+    error((e as ErrorEvent).error)
     e.preventDefault()
   })
 } else if (task === 'start') {
 
 } else if (task !== import.meta) {
-  reportError(new RangeError(`unrecognized subcommand '${task}'`))
+  error(new RangeError(`unrecognized subcommand '${task}'`))
   exit(1)
 } else {
   Deno.bench('av号', () => {

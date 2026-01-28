@@ -5,8 +5,8 @@
 就可以获取元数据或生成借物表  
 
 ### [下载](https://pan.baidu.com/s/1MAvtaVs9RA0tWvReXNj__w?pwd=rc18)
-双击`run.bat`启动  
-启动完成后会发出通知，并显示托盘图标  
+下载并解压后，双击`run.bat`启动  
+启动完成后会有提示，并显示托盘图标  
 点击托盘图标打开WebUI  
 
 ### 支持
@@ -22,8 +22,8 @@
 npm run build
 
 ::运行 WebUI
-npm run serve
-npm run serve:bun
+deno task serve
+deno task serve:bun
 
 ::获取元数据
 deno task fetch [...]

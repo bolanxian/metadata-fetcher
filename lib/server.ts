@@ -1,5 +1,4 @@
 
-/// <reference path="../src/vite-env.d.ts" />
 const basename = 'metadata-fetcher'
 const hostbase = `${basename}.`
 const pathbase = `/${basename}/`
@@ -13,7 +12,7 @@ import {
   name, ready, cheerioLoad, $string, $array,
   call, getOwn, encodeText as encode, join,
   test, match, replace, split,
-  cache, redirect,
+  type FsCache, cache, redirect,
   discoverMap, discoverHttpMap,
   xresolve, resolve, xparse,
   config, readConfig, writeConfig,
@@ -22,11 +21,14 @@ import {
   handleRequestBbdown,
   illustId, illustName,
   checkVersion, renderToHtml,
-} from '../dist/main.ssr.js'
-import { getCpu, getCpuUsage, getMemoryUsage, getOs, getRuntime, getPm } from './info.js'
+} from '@/main.ssr'
+import { getCpu, getCpuUsage, getMemoryUsage, getOs, getRuntime, getPm } from './info.ts'
+declare const { ReadableStream }: typeof import('node:stream/web')
 await ready
-/** @type {Record<string, (ctx: { request: Request, remoteAddr: string, url: URL, 0: string }) => Promise<Response> | Response>} */
-export const $ = { __proto__: null }
+
+type RouteCtx = { request: Request, remoteAddr: string, url: URL, 0: string }
+type RouteFn = (ctx: RouteCtx) => Promise<Response> | Response
+export const $: Record<string, RouteFn> = { __proto__: null! }
 
 const { stringify } = JSON, { log, error } = console
 const { trim, concat, startsWith, endsWith, slice, includes, lastIndexOf, replaceAll } = $string
@@ -34,7 +36,7 @@ const { indexOf } = $array
 const server = navigator.userAgent
 const TYPE = 'content-type'
 const types = {
-  __proto__: null,
+  __proto__: null!,
   css: 'text/css',
   html: 'text/html',
   js: 'text/javascript',
@@ -45,7 +47,7 @@ const types = {
   osdx: 'application/opensearchdescription+xml',
   suggest: 'application/x-suggestions+json',
   trending: 'application/x-trending+json',
-}
+} as const
 
 let runtime = 'unknown'
 switch (`${typeof Deno}:${typeof Bun}`) {
@@ -53,7 +55,7 @@ switch (`${typeof Deno}:${typeof Bun}`) {
   case 'undefined:object': runtime = 'bun'; break
 }
 
-const allowOrigin = { __proto__: null }
+const allowOrigin: Record<string, null> = { __proto__: null }
 const _allowOrigin = trim(config.allowOrigin)
 for (const origin of _allowOrigin ? split(S, _allowOrigin) : []) {
   if (!origin) { continue }
@@ -63,7 +65,7 @@ for (const origin of _allowOrigin ? split(S, _allowOrigin) : []) {
 const rawHtml = await readFile('./dist/index.html', { encoding: 'utf8' })
 const _html = split(/<title>.*?<\/title>|(?=><!--#app-->)|<!--#app-->/, rawHtml)
 _html[0] = `\
-${trim(_html[0])}
+${trim(_html[0]!)}
 
 <script defer src="./.check-version"></script>
 <link rel="icon" type="${types.svg}" href="./.favicon">
@@ -72,7 +74,7 @@ ${trim(_html[0])}
 const [html0, html1, html2, html3] = _html
 
 const $clone = Response.prototype.clone
-const defineStaticFile = (name, type, data) => {
+const defineStaticFile = (name: string, type: string, data: BodyInit) => {
   const resp = new Response(data, {
     headers: {
       server,
@@ -85,16 +87,16 @@ const defineStaticFile = (name, type, data) => {
 {
   const $ = cheerioLoad(rawHtml)
   for (const el of $('link[rel="@app-asset"]')) {
-    const href = $(el).attr('href')
+    const href = $(el).attr('href')!
     const ext = slice(extname(href), 1)
     const data = await readFile(`./dist/${href}`)
-    defineStaticFile(slice(href, 1), types[ext] ?? '', data)
+    defineStaticFile(slice(href, 1), types[ext as keyof typeof types] ?? '', data)
   }
 }
 defineStaticFile('favicon', types.svg, await readFile('./dist/favicon.svg'))
 defineStaticFile('check-version', types.js, checkVersion)
 
-$.opensearch = (ctx) => {
+$['opensearch'] = (ctx) => {
   return new Response(`\
 <?xml version="1.0" encoding="UTF-8"?>
 <OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
@@ -111,12 +113,12 @@ $.opensearch = (ctx) => {
     headers: { server, [TYPE]: types.osdx }
   })
 }
-const searchAsRedirect = async (url, base) => {
+const searchAsRedirect = async (url: string, base?: string | URL) => {
   const target = await redirect(url)
   if (target == null) { return $html('default', url) }
   return $redirect(new URL(`./.search?.=${encodeURIComponent(target)}`, base).href)
 }
-$.search = ({ url }) => {
+$['search'] = ({ url }) => {
   const input = trim(url.searchParams.get('.') ?? '')
   if (input === '') { return $redirect(new URL('./', url).href) }
   const resolved = resolve(input)
@@ -126,12 +128,12 @@ $.search = ({ url }) => {
       return $redirect(new URL(`./${encodeURIComponent(id)}`, url).href)
     }
     if (id[0] === '@') {
-      return searchAsRedirect(resolved.url, url)
+      return searchAsRedirect(resolved!.url, url)
     }
   }
   return $html('default', input)
 }
-$.suggest = ({ url }) => {
+$['suggest'] = ({ url }) => {
   const _input = url.searchParams.get('.')
   const input = trim(_input ?? '')
   if (!input) {
@@ -155,9 +157,9 @@ $.suggest = ({ url }) => {
   })
 }
 
-let REG_ID
+let REG_ID: RegExp
 let init_reg_id = () => {
-  init_reg_id = null
+  init_reg_id = null!
   const ret = [], REG1 = /^\^|\$$/g, REG2 = /^\w+$/
   for (const keys of [discoverMap.keys(), discoverHttpMap.keys()]) {
     for (let { source } of keys) {
@@ -171,17 +173,18 @@ let init_reg_id = () => {
   }
   return RegExp(join(ret, '|'), 'g')
 }
-function* matchId(data) {
-  for (let id of match(REG_ID, data) ?? []) {
-    id = resolve(id)?.id
-    if (id != null) { yield id }
+function* matchId(data: string) {
+  for (const id of match(REG_ID, data) ?? []) {
+    let newId = resolve(id)?.id
+    if (newId != null) { yield newId }
   }
 }
-function* matchIllust(line) {
+function* matchIllust(line: string) {
   const id = illustId(line)
   if (id != null) { yield id }
 }
-async function* xmatcher(getIter, ctx, params) {
+type GetIter = (...args: [RouteCtx]) => AsyncIterableIterator<string>
+async function* xmatcher(getIter: GetIter, ctx: RouteCtx, params: URLSearchParams) {
   try {
     yield encode('\r\nchcp 65001\r\npause\r\n')
     if (params.get('mode') === 'illust') {
@@ -210,7 +213,7 @@ async function* xmatcher(getIter, ctx, params) {
     yield encode(':error\r\n')
   }
 }
-const matcher = (getIter) => async (ctx) => {
+const matcher = (getIter: GetIter): RouteFn => async (ctx) => {
   if (!startsWith(ctx.remoteAddr, '127.')) {
     return $error(403, name)
   }
@@ -222,7 +225,7 @@ const matcher = (getIter) => async (ctx) => {
   REG_ID ??= init_reg_id()
   const params = ctx.url.searchParams
   if (params.get('output') === 'batch') {
-    return new Response(ReadableStream.from(xmatcher(getIter, ctx, params)), {
+    return new Response(ReadableStream.from(xmatcher(getIter, ctx, params)) as any as ReadableStream, {
       headers: { server, [TYPE]: `${types.txt};charset=UTF-8` }
     })
   }
@@ -230,7 +233,7 @@ const matcher = (getIter) => async (ctx) => {
   if (params.get('mode') === 'illust') {
     matchFn = matchIllust
   }
-  const set = new Set(); let i = 0
+  const set = new Set<string>(); let i = 0
   loop: for await (const data of getIter(ctx)) {
     for (let id of matchFn(data)) {
       set.add(id)
@@ -244,12 +247,12 @@ const matcher = (getIter) => async (ctx) => {
   const location = new URL(`./.batch?${createBatchParams(batch, set)}`, ctx.url).href
   return $redirect(location)
 }
-$.file = matcher(async function* ({ url }) {
-  const data = await readFile(url.searchParams.get('path'), { encoding: 'utf-8' })
+$['file'] = matcher(async function* ({ url }) {
+  const data = await readFile(url.searchParams.get('path')!, { encoding: 'utf-8' })
   for (const line of split(S, data)) { yield line }
 })
-$.directory = matcher(async function* ({ url }) {
-  const dir = await opendir(url.searchParams.get('path'))
+$['directory'] = matcher(async function* ({ url }) {
+  const dir = await opendir(url.searchParams.get('path')!)
   try {
     for await (let dirent of dir) {
       yield dirent.name
@@ -258,22 +261,23 @@ $.directory = matcher(async function* ({ url }) {
     await dir.close()
   }
 })
-$.bbdown = ({ request, remoteAddr }) => {
+let bbdownCwd: string
+$['bbdown'] = ({ request, remoteAddr }) => {
   if (!startsWith(remoteAddr, '127.')) {
     return $error(403, name)
   }
   if (request.headers.get('upgrade') !== 'websocket') {
     return $error(426, name)
   }
-  $.bbdown.cwd ??= fileURLToPath(import.meta.resolve('../__download__/'))
-  return handleRequestBbdown(request, $.bbdown.cwd) ?? $error(400, name)
+  bbdownCwd ??= fileURLToPath(import.meta.resolve('../__download__/'))
+  return handleRequestBbdown(request, bbdownCwd) ?? $error(400, name)
 }
-$.info = ({ remoteAddr, request }) => {
+$['info'] = ({ remoteAddr, request }) => {
   if (!startsWith(remoteAddr, '127.')) {
     return $error(403, name)
   }
   if (request.headers.get('accept') === 'text/event-stream') {
-    let timer
+    let timer: ReturnType<typeof setTimeout>
     return new Response(new ReadableStream({
       start(controller) {
         controller.enqueue(encode(`\
@@ -294,7 +298,7 @@ data: ${stringify({ cpu: getCpuUsage(), memory: getMemoryUsage() })}
       cancel(reason) {
         clearInterval(timer)
       }
-    }), {
+    }) as any as ReadableStream, {
       headers: { server, [TYPE]: 'text/event-stream' }
     })
   }
@@ -309,7 +313,7 @@ data: ${stringify({ cpu: getCpuUsage(), memory: getMemoryUsage() })}
     headers: { server, [TYPE]: types.json }
   })
 }
-$.config = async ({ request, remoteAddr }) => {
+$['config'] = async ({ request, remoteAddr }) => {
   if (request.method === 'POST') {
     if (!(startsWith(remoteAddr, '127.') && origin === request.headers.get('origin'))) {
       return $error(403, name)
@@ -329,10 +333,10 @@ $['clear-lru'] = ({ remoteAddr }) => {
   if (!startsWith(remoteAddr, '127.')) {
     return $error(403, name)
   }
-  cache.lru.clear()
+  (cache as FsCache).lru.clear()
   return $error(200, name, '已复位')
 }
-async function* _json(input) {
+async function* _json(input: string) {
   let step = 0
   try {
     const [, resolved, redirected, , parsedPromise] = xparse(input)
@@ -349,42 +353,42 @@ async function* _json(input) {
     yield encode(`,
   "rended":${stringify(parsed != null ? render(parsed) : null)}
 }`)
-  } catch (e) {
+  } catch (e: any) {
     error(e)
     yield encode(`${step > 0 ? ',' : '{'}
   "error":${stringify({ step, message: e.message ?? 'unknown error' })}
 }`)
   }
 }
-$.json = ({ url }) => {
-  return new Response(ReadableStream.from(_json(url.searchParams.get('.') ?? '')), {
+$['json'] = ({ url }) => {
+  return new Response(ReadableStream.from(_json(url.searchParams.get('.') ?? '')) as any as ReadableStream, {
     headers: { server, [TYPE]: types.json }
   })
 }
-$.dialog = ({ url }) => {
+$['dialog'] = ({ url }) => {
   const params = url.searchParams
   const type = params.get('type')
   const path = params.get('path')
-  return $html(`dialog:${type}`, path)
+  return $html(`dialog:${type}`, path!)
 }
-$.id = ({ 0: input, url }) => {
+$['id'] = ({ 0: input, url }) => {
   const params = createBatchParams(input, url.searchParams.getAll('id'))
   const location = new URL(`./.batch?.from=legacy&${params}`, url).href
   return $redirect(location)
 }
-$.list = $.name = ({ 0: input, url }) => {
+$['list'] = $['name'] = ({ 0: input, url }) => {
   const params = createBatchParams(slice(input, 1), url.searchParams.getAll('id'))
   const location = new URL(`./.batch?.from=legacy&${params}`, url).href
   return $redirect(location)
 }
-function* xbatch(params) {
+function* xbatch(params: Iterable<[string, string]>) {
   for (const [name, value] of params) {
     if (!name || name[0] === '.') { continue }
     yield* split(S, name)
     if (value) { yield* split(S, value) }
   }
 }
-$.batch = ({ url }) => {
+$['batch'] = ({ url }) => {
   const params = url.searchParams
   const type = params.get('.type')
   if (type != null) {
@@ -392,10 +396,10 @@ $.batch = ({ url }) => {
   }
   return $error(400, name)
 }
-const $html = async (mode, input) => {
+const $html = async (mode: string, input: string) => {
   let { status, head, attrs, app } = await renderToHtml(mode, input)
   head ??= `<title>${name}</title>`
-  const html = concat(html0, head, html1, attrs, html2, app, html3)
+  const html = concat(html0, head, html1!, attrs, html2!, app, html3!)
   return new Response(html, {
     status, headers: $html.init ??= {
       'content-security-policy': `default-src 'self';img-src * data: blob:;style-src 'self' 'unsafe-inline';`,
@@ -403,8 +407,9 @@ const $html = async (mode, input) => {
     }
   })
 }
-const $redirect = (location, status = 302) => new Response(null, { status, headers: { server, location } })
-export const $error = (status, name, title) => {
+$html.init = null! as HeadersInit
+const $redirect = (location: string, status = 302) => new Response(null, { status, headers: { server, location } })
+export const $error = (status: number, name: string, title?: string) => {
   title ??= `${status} ${getOwn(STATUS_CODES, status) ?? 'Unknown'}`
   return new Response(`\
 <!DOCTYPE html>
@@ -422,42 +427,41 @@ export const $error = (status, name, title) => {
   })
 }
 
-export const open = await (async () => {
+let args: string[] | undefined
+{
   let isBrowser = false
-  let command, $args, i
   switch (platform) {
     case 'win32': try {
-      if (config.defaultBrowser == null) { throw null }
-      const [cmd, ...args] = getOwn(config.browsers, config.defaultBrowser).args
-      i = indexOf(args, '%1')
-      if (!(i >= 0)) { (void 0)() }
-      command = cmd; $args = args
-      isBrowser = true
+      if (config.browsers == null || config.defaultBrowser == null) { throw null }
+      const $args = getOwn(config.browsers, config.defaultBrowser)?.args
+      if ($args == null) { throw null }
+      const i = indexOf($args, '%1')
+      if (!(i > 0)) { throw null }
+      $args[i] = '$1'
+      args = $args; isBrowser = true
     } catch (cause) {
-      command = 'explorer'; $args = ['']; i = 0
+      args = ['explorer', '$1']
       error(new TypeError('获取默认浏览器失败', { cause }))
     } break
   }
-  if (command != null && $args != null) {
-    isBrowser && log('浏览器:', command)
-    return (url) => new Promise(ok => {
-      const [...args] = $args; args[i] = url
-      const process = spawn(command, args, { stdio: 'inherit', shell: false })
-      process.on('exit', ok)
-    })
-  }
-  return async (url) => 1
-})()
+  if (isBrowser) { log('浏览器:', args![0]) }
+}
+export const open = (url: string) => new Promise<number | null | void>(ok => {
+  if (args == null) { return ok() }
+  const [command, ...$args] = args
+  $args[indexOf($args, '$1')] = url
+  const process = spawn(command!, $args, { stdio: 'inherit', shell: false })
+  process.on('exit', ok)
+})
 
-const fetch = (request, remoteAddr) => {
+const fetch = (request: Request, remoteAddr: string) => {
   const _origin = request.headers.get('origin')
   if (!(_origin == null || _origin in allowOrigin)) {
     return $error(403, name)
   }
   const url = new URL(request.url)
   const { hostname, pathname } = url
-  /** @type {'/' | typeof pathbase | undefined} */
-  let base
+  let base: '/' | typeof pathbase | undefined
   if (startsWith(hostname, hostbase)) {
     base = '/'
   } else if (startsWith(pathname, pathbase)) {
@@ -481,6 +485,7 @@ const fetch = (request, remoteAddr) => {
           case 'favicon.ico':
             return $redirect(`${base}.favicon`)
           case 'announce':
+          case 'robots.txt':
             return $error(404, name)
         }
         if (includes(path, '/')) {
@@ -498,24 +503,24 @@ const fetch = (request, remoteAddr) => {
       case '/favicon.ico':
         return $redirect(`${pathbase}.favicon`)
       case '/announce':
+      case '/robots.txt':
         return $error(404, name)
     }
   }
   return $error(404, name)
 }
-const afterListen = async (serverInst, localAddrPromise) => {
-  let { hostname, port } = await localAddrPromise
+const afterListen = async (server: typeof serverInst, localAddr: typeof localAddrPromise) => {
+  let { hostname, port } = await localAddr
   if (hostname === '0.0.0.0') { hostname = '127.0.0.1' }
   origin = `http://${hostbase}localhost:${port}`
   url = `${origin}/`
   allowOrigin[origin] = null
   log(`Listening on ${url}`)
-  return { server: serverInst, hostname, port, url }
+  return { server, hostname, port, url }
 }
-const onError = (e) => { error(e); return $error(500, name) }
+const onError = (e: any) => { error(e); return $error(500, name) }
 export const main = (port = 6702, hostname = '127.0.0.1') => {
-  if (serverInst != null) { (void 0)() }
-  let localAddrPromise
+  if (serverInst != null) { throw null }
   switch (runtime) {
     case 'deno': localAddrPromise = new Promise((onListen) => {
       serverInst = Deno.serve({
@@ -533,7 +538,7 @@ export const main = (port = 6702, hostname = '127.0.0.1') => {
         port, hostname,
         idleTimeout: 45,
         fetch(request) {
-          const { address } = this.requestIP(request)
+          const { address } = this.requestIP(request)!
           return fetch(request, address)
         },
         error: onError
@@ -547,13 +552,16 @@ export const main = (port = 6702, hostname = '127.0.0.1') => {
   }
 }
 
-for (const type of ['file', 'directory']) {
-  addEventListener(`tray:open:${type}`, e => {
-    if (url == null) { return }
-    const nextPath = `.dialog?${new URLSearchParams({ type, path: e.detail })}`
-    open(`${url}!${encodeURIComponent(nextPath)}`)
-  })
+if (typeof addEventListener == 'function') {
+  for (const type of ['file', 'directory']) {
+    addEventListener(`tray:open:${type}`, e => {
+      if (url == null) { return }
+      const nextPath = `.dialog?${new URLSearchParams({ type, path: (e as CustomEvent).detail })}`
+      open(`${url}!${encodeURIComponent(nextPath)}`)
+    })
+  }
 }
 
-let url, origin, serverInst
-export default { fetch }
+let url: string, origin: string
+let serverInst: Deno.HttpServer<Deno.NetAddr> | Bun.Server<void>
+let localAddrPromise: Promise<Deno.NetAddr | Bun.Server<void>>
