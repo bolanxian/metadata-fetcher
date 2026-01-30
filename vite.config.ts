@@ -6,9 +6,7 @@ import type { ExternalOption } from 'rollup'
 import type { Plugin, RenderBuiltAssetUrl, HtmlTagDescriptor } from 'vite'
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
-//@ts-ignore
 import { bindScript } from 'bind-script/plugin.vite'
-//@ts-ignore
 import { $string, test } from 'bind-script/src/utils'
 
 const compare: (a: string, b: string) => number = $string.localeCompare

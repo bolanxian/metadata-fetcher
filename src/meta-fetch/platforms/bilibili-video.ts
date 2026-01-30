@@ -1,11 +1,11 @@
 
 import * as cheerio from 'cheerio'
-import { getOwn, test } from 'bind:utils'
+import { assert, getOwn, test } from 'bind:utils'
 import { slice } from 'bind:String'
 import { keys } from 'bind:Object'
 import { $fetch, htmlInit, jsonInit } from '../fetch'
 import { defineDiscover } from '../discover'
-import { definePlugin, redirectPlugin, assert } from '../plugin'
+import { definePlugin, redirectPlugin } from '../plugin'
 import * as BV from '@/utils/bv-encode'
 import { fromHTML } from '@/utils/find-json-object'
 import { join, toHttps, htmlToText } from '@/bind'

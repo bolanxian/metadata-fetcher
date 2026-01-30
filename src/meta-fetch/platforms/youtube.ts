@@ -67,10 +67,14 @@ definePlugin<[any, any]>({
       }
       return ownerName
     },
+    ownerUrl(data, info) {
+      const { url } = data[1].owner.videoOwnerRenderer.navigationEndpoint.commandMetadata.webCommandMetadata
+      return new URL(url, `https://${host}/`).href
+    },
     publishDate(data, info) {
-      const _date: string = data[0].dateText.simpleText
-      let date = parseRfc2822Date(_date)
-      return date != null ? `${date}(${_date})` : _date
+      const rawDate: string = data[0].dateText.simpleText
+      const date = parseRfc2822Date(rawDate)
+      return date != null ? `${date}(${rawDate})` : rawDate
     },
     thumbnailUrl(_, { id }) {
       const videoId = match(REG_YOUTUBE, id)![1]
@@ -78,11 +82,12 @@ definePlugin<[any, any]>({
     },
     description(videoDesc, { id }) {
       const videoId = match(REG_YOUTUBE, id)![1]
-      const _desc = videoDesc[1].attributedDescription
-      const description = _desc?.commandRuns == null ? _desc?.content : replace(RegExp(
-        join(map(_desc.commandRuns, $ => `(?<=^.{${+$.startIndex}}).{${+$.length}}`), '|'), 'sg'
-      ), _desc.content, (_, index) => {
-        const command = find(_desc.commandRuns, $ => $.startIndex === index)
+      const description = videoDesc[1].attributedDescription
+      if (description?.commandRuns == null) { return description?.content }
+      return replace(RegExp(
+        join(map(description.commandRuns, $ => `(?<=^.{${+$.startIndex}}).{${+$.length}}`), '|'), 'sg'
+      ), description.content, (_, index) => {
+        const command = find(description.commandRuns, $ => $.startIndex === index)
         const inner = command.onTap.innertubeCommand
         let ep: any, url: string | undefined
         if ((ep = inner.watchEndpoint) != null) {
@@ -115,7 +120,6 @@ definePlugin<[any, any]>({
         }
         return _
       })
-      return description
     }
   }
 })

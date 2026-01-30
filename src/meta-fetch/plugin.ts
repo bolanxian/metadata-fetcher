@@ -2,7 +2,7 @@
 import type { DefineComponent, ExtractPropTypes, Prop } from 'vue'
 import { noop, voidPromise } from '@/bind'
 import { call } from 'bind:core'
-import { type Override, $then } from 'bind:utils'
+import { type Override, assert, $then } from 'bind:utils'
 import { freeze, keys, fromEntries } from 'bind:Object'
 import { from, filter } from 'bind:Array'
 import { get, set } from 'bind:WeakMap'
@@ -11,7 +11,6 @@ import { redirect } from './fetch'
 import { xresolveDiscover } from './discover'
 import { type RouteMap, defineRoute, resolveRoute } from './router'
 
-export const assert: { <T>(arg: any): asserts arg is T } = null!
 export let cache: BaseCache = null!
 export let initCache = ($cache: BaseCache) => {
   initCache = null!

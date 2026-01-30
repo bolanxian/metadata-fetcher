@@ -226,7 +226,10 @@ const matcher = (getIter: GetIter): RouteFn => async (ctx) => {
   const params = ctx.url.searchParams
   if (params.get('output') === 'batch') {
     return new Response(ReadableStream.from(xmatcher(getIter, ctx, params)) as any as ReadableStream, {
-      headers: { server, [TYPE]: `${types.txt};charset=UTF-8` }
+      headers: {
+        server, [TYPE]: `${types.txt};charset=UTF-8`,
+        'content-disposition': `inline; filename="rename.bat"; filename*=UTF-8''rename.bat`,
+      }
     })
   }
   let matchFn = matchId
@@ -402,8 +405,8 @@ const $html = async (mode: string, input: string) => {
   const html = concat(html0, head, html1!, attrs, html2!, app, html3!)
   return new Response(html, {
     status, headers: $html.init ??= {
+      server, [TYPE]: types.html,
       'content-security-policy': `default-src 'self';img-src * data: blob:;style-src 'self' 'unsafe-inline';`,
-      server, [TYPE]: types.html
     }
   })
 }
