@@ -22,7 +22,7 @@ import metaName from 'meta:name'
 import metaItemprop from 'meta:itemprop'
 import metaProperty from 'meta:property'
 import { config } from './config'
-import App, { Data, type Store } from './components/app.vue'
+import App, { type Store, Data, createStore, createData, prefetchStore } from './components/app.vue'
 const { stringify } = JSON
 
 const urlKeys = ['shortUrl', 'url', 'relatedUrl']
@@ -76,16 +76,25 @@ data-content-escaped="${escapeJson(parsed.title)}">`
 }
 
 export const renderToHtml = async (mode: string, input: string): Promise<{
-  status: number, head: string, attrs: string, app: string, context: {}
+  status: number, head: string, attrs: string, app: string, context: {} | null
 }> => {
-  const store: Store = { mode, input, resolved: null, data: null, parsed: null, batchResolved: null, output: '', config }
-  const app = createSSRApp(App, { store }), context = {}
   let status: number | undefined
-  app.config.errorHandler = (err, instance, info) => {
-    status = 500
-    reportError(err)
+  const store = createStore(mode, input)
+  store[Data] = createData(store)
+  if (store.input) {
+    try { await prefetchStore(store) }
+    catch (err) { status = 500; reportError(err) }
   }
-  const appHTML = await renderToString(app, context)
+  const attrs = ` data-store='${escapeAttrApos(stringify(store, void 0, 2))}'`
+  const head = join(xbuildMeta(store), '\n')
+  let html = '', context: {} | null = null
+  if (config.ssr) {
+    const app = createSSRApp(App, { store })
+    app.config.errorHandler = (err, instance, info) => {
+      status = 500; reportError(err)
+    }
+    html = await renderToString(app, context = {})
+  }
   if (status == null) {
     if (mode === 'default') {
       if (input && store.parsed == null) { status = 404 }
@@ -94,7 +103,5 @@ export const renderToHtml = async (mode: string, input: string): Promise<{
     }
     status ??= 200
   }
-  const attrs = ` data-store='${escapeAttrApos(stringify(store, void 0, 2))}'`
-  const head = join(xbuildMeta(store), '\n')
-  return { status, head, attrs, app: appHTML, context }
+  return { status, head, attrs, app: html, context }
 }

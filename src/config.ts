@@ -10,19 +10,25 @@ const PAGES = TARGET == 'pages'
 const configName = '_config.json'
 
 export interface Config {
+
   browsers: null | Record<string, { name: string, args: string[] }>
   defaultBrowser: null | string
+
   /** 指定允许的`Origin`。使用空格分隔可指定多个值。 */
   allowOrigin: string
+  ssr: boolean
+
   separator: string
   template: string
   batch: Record<string, { name: string, template: string }>
+
   nicoUrlType: 'watch' | 'tree'
 }
 export const config: Config = {
   browsers: null,
   defaultBrowser: null,
   allowOrigin: '',
+  ssr: true,
   separator: '\uFF0F',
   template: `\
 displayId=
