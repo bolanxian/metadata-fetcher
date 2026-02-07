@@ -50,7 +50,7 @@ export interface ParsedInfo {
 export const resolvedToPlugin: WeakMap<ResolvedInfo, Plugin> = new WeakMap()
 export const pluginToComponent: WeakMap<Plugin, Component<{}>> = new WeakMap()
 export const pluginList: Plugin[] = []
-export const routeMap: RouteMap<ResolvedInfo> = {}
+export const routeMap: RouteMap<ResolvedInfo | null> = { __proto__: null! }
 
 export function* xresolve(input: string): Generator<ResolvedInfo> {
   for (const discover of xresolveDiscover(input)) {
@@ -123,10 +123,9 @@ export const definePlugin = <T extends {}>(plugin: DefinePlugin<T>): Plugin<T> =
   const { resolve } = plugin
   defineRoute(routeMap, plugin.path, path => {
     const info = call(resolve, plugin, path)
-    if (info != null) {
-      set(resolvedToPlugin, info, plugin)
-      return info
-    }
+    if (info == null) { return null }
+    set(resolvedToPlugin, info, plugin)
+    return info
   })
   pluginList[pluginList.length] = plugin
   return plugin
