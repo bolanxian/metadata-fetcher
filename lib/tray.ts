@@ -41,7 +41,7 @@ const fn = new Deno.UnsafeCallback({
   result: 'void'
 }, (ptr, len) => {
   const str = decode(getArrayBuffer(ptr!, len as any))
-  switch (str[0]) {
+  outer: switch (str[0]) {
     case '@': switch (slice(str, 1)) {
       case 'success': timeout(ok, 0); break
       case 'open':
@@ -51,15 +51,16 @@ const fn = new Deno.UnsafeCallback({
       case 'exit': timeout(exit, 0, 0); break
     } break
     case '!': reject(slice(str, 1)); break
-    case '#': timeout(() => {
-      let type
+    case '#': {
+      let type: string
       switch (str[1]) {
-        case 'F': type = 'tray:open:file'; break
-        case 'D': type = 'tray:open:directory'; break
-        default: return
+        case 'F': type = 'file'; break
+        case 'D': type = 'directory'; break
+        default: break outer
       }
-      call($emit, null, new CustomEvent(type, { detail: slice(str, 2) }))
-    }, 0); break
+      const e = new CustomEvent(`tray:open:${type}`, { detail: slice(str, 2) })
+      timeout(() => { call($emit, null, e) }, 0)
+    } break
   }
 })
 export const init = (name_str: string, path_str: string, on_click: () => void) => {

@@ -432,27 +432,33 @@ export const $error = (status: number, name: string, title?: string) => {
 
 let args: string[] | undefined
 {
-  let isBrowser = false
+  let browser: NonNullable<typeof config.browsers>[string] | undefined
+  if (config.browsers != null && config.defaultBrowser != null) {
+    browser = getOwn(config.browsers, config.defaultBrowser)
+  }
   switch (platform) {
-    case 'win32': try {
-      if (config.browsers == null || config.defaultBrowser == null) { throw null }
-      const $args = getOwn(config.browsers, config.defaultBrowser)?.args
-      if ($args == null) { throw null }
+    case 'win32': {
+      if (browser == null) { break }
+      const $args = [...browser.args]
       const i = indexOf($args, '%1')
-      if (!(i > 0)) { throw null }
-      $args[i] = '$1'
-      args = $args; isBrowser = true
-    } catch (cause) {
-      args = ['explorer', '$1']
-      error(new TypeError('获取默认浏览器失败', { cause }))
+      if (!(i > 0)) { break }
+      args = $args; args[i] = '$1'
     } break
   }
-  if (isBrowser) { log('浏览器:', args![0]) }
+  if (args == null) {
+    error(new TypeError('获取默认浏览器失败', { cause: browser }))
+    switch (platform) {
+      case 'win32': args = ['explorer', '$1']; break
+    }
+  } else if (browser != null) {
+    log('浏览器:', browser.name)
+  }
 }
-export const open = (url: string) => new Promise<number | null | void>(ok => {
-  if (args == null) { return ok() }
-  const [command, ...$args] = args
-  $args[indexOf($args, '$1')] = url
+export const open = (url: string) => new Promise<number | null>(ok => {
+  const [command, ...$args] = args!
+  const i = indexOf($args, '$1')
+  if (!(i > 0)) { throw new TypeError('Not found: "$1"', { cause: args }) }
+  $args[i] = url
   const process = spawn(command!, $args, { stdio: 'inherit', shell: false })
   process.on('exit', ok)
 })
@@ -559,7 +565,7 @@ if (typeof addEventListener == 'function') {
   for (const type of ['file', 'directory']) {
     addEventListener(`tray:open:${type}`, e => {
       if (url == null) { return }
-      const nextPath = `.dialog?${new URLSearchParams({ type, path: (e as CustomEvent).detail })}`
+      const nextPath = `.dialog?${new URLSearchParams({ type, path: (e as CustomEvent<string>).detail })}`
       open(`${url}!${encodeURIComponent(nextPath)}`)
     })
   }
