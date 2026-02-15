@@ -7,23 +7,24 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+node_modules
+package-lock.json
+*.lock
+
+dist
+dist-pages
+/crates/*/target
 /koishi-plugin/*.js
 /koishi-plugin/*.svg
 *.7z
+*.zip
 *.tar
 *.tgz
-/crates/*/target
-Cargo.lock
-deno.lock
-package-lock.json
 __*__
+
+*.local
 *.local.*
 *.proxy.*
-node_modules
-dist
-dist-pages
-.vite
-*.local
 
 # Editor directories and files
 .vscode/*

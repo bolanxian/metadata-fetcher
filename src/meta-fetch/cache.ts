@@ -59,15 +59,19 @@ export class FsCache extends BaseCache {
       name = resolveName(name)
       const path = `${prefix}/${name}`
       try {
-        return await this.#readFile(path, { encoding: 'utf8', signal })
+        const data = await this.#readFile(path, { encoding: 'utf8', signal })
+        if (data) { return data }
       } catch (error: any) {
         //error.name !== 'NotFound'
         if (error.code !== 'ENOENT') { throw error }
       }
       if (context != null) {
-        const ret = await context()
-        if (ret != null) { await this.#writeFile(path, ret) }
-        return ret
+        const data = await context()
+        if (data != null) {
+          try { await this.#writeFile(path, data) }
+          catch (e) { reportError(e) }
+        }
+        return data
       }
     }
     this.#lru = new LRUCache({ max: 200, fetchMethod })

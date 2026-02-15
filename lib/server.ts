@@ -446,7 +446,7 @@ let args: string[] | undefined
     } break
   }
   if (args == null) {
-    error(new TypeError('获取默认浏览器失败', { cause: browser }))
+    error('获取默认浏览器失败', browser)
     switch (platform) {
       case 'win32': args = ['explorer', '$1']; break
     }
@@ -454,14 +454,14 @@ let args: string[] | undefined
     log('浏览器:', browser.name)
   }
 }
-export const open = (url: string) => new Promise<number | null>(ok => {
-  const [command, ...$args] = args!
+export const open = args != null ? (url: string) => new Promise<number | null>(ok => {
+  const [command, ...$args] = args
   const i = indexOf($args, '$1')
   if (!(i > 0)) { throw new TypeError('Not found: "$1"', { cause: args }) }
   $args[i] = url
   const process = spawn(command!, $args, { stdio: 'inherit', shell: false })
   process.on('exit', ok)
-})
+}) : null
 
 const fetch = (request: Request, remoteAddr: string) => {
   const _origin = request.headers.get('origin')
@@ -564,7 +564,7 @@ export const main = (port = 6702, hostname = '127.0.0.1') => {
 if (typeof addEventListener == 'function') {
   for (const type of ['file', 'directory']) {
     addEventListener(`tray:open:${type}`, e => {
-      if (url == null) { return }
+      if (url == null || open == null) { return }
       const nextPath = `.dialog?${new URLSearchParams({ type, path: (e as CustomEvent<string>).detail })}`
       open(`${url}!${encodeURIComponent(nextPath)}`)
     })
