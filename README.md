@@ -19,7 +19,7 @@
 ### CLI / WebUI
 ```batch
 ::构建
-npm run build
+bun run build
 
 ::运行 WebUI
 deno task serve
@@ -33,8 +33,9 @@ deno task batch <".id" | "list" | "name" | ...> [...]
 
 ### Koishi 插件
 ```batch
-deno task build:koishi
-npm pack -w koishi-plugin-metadata-fetcher
+bun run build:koishi
+cd koishi-plugin
+bun pm pack
 
 cd <koishi-desktop>\data\instances\default
 yarn add ./koishi-plugin-metadata-fetcher-<version>.tgz

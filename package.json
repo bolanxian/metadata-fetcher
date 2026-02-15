@@ -1,42 +1,51 @@
 {
   "name": "metadata-fetcher",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
+  "devEngines": {
+    "packageManager": {
+      "name": "bun",
+      "onFail": "error"
+    }
+  },
   "scripts": {
-    "start": "start deno run --quiet --no-prompt --no-remote -S -E -N -R -W=./__cache__ --allow-run --unstable-ffi --allow-ffi ./lib/main.ts start",
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
     "dev": "vite",
     "preview": "vite preview",
     "preview:pages": "vite preview --outDir ../dist-pages",
-    "build": "vue-tsc --noEmit && npm run build:client && npm run build:server",
+    "build": "vue-tsc --noEmit && bun run build:client && bun run build:server",
     "build:client": "vite build",
     "build:server": "vite build --ssr main.ssr.ts",
-    "crates": "npm run crate:reg && npm run crate:tray",
-    "crate:reg": "cd crates/reg-utils && cargo build --release && move /Y target\\release\\reg-utils.exe ..\\..\\dist\\",
-    "crate:tray": "cd crates/tray && cargo build --release && move /Y target\\release\\tray.dll ..\\..\\dist\\",
+    "build:koishi": "export VITE_TARGET=koishi && bun run build:client --",
+    "build:pages": "export VITE_TARGET=pages && bun run build:client --",
+    "build:pages:min": "bun run build:pages -- --minify",
+    "crate": "bun run crate:reg && bun run crate:tray",
+    "crate:reg": "cd crates/reg-utils && cargo build --release && mv -f target/release/reg-utils.exe ../../dist/",
+    "crate:tray": "cd crates/tray && cargo build --release && mv -f target/release/tray.dll ../../dist/",
     "extra:png": "python ./lib/convert-svg.py ./public/favicon.svg ./dist/favicon.png",
     "extra:ico": "ffmpeg -i ./dist/favicon.png ./dist/favicon.ico",
-    "tar": "tar cf metadata-fetcher.tar deno.json *.md run.bat lib/*.ts dist/*",
-    "7z": "7z a metadata-fetcher.7z -m0=LZMA2 -mx=9 -mhc=off -ms=on -mqs=on -- deno.json *.md run.bat lib/*.ts dist/*"
+    "tar": "tar cf metadata-fetcher.tar deno.json \\*.md run.bat lib/\\*.ts dist/\\*",
+    "zip": "7z a metadata-fetcher.zip -- deno.json \\*.md run.bat lib/\\*.ts dist/\\*",
+    "7z": "7z a metadata-fetcher.7z -m0=LZMA2 -mx=9 -mhc=off -ms=on -mqs=on -- deno.json \\*.md run.bat lib/\\*.ts dist/\\*"
   },
   "dependencies": {
-    "@xterm/addon-webgl": "^0.18.0",
-    "@xterm/xterm": "^5.5.0",
+    "@xterm/addon-webgl": "^0.19.0",
+    "@xterm/xterm": "^6.0.0",
     "bind-script": "github:bolanxian/BindScript",
     "cheerio": "^1.2.0",
-    "lru-cache": "^11.2.5",
+    "lru-cache": "^11.2.6",
     "qrcode": "^1.5.4",
-    "temporal-polyfill": "^0.2.5",
-    "view-ui-plus": "^1.3.21",
-    "vue": "^3.5.25"
+    "temporal-polyfill": "^0.3.0",
+    "view-ui-plus": "^1.3.23",
+    "vue": "^3.5.28"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.8",
+    "@types/bun": "^1.3.9",
     "@types/deno": "^2.5.0",
-    "@types/node": "^25.2.2",
+    "@types/node": "^25.3.0",
     "@types/qrcode": "^1.5.6",
     "@vitejs/plugin-vue": "^6.0.4",
     "@vitest/ui": "^4.0.18",
@@ -44,7 +53,7 @@
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vitest": "^4.0.18",
-    "vue-tsc": "^3.2.4"
+    "vue-tsc": "^3.2.5"
   },
   "workspaces": [
     "koishi-plugin"

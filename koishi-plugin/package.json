@@ -14,16 +14,18 @@
   "files": [
     "index.js"
   ],
-  "scripts": {},
   "keywords": [
     "chatbot",
     "koishi",
-    "plugin"
+    "plugin",
+    "meta",
+    "metadata",
+    "url"
   ],
   "peerDependencies": {
     "cheerio": "^1.2.0",
     "koishi": "^4.18.10",
-    "temporal-polyfill": "^0.2.5"
+    "temporal-polyfill": "^0.3.0"
   },
   "koishi": {
     "service": {

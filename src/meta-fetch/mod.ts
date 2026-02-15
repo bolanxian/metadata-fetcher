@@ -6,7 +6,11 @@ export * from './router'
 export * from './plugin'
 import './platforms/$'
 import './platforms/bilibili-video'
-import.meta.glob('./platforms/*', { eager: true })
+import.meta.glob([
+  './platforms/*',
+  '!./platforms/*.test.js',
+  '!./platforms/*.bench.js',
+], { eager: true })
 
 import type { BaseCache } from './cache'
 import { initCache } from './plugin'

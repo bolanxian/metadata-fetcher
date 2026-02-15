@@ -15,22 +15,14 @@
     }
   },
   "tasks": {
-    "dev": "exit",
-    "build": "npm run build --",
-    "build:client": "npm run build:client --",
-    "build:server": "npm run build:server --",
-    "build:koishi": "export VITE_TARGET=koishi && npm run build:client --",
-    "build:pages": "export VITE_TARGET=pages && npm run build:client --",
-    "build:pages:min": "deno task build:pages --minify",
     "fetch:node": "node --import=./lib/preload.node.ts ./lib/main.ts fetch",
     "batch:node": "node --import=./lib/preload.node.ts ./lib/main.ts batch",
-    "serve:bun": "bun --preload=./lib/preload.bun.ts ./lib/main.ts serve",
-    "fetch:bun": "bun --preload=./lib/preload.bun.ts ./lib/main.ts fetch",
-    "batch:bun": "bun --preload=./lib/preload.bun.ts ./lib/main.ts batch",
+    "serve:bun": "bun run --preload=./lib/preload.bun.ts ./lib/main.ts serve",
+    "fetch:bun": "bun run --preload=./lib/preload.bun.ts ./lib/main.ts fetch",
+    "batch:bun": "bun run --preload=./lib/preload.bun.ts ./lib/main.ts batch",
     "serve": "deno run --quiet --no-prompt --no-remote -P ./lib/main.ts serve",
     "fetch": "deno run --quiet --no-prompt --no-remote -P ./lib/main.ts fetch",
     "batch": "deno run --quiet --no-prompt --no-remote -P ./lib/main.ts batch",
-    "test": "deno test --no-check -P ./lib/main.test.js --",
-    "bench": "deno bench --no-check -P ./lib/main.ts --"
+    "dev": "exit"
   }
 }

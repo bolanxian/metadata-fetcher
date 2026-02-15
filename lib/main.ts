@@ -5,7 +5,7 @@ export let [, , task, ...args]: [any, any, string | ImportMeta, ...string[]]
     ? argv as any
     : [, , import.meta]
 
-import { argv, exit } from 'node:process'
+import process, { argv, env, exit } from 'node:process'
 const MAIN = import('@/main.ssr')
 const { log, error } = console
 
@@ -38,7 +38,7 @@ if (task === 'start') {
     await ready
     const { url } = await main()!
     const icon = './dist/favicon.ico'
-    const onClick = () => { open(url) }
+    const onClick = () => { open?.(url) }
     await init(name, icon, onClick)
     $['reset-tray'] = async ({ remoteAddr }) => {
       if (!startsWith(remoteAddr, '127.')) {
@@ -56,7 +56,7 @@ if (task === 'start') {
   }
 }
 
-const { ready, resolve, xparse, render, renderBatch } = await MAIN
+const { ready, xparse, render, renderBatch } = await MAIN
 await ready
 
 if (task === 'fetch') {
@@ -85,28 +85,13 @@ if (task === 'fetch') {
   for await (const $ of renderBatch(_args, type!)) { log($.error ?? $.value) }
 } else if (task === 'serve' || task == null) {
   const { main, open } = await import('./server.ts')
-  const { url } = await main()!
-  await open(url)
-  addEventListener('error', e => {
-    error((e as ErrorEvent).error)
-    e.preventDefault()
-  })
+  const port = env['PORT'], hostname = env['HOSTNAME']
+  const { url } = await main(port != null ? +port : void 0, hostname)!
+  await open?.(url)
+  process.on('uncaughtException', e => error(e))
 } else if (task === 'start') {
 
 } else if (task !== import.meta) {
   error(new RangeError(`unrecognized subcommand '${task}'`))
   exit(1)
-} else {
-  Deno.bench('av号', () => {
-    resolve('av1')
-  })
-  Deno.bench('BV号', () => {
-    resolve('raw!BV1xx411c7mQ')
-  })
-  Deno.bench('av2bv', () => {
-    resolve('bv!av1')
-  })
-  Deno.bench('bv2av', () => {
-    resolve('BV1xx411c7mQ')
-  })
 }
