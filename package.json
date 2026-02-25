@@ -22,16 +22,18 @@
     "build:koishi": "export VITE_TARGET=koishi && bun run build:client --",
     "build:pages": "export VITE_TARGET=pages && bun run build:client --",
     "build:pages:min": "bun run build:pages -- --minify",
-    "crate": "bun run crate:reg && bun run crate:tray",
+    "crate": "bun run crate:svg && bun run crate:reg && bun run crate:tray",
+    "crate:svg": "cd crates/convert-svg && cargo build --release && mv -f target/release/convert-svg.exe ../../node_modules/.bin/",
     "crate:reg": "cd crates/reg-utils && cargo build --release && mv -f target/release/reg-utils.exe ../../dist/",
     "crate:tray": "cd crates/tray && cargo build --release && mv -f target/release/tray.dll ../../dist/",
-    "extra:png": "python ./lib/convert-svg.py ./public/favicon.svg ./dist/favicon.png",
-    "extra:ico": "ffmpeg -i ./dist/favicon.png ./dist/favicon.ico",
+    "convert:png": "cat ./public/favicon.svg | convert-svg png > ./dist/favicon.png",
+    "convert:ico": "cat ./public/favicon.svg | convert-svg ico > ./dist/favicon.ico",
     "tar": "tar cf metadata-fetcher.tar deno.json \\*.md run.bat lib/\\*.ts dist/\\*",
     "zip": "7z a metadata-fetcher.zip -- deno.json \\*.md run.bat lib/\\*.ts dist/\\*",
     "7z": "7z a metadata-fetcher.7z -m0=LZMA2 -mx=9 -mhc=off -ms=on -mqs=on -- deno.json \\*.md run.bat lib/\\*.ts dist/\\*"
   },
   "dependencies": {
+    "@vue/runtime-dom": "^3.5.29",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "bind-script": "github:bolanxian/BindScript",
@@ -40,7 +42,7 @@
     "qrcode": "^1.5.4",
     "temporal-polyfill": "^0.3.0",
     "view-ui-plus": "^1.3.23",
-    "vue": "^3.5.28"
+    "vue": "^3.5.29"
   },
   "devDependencies": {
     "@types/bun": "^1.3.9",
@@ -50,6 +52,7 @@
     "@vitejs/plugin-vue": "^6.0.4",
     "@vitest/ui": "^4.0.18",
     "koishi": "^4.18.10",
+    "rollup": "^4.59.0",
     "typescript": "^5.9.3",
     "vite": "^7.3.1",
     "vitest": "^4.0.18",

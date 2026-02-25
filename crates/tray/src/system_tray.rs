@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::ops::Deref;
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 pub type Handle = extern "C" fn(*const u8, usize);
 
@@ -22,8 +22,8 @@ pub struct SystemTray {
     pub item_exit: nwg::MenuItem,
 
     pub handle: Handle,
-    pub name: String,
-    pub path: String,
+    pub name: Weak<String>,
+    pub icon_path: Weak<String>,
 }
 
 pub trait Dispatch<T, A> {
@@ -42,7 +42,7 @@ impl<S: AsRef<[u8]>> Dispatch<&SystemTray, S> for SystemTray {
 }
 
 impl SystemTray {
-    pub fn new(handle: Handle, name: String, path: String) -> SystemTray {
+    pub fn new(handle: Handle, name: Weak<String>, icon: Weak<String>) -> SystemTray {
         SystemTray {
             window: Default::default(),
             icon: Default::default(),
@@ -62,7 +62,7 @@ impl SystemTray {
 
             handle: handle,
             name: name,
-            path: path,
+            icon_path: icon,
         }
     }
     pub fn notification<'a>(&self, text: &'a str, title: Option<&'a str>) {
@@ -161,8 +161,13 @@ impl nwg::NativeUi<SystemTrayUi> for SystemTray {
     fn build_ui(mut data: SystemTray) -> Result<SystemTrayUi, nwg::NwgError> {
         use SystemTrayUi as Ui;
 
+        let name = Weak::upgrade(&data.name);
+        let name: Option<&str> = name.as_deref().map(String::as_str);
+        let icon = Weak::upgrade(&data.icon_path);
+        let icon: Option<&str> = icon.as_deref().map(String::as_str);
+
         nwg::Icon::builder()
-            .source_file(Some(&data.path))
+            .source_file(icon)
             .build(&mut data.icon)?;
 
         nwg::MessageWindow::builder().build(&mut data.window)?;
@@ -170,7 +175,7 @@ impl nwg::NativeUi<SystemTrayUi> for SystemTray {
         nwg::TrayNotification::builder()
             .parent(&data.window)
             .icon(Some(&data.icon))
-            .tip(Some(&data.name))
+            .tip(name)
             .build(&mut data.tray)?;
 
         nwg::Menu::builder()
@@ -203,7 +208,7 @@ impl nwg::NativeUi<SystemTrayUi> for SystemTray {
 
         let evt_ui = Rc::downgrade(&ui.inner);
         let handle_events = move |evt, _evt_data, handle| {
-            if let Some(evt_ui) = evt_ui.upgrade() {
+            if let Some(evt_ui) = Weak::upgrade(&evt_ui) {
                 SystemTray::handle_event(&evt_ui, &evt, &handle);
             }
         };

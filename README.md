@@ -29,6 +29,12 @@ deno task serve:bun
 deno task fetch [...]
 ::批量模式
 deno task batch <".id" | "list" | "name" | ...> [...]
+
+::完整构建
+bun create https://github.com/bolanxian/metadata-fetcher
+cd metadata-fetcher
+bun run build && bun run crate && bun run convert:ico
+start "" deno run --no-prompt -P=start ./lib/main.ts start
 ```
 
 ### Koishi 插件

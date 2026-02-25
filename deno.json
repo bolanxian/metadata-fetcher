@@ -12,6 +12,16 @@
       "run": true,
       "ffi": true,
       "sys": true
+    },
+    "start": {
+      "read": true,
+      "write": ["./__cache__"],
+      "import": false,
+      "env": true,
+      "net": true,
+      "run": true,
+      "ffi": true,
+      "sys": true
     }
   },
   "tasks": {
@@ -23,6 +33,6 @@
     "serve": "deno run --quiet --no-prompt --no-remote -P ./lib/main.ts serve",
     "fetch": "deno run --quiet --no-prompt --no-remote -P ./lib/main.ts fetch",
     "batch": "deno run --quiet --no-prompt --no-remote -P ./lib/main.ts batch",
-    "dev": "exit"
+    "start": "deno run --quiet --no-prompt --no-remote -P=start ./lib/main.ts start"
   }
 }
