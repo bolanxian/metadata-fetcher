@@ -1,31 +1,73 @@
 
 import { fileURLToPath } from 'node:url'
+import process, { exit } from 'node:process'
 import { encodeText as encode, decodeText as decode, call, $string } from '@/main.ssr'
-const { slice } = $string
-const { getArrayBuffer } = Deno.UnsafePointerView
-const { exit } = Deno, timeout = setTimeout, { error } = console
-const { addEventListener: $on, dispatchEvent: $emit } = EventTarget.prototype
-const { preventDefault: $preventDefault, stopPropagation: $stopPropagation } = Event.prototype
+const { slice } = $string, { error } = console, timeout = setTimeout
+const { dispatchEvent: $emit } = EventTarget.prototype
+const filename = fileURLToPath(import.meta.resolve('../dist/tray.dll'))
 
-const tray = Deno.dlopen(fileURLToPath(import.meta.resolve('../dist/tray.dll')), {
-  set_console_output_code_page: { parameters: ['u32'], result: 'i32' },
-  set_title: { parameters: ['buffer', 'usize'], result: 'i32' },
-  show_console: { parameters: ['i32'], result: 'i32' },
-  tray_init: {
-    parameters: ['buffer', 'usize', 'buffer', 'usize', 'function'],
-    result: 'i32',
-    nonblocking: true
-  },
-  tray_deinit: {
-    parameters: [],
-    result: 'void'
-  },
-  tray_notification: {
-    parameters: ['buffer', 'usize', 'buffer', 'usize'],
-    result: 'void'
-  }
-})
-const { set_console_output_code_page, set_title, show_console, tray_init, tray_deinit, tray_notification } = tray.symbols
+let runtime = 'unknown'
+switch (`${typeof Deno}:${typeof Bun}`) {
+  case 'object:undefined': runtime = 'deno'; break
+  case 'undefined:object': runtime = 'bun'; break
+}
+
+type i32 = number
+type u32 = number
+type usize = bigint
+type Buffer = Uint8Array<ArrayBuffer> | null
+type Fn = Deno.PointerObject
+let symbols: Readonly<{
+  set_console_output_code_page: (code: u32) => i32
+  set_title: (buf: Buffer, len: usize) => i32
+  show_console: (show: i32) => i32
+  tray_init: (name_buf: Buffer, name_len: usize, path_buf: Buffer, path_len: usize, handle: Fn) => i32
+  tray_deinit: () => void
+  tray_notification: (text_buf: Buffer, text_len: usize, title_buf: Buffer, title_len: usize) => void
+}>
+let tray: any, fn: any
+let fnPtr: Fn
+switch (runtime) {
+  case 'deno': {
+    const { getArrayBuffer } = Deno.UnsafePointerView
+    const $fn = <R, A extends unknown[]>(result: R, ...parameters: readonly [...A]) => ({ parameters, result } as const)
+    const tray_inner = Deno.dlopen(filename, {
+      set_console_output_code_page: $fn('i32', 'u32'),
+      set_title: $fn('i32', 'buffer', 'usize'),
+      show_console: $fn('i32', 'i32'),
+      tray_init: $fn('i32', 'buffer', 'usize', 'buffer', 'usize', 'function'),
+      tray_deinit: $fn('void'),
+      tray_notification: $fn('void', 'buffer', 'usize', 'buffer', 'usize'),
+    })
+    tray = tray_inner
+    symbols = tray_inner.symbols
+    const fn_inner = new Deno.UnsafeCallback($fn('void', 'buffer', 'usize'), (ptr, len) => {
+      handle(decode(getArrayBuffer(ptr!, len as any)))
+    })
+    fn = fn_inner
+    fnPtr = fn_inner.pointer
+  } break
+  case 'bun': {
+    const { dlopen, JSCallback, CString } = await import('bun:ffi')
+    const $fn = <R, A extends unknown[]>(returns: R, ...args: readonly [...A]) => ({ args, returns } as const)
+    tray = dlopen(filename, {
+      set_console_output_code_page: $fn('i32', 'u32'),
+      set_title: $fn('i32', 'buffer', 'usize'),
+      show_console: $fn('i32', 'i32'),
+      tray_init: $fn('i32', 'buffer', 'usize', 'buffer', 'usize', 'callback'),
+      tray_deinit: $fn('void'),
+      tray_notification: $fn('void', 'buffer', 'usize', 'buffer', 'usize'),
+    })
+    symbols = tray.symbols
+    fn = new JSCallback((ptr, len) => {
+      handle(`${new CString(ptr, len)}`)
+    }, $fn('void', 'buffer', 'usize'))
+    fnPtr = fn
+  } break
+  default: throw new TypeError(`FFI is not supported.(Runtime: ${runtime})`)
+}
+
+const { set_console_output_code_page, set_title, show_console, tray_init, tray_deinit, tray_notification } = symbols
 
 export const setConsoleOutputCP = (code_page_id: number) => set_console_output_code_page(code_page_id) != 0
 export const setTitle = (title_str: string) => {
@@ -34,20 +76,16 @@ export const setTitle = (title_str: string) => {
 }
 export const hideConsole = () => show_console(0) != 0
 export const showConsole = () => show_console(1) != 0
-let ready: Promise<void>, ok: () => void, reject: (reason: string) => void, name: string
-let closed: Promise<number>, onClick: () => void
-const fn = new Deno.UnsafeCallback({
-  parameters: ['buffer', 'usize'],
-  result: 'void'
-}, (ptr, len) => {
-  const str = decode(getArrayBuffer(ptr!, len as any))
+let ready: Promise<void>, ok: () => void, reject: (reason: string) => void
+let name: string | null = null, onClick: (() => void) | null = null
+const handle = (str: string) => {
   outer: switch (str[0]) {
     case '@': switch (slice(str, 1)) {
       case 'success': timeout(ok, 0); break
       case 'open':
-      case 'click': timeout(onClick, 0); break
-      case 'show': showConsole(); break
-      case 'hide': hideConsole(); break
+      case 'click': timeout(onClick!, 0); break
+      case 'show': timeout(showConsole, 0); break
+      case 'hide': timeout(hideConsole, 0); break
       case 'exit': timeout(exit, 0, 0); break
     } break
     case '!': reject(slice(str, 1)); break
@@ -62,40 +100,32 @@ const fn = new Deno.UnsafeCallback({
       timeout(() => { call($emit, null, e) }, 0)
     } break
   }
-})
+}
+
 export const init = (name_str: string, path_str: string, on_click: () => void) => {
-  if (closed != null) { return }
-  const name_buf = encode(name_str)
+  if (name != null) { return }
+  const name_buf = encode(name = name_str)
   const path_buf = encode(path_str)
-  name = name_str
   onClick = on_click
   ready = new Promise(($1, $2) => { ok = $1; reject = $2 })
-  closed = tray_init(name_buf, name_buf.length as any, path_buf, path_buf.length as any, fn.pointer)
+  if (tray_init(name_buf, name_buf.length as any, path_buf, path_buf.length as any, fnPtr) != 0) {
+    name = onClick = null
+  }
   return ready
 }
 export const deinit = () => {
-  if (closed == null) { return }
+  if (name == null) { return }
   tray_deinit()
-  closed = onClick = (void 0)!
+  name = onClick = null
 }
 export const notification = (text_str: string, title_str = '') => {
   const text = encode(text_str)
   const title = title_str.length > 0 ? encode(title_str) : null
   tray_notification(text, text.length as any, title, title_str.length > 0 ? title!.length as any : 0)
 }
-call($on, null, 'unload', e => { deinit() })
-call($on, null, 'unhandledrejection', e => {
-  if (closed == null) { return }
-  error((e as PromiseRejectionEvent).reason)
-  notification('发生错误', name)
-  call($preventDefault, e)
-  call($stopPropagation, e)
+process.on('uncaughtException', e => {
+  error(e)
+  if (name != null) { notification('发生错误', name) }
 })
-call($on, null, 'error', e => {
-  if (closed == null) { return }
-  error((e as ErrorEvent).error)
-  notification('发生错误', name)
-  call($preventDefault, e)
-  call($stopPropagation, e)
-})
-Deno.addSignalListener("SIGINT", () => { exit(0) })
+process.on('SIGINT', () => { exit(0) })
+process.on('exit', code => { deinit() })
