@@ -1,129 +1,105 @@
 use std::cell::RefCell;
+use std::ffi::OsString;
 use std::ops::Deref;
 use std::rc::{Rc, Weak};
+use std::sync::{mpsc, Arc};
 
-pub type Handle = extern "C" fn(*const u8, usize);
 type BuildResult = Result<(), nwg::NwgError>;
+type ExecuterNotice = &'static (dyn Fn(&'static SystemTrayInner) + Sync);
 
-enum MenuItem {
+pub enum MenuEnum {
     Item(&'static str, nwg::MenuItem),
     Separator(nwg::MenuSeparator),
 }
-fn push_item(
-    list: &mut Vec<MenuItem>,
-    menu: &nwg::Menu,
-    name: &'static str,
-    text: &str,
-) -> BuildResult {
-    let mut item: nwg::MenuItem = Default::default();
-    nwg::MenuItem::builder()
-        .text(text)
-        .parent(menu)
-        .build(&mut item)?;
-    list.push(MenuItem::Item(name, item));
-    Ok(())
+pub struct SystemTray<
+    'a,
+    OnBuild: FnOnce(&mut SystemTrayBuild) -> BuildResult,
+    OnClick: Fn(&SystemTrayInner),
+    OnSelect: Fn(&SystemTrayInner, &str),
+> {
+    pub name: &'a str,
+    pub icon_path: &'a str,
+    pub on_build: OnBuild,
+    pub on_click: OnClick,
+    pub on_select: OnSelect,
 }
-fn push_separator(list: &mut Vec<MenuItem>, menu: &nwg::Menu) -> BuildResult {
-    let mut sep: nwg::MenuSeparator = Default::default();
-    nwg::MenuSeparator::builder().parent(menu).build(&mut sep)?;
-    list.push(MenuItem::Separator(sep));
-    Ok(())
+pub struct SystemTrayBuild<'a> {
+    list: Vec<MenuEnum>,
+    menu: &'a nwg::Menu,
 }
-
-pub struct SystemTray {
+#[derive(Default)]
+pub struct SystemTrayInnerInner {
     window: nwg::MessageWindow,
-    pub notice: nwg::Notice,
+    notice: nwg::Notice,
     icon: nwg::Icon,
     tray: nwg::TrayNotification,
     tray_menu: nwg::Menu,
-    pub picker_file: nwg::FileDialog,
-    pub picker_directory: nwg::FileDialog,
+    picker_file: nwg::FileDialog,
+    picker_directory: nwg::FileDialog,
+}
+pub struct SystemTrayInner {
+    inner: SystemTrayInnerInner,
+    item_list: Box<[MenuEnum]>,
 
-    item_list: Box<[MenuItem]>,
+    on_click: Box<dyn Fn(&SystemTrayInner)>,
+    on_select: Box<dyn Fn(&SystemTrayInner, &str)>,
 
-    pub handle: Handle,
-    on_notice: Box<dyn Fn()>,
-    name: Weak<String>,
-    icon_path: Weak<String>,
+    notice_rx: mpsc::Receiver<ExecuterNotice>,
+}
+pub struct Executer {
+    notice_tx: mpsc::Sender<ExecuterNotice>,
+    notice_sender: nwg::NoticeSender,
+}
+pub struct SystemTrayUi {
+    inner: Rc<SystemTrayInner>,
+    pub executer: Arc<Executer>,
+    default_handler: RefCell<Vec<nwg::EventHandler>>,
 }
 
-pub trait Dispatch<T, A> {
-    fn dispatch(_: T, _: A);
-}
-impl<S: AsRef<[u8]>> Dispatch<Handle, S> for SystemTray {
-    fn dispatch(handle: Handle, data: S) {
-        let data = S::as_ref(&data);
-        handle(<[u8]>::as_ptr(data), <[u8]>::len(data));
+impl SystemTrayBuild<'_> {
+    pub fn push_item(&mut self, name: &'static str, text: &str) -> BuildResult {
+        let mut item: nwg::MenuItem = Default::default();
+        nwg::MenuItem::builder()
+            .text(text)
+            .parent(self.menu)
+            .build(&mut item)?;
+        self.list.push(MenuEnum::Item(name, item));
+        Ok(())
+    }
+    pub fn push_separator(&mut self) -> BuildResult {
+        let mut sep: nwg::MenuSeparator = Default::default();
+        nwg::MenuSeparator::builder()
+            .parent(self.menu)
+            .build(&mut sep)?;
+        self.list.push(MenuEnum::Separator(sep));
+        Ok(())
     }
 }
-impl<S: AsRef<[u8]>> Dispatch<&SystemTray, S> for SystemTray {
-    fn dispatch(this: &SystemTray, data: S) {
-        SystemTray::dispatch(this.handle, data);
-    }
-}
-
-impl SystemTray {
-    pub fn new(
-        handle: Handle,
-        name: Weak<String>,
-        icon: Weak<String>,
-        on_notice: Box<dyn Fn()>,
-    ) -> SystemTray {
-        SystemTray {
-            window: Default::default(),
-            notice: Default::default(),
-            icon: Default::default(),
-            tray: Default::default(),
-            tray_menu: Default::default(),
-            picker_file: Default::default(),
-            picker_directory: Default::default(),
-
-            item_list: Default::default(),
-
-            handle: handle,
-            on_notice: on_notice,
-            name: name,
-            icon_path: icon,
-        }
-    }
+impl SystemTrayInner {
     pub fn notification<'a>(&self, text: &'a str, title: Option<&'a str>) {
         use nwg::TrayNotificationFlags as Flags;
         let flags = Flags::USER_ICON | Flags::LARGE_ICON;
         self.tray.show(text, title, Some(flags), Some(&self.icon));
     }
-    pub fn set_show(&self, show: bool) {
-        self.find("show").map(|item| item.set_enabled(!show));
-        self.find("hide").map(|item| item.set_enabled(show));
-    }
     fn show_menu(&self) {
         let (x, y) = nwg::GlobalCursor::position();
         self.tray_menu.popup(x, y);
     }
-    fn click(&self) {
-        SystemTray::dispatch(self, "@click");
-    }
-    fn pick(&self, is_dir: bool) {
+    pub fn pick(&self, is_dir: bool) -> Option<OsString> {
         let picker = match is_dir {
             true => &self.picker_directory,
             false => &self.picker_file,
         };
         if !picker.run(Some(&self.window)) {
-            return;
+            return None;
         }
-        let item = match picker.get_selected_item() {
-            Ok(item) => item,
-            Err(_) => return,
-        };
-        let item = match item.to_str() {
-            Some(item) => item,
-            None => return,
-        };
-        let ret = format!("#{}{}", if is_dir { "D" } else { "F" }, item);
-        SystemTray::dispatch(self, &ret);
+        let item = picker.get_selected_item();
+        let Ok(item) = item else { return None };
+        Some(item)
     }
-    fn find(&self, name: &str) -> Option<&nwg::MenuItem> {
+    pub fn find(&self, name: &str) -> Option<&nwg::MenuItem> {
         self.item_list.iter().find_map(|item| {
-            if let MenuItem::Item(target_name, item) = item {
+            if let MenuEnum::Item(target_name, item) = item {
                 if name == *target_name {
                     return Some(item);
                 }
@@ -134,12 +110,12 @@ impl SystemTray {
     fn find_handle(&self, handle: &nwg::ControlHandle) -> Option<(&str, &nwg::MenuItem)> {
         self.item_list.iter().find_map(|item| {
             match item {
-                MenuItem::Item(target_name, item) => {
+                MenuEnum::Item(target_name, item) => {
                     if handle == item {
                         return Some((*target_name, item));
                     }
                 }
-                MenuItem::Separator(item) => {
+                MenuEnum::Separator(item) => {
                     let _ = item;
                 }
             }
@@ -150,7 +126,7 @@ impl SystemTray {
         use nwg::Event as E;
         match evt {
             E::OnMousePress(nwg::MousePressEvent::MousePressLeftUp) => match () {
-                () if handle == &self.tray => Self::click(self),
+                () if handle == &self.tray => (self.on_click)(self),
                 () => (),
             },
             E::OnContextMenu => match () {
@@ -158,43 +134,55 @@ impl SystemTray {
                 () => (),
             },
             E::OnMenuItemSelected => {
-                let item = self.find_handle(handle);
-                let (name, _) = match item {
-                    Some(item) => item,
-                    _ => return,
-                };
-                if name.starts_with("pick_") {
-                    match name {
-                        "pick_file" => Self::pick(self, false),
-                        "pick_directory" => Self::pick(self, true),
-                        _ => (),
-                    }
-                } else {
-                    SystemTray::dispatch(self, format!("@{}", name));
-                }
+                let item = Self::find_handle(self, handle);
+                let Some((name, _)) = item else { return };
+                (self.on_select)(self, name);
             }
             E::OnNotice => match () {
-                () if handle == &self.notice => (self.on_notice)(),
+                () if handle == &self.notice => {
+                    let ui: &'static Self = unsafe { &*&raw const *self };
+                    while let Ok(f) = self.notice_rx.try_recv() {
+                        f(ui);
+                    }
+                }
                 () => (),
             },
             _ => {}
         }
     }
 }
-
-pub struct SystemTrayUi {
-    inner: Rc<SystemTray>,
-    default_handler: RefCell<Vec<nwg::EventHandler>>,
+impl Executer {
+    pub fn execute<F, T>(&self, f: F) -> Option<T>
+    where
+        F: Fn(&SystemTrayInner) -> T + Sync + 'static,
+        T: Send + 'static,
+    {
+        let (tx, rx) = mpsc::channel::<T>();
+        let handle = move |ui| {
+            let _ = tx.send(f(ui));
+        };
+        self.notice_tx.send(unsafe { &*&raw const handle }).ok()?;
+        self.notice_sender.notice();
+        rx.recv().ok()
+    }
 }
 
-impl nwg::NativeUi<SystemTrayUi> for SystemTray {
-    fn build_ui(mut data: SystemTray) -> Result<SystemTrayUi, nwg::NwgError> {
+impl<OnBuild, OnClick, OnSelect> nwg::NativeUi<SystemTrayUi>
+    for SystemTray<'_, OnBuild, OnClick, OnSelect>
+where
+    OnBuild: FnOnce(&mut SystemTrayBuild) -> BuildResult + 'static,
+    OnClick: Fn(&SystemTrayInner) + 'static,
+    OnSelect: Fn(&SystemTrayInner, &str) + 'static,
+{
+    fn build_ui(
+        options: SystemTray<OnBuild, OnClick, OnSelect>,
+    ) -> Result<SystemTrayUi, nwg::NwgError> {
         use SystemTrayUi as Ui;
 
-        let name = Weak::upgrade(&data.name);
-        let name: Option<&str> = name.as_deref().map(String::as_str);
-        let icon = Weak::upgrade(&data.icon_path);
-        let icon: Option<&str> = icon.as_deref().map(String::as_str);
+        let name = Some(options.name);
+        let icon = Some(options.icon_path);
+
+        let mut data: SystemTrayInnerInner = Default::default();
 
         nwg::Icon::builder()
             .source_file(icon)
@@ -225,28 +213,34 @@ impl nwg::NativeUi<SystemTrayUi> for SystemTray {
             .action(nwg::FileDialogAction::OpenDirectory)
             .build(&mut data.picker_directory)?;
 
-        let menu = &data.tray_menu;
-        let mut list_owned = Vec::new();
-        let list = &mut list_owned;
-        push_item(list, menu, "open", "打开WebUI")?;
-        push_item(list, menu, "pick_file", "打开文件")?;
-        push_item(list, menu, "pick_directory", "打开目录")?;
-        push_separator(list, menu)?;
-        push_item(list, menu, "show", "显示控制台")?;
-        push_item(list, menu, "hide", "隐藏控制台")?;
-        push_separator(list, menu)?;
-        push_item(list, menu, "exit", "退出")?;
-        data.item_list = list_owned.into_boxed_slice();
+        let mut init = SystemTrayBuild {
+            list: Vec::new(),
+            menu: &data.tray_menu,
+        };
+        (options.on_build)(&mut init)?;
+        let item_list = init.list.into_boxed_slice();
+        let (notice_tx, notice_rx) = mpsc::channel();
+        let notice_sender = data.notice.sender();
 
         let ui = Ui {
-            inner: Rc::new(data),
+            inner: Rc::new(SystemTrayInner {
+                inner: data,
+                item_list,
+                on_click: Box::new(options.on_click),
+                on_select: Box::new(options.on_select),
+                notice_rx,
+            }),
+            executer: Arc::new(Executer {
+                notice_tx,
+                notice_sender,
+            }),
             default_handler: Default::default(),
         };
 
         let evt_ui = Rc::downgrade(&ui.inner);
         let handle_events = move |evt, _evt_data, handle| {
             if let Some(evt_ui) = Weak::upgrade(&evt_ui) {
-                SystemTray::handle_event(&evt_ui, &evt, &handle);
+                SystemTrayInner::handle_event(&evt_ui, &evt, &handle);
             }
         };
 
@@ -271,9 +265,14 @@ impl Drop for SystemTrayUi {
 }
 
 impl Deref for SystemTrayUi {
-    type Target = SystemTray;
-
-    fn deref(&self) -> &SystemTray {
+    type Target = SystemTrayInner;
+    fn deref(&self) -> &SystemTrayInner {
+        &self.inner
+    }
+}
+impl Deref for SystemTrayInner {
+    type Target = SystemTrayInnerInner;
+    fn deref(&self) -> &SystemTrayInnerInner {
         &self.inner
     }
 }

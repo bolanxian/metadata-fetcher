@@ -1,17 +1,14 @@
 use nwg::NativeUi;
 use std::borrow::Cow;
-use std::ops::DerefMut;
-use std::rc::Rc;
-use std::sync::{mpsc, Mutex, PoisonError};
+use std::sync::{mpsc, Arc, Mutex, PoisonError, Weak};
 use std::thread;
 use winapi::um::wincon::{GetConsoleWindow, SetConsoleOutputCP, SetConsoleTitleW};
 use winapi::um::winuser::{ShowWindow, SW_HIDE, SW_SHOW};
 
 mod system_tray;
-use system_tray::{Dispatch, Handle, SystemTray, SystemTrayUi};
+use system_tray::{Executer, SystemTray, SystemTrayUi};
 static THREAD: Mutex<Option<thread::JoinHandle<()>>> = Mutex::new(None);
-static TX: Mutex<Option<(nwg::NoticeSender, mpsc::Sender<Event>)>> = Mutex::new(None);
-static mut UI: Option<SystemTrayUi> = None;
+static EXECUTER: Mutex<Weak<Executer>> = Mutex::new(Weak::new());
 
 mod string {
     use std::os::windows::ffi;
@@ -38,6 +35,11 @@ pub extern "C" fn set_title(title_ptr: *const u8, title_len: usize) -> i32 {
     unsafe { SetConsoleTitleW(wide.as_ptr()) }
 }
 
+fn dispatch<S: AsRef<[u8]>>(handle: Handle, data: S) {
+    let data = S::as_ref(&data);
+    handle(<[u8]>::as_ptr(data), <[u8]>::len(data));
+}
+
 enum InitStatus {
     Success,
     AlreadyInited,
@@ -54,65 +56,46 @@ impl InitStatus {
         }
     }
 }
-impl Dispatch<Handle, &InitStatus> for SystemTray {
-    fn dispatch(handle: Handle, data: &InitStatus) {
-        let data = InitStatus::to_str(data);
-        SystemTray::dispatch(handle, &*data);
-    }
-}
 
-enum Event<'a> {
-    Deinit,
-    ShowConsole(mpsc::Sender<i32>, i32),
-    Notification(mpsc::Sender<()>, &'a str, Option<&'a str>),
-}
-impl Event<'_> {
-    fn dispatch(self, ui: &SystemTrayUi) {
-        match self {
-            Event::Deinit => {
-                nwg::stop_thread_dispatch();
-            }
-            Event::ShowConsole(tx, show) => {
-                let show = show != 0;
-                ui.set_show(show);
-                let show = if show { SW_SHOW } else { SW_HIDE };
-                let ret = unsafe { ShowWindow(GetConsoleWindow(), show) };
-                let _ = tx.send(ret);
-            }
-            Event::Notification(tx, text, title) => {
-                ui.notification(text, title);
-                let _ = tx.send(());
-            }
-        }
-    }
-}
-
-fn tray_init_inner<Ui: DerefMut<Target = Option<SystemTrayUi>>>(
-    mut ui: Ui,
-    name: &str,
-    icon: &str,
-    handle: Handle,
-    on_notice: Box<dyn Fn()>,
-) -> Result<nwg::NoticeSender, InitStatus> {
-    if ui.is_some() {
-        return Err(InitStatus::AlreadyInited);
-    }
+type Handle = extern "C" fn(*const u8, usize);
+fn tray_init_inner(name: &str, icon: &str, handle: Handle) -> Result<SystemTrayUi, InitStatus> {
     nwg::init().map_err(InitStatus::InitError)?;
 
-    let name = Rc::new(String::from(name));
-    let icon = Rc::new(String::from(icon));
+    let ui = SystemTray {
+        name,
+        icon_path: icon,
+        on_build: |list| {
+            list.push_item("open", "打开WebUI")?;
+            list.push_item("pick_file", "打开文件")?;
+            list.push_item("pick_directory", "打开目录")?;
+            list.push_separator()?;
+            list.push_item("show", "显示控制台")?;
+            list.push_item("hide", "隐藏控制台")?;
+            list.push_separator()?;
+            list.push_item("exit", "退出")?;
+            Ok(())
+        },
+        on_click: move |_| dispatch(handle, "@click"),
+        on_select: move |ui, name| {
+            if name.starts_with("pick_") {
+                let is_dir = match name {
+                    "pick_file" => false,
+                    "pick_directory" => true,
+                    _ => return,
+                };
+                let item = ui.pick(is_dir);
+                let Some(item) = item else { return };
+                let Some(item) = item.to_str() else { return };
+                let item = format!("#{}{}", if is_dir { "D" } else { "F" }, item);
+                dispatch(handle, item);
+            } else {
+                dispatch(handle, format!("@{}", name));
+            }
+        },
+    };
+    let ui = SystemTray::build_ui(ui).map_err(InitStatus::TrayBuildError)?;
 
-    let tray_ui = SystemTray::new(
-        handle,
-        Rc::downgrade(&name),
-        Rc::downgrade(&icon),
-        on_notice,
-    );
-    let tray_ui = SystemTray::build_ui(tray_ui).map_err(InitStatus::TrayBuildError)?;
-    let sender = tray_ui.notice.sender();
-
-    *ui = Some(tray_ui);
-    return Ok(sender);
+    return Ok(ui);
 }
 
 #[no_mangle]
@@ -125,7 +108,7 @@ pub extern "C" fn tray_init(
 ) -> i32 {
     let mut thread = THREAD.lock().unwrap_or_else(PoisonError::into_inner);
     if (*thread).is_some() {
-        SystemTray::dispatch(handle, &InitStatus::AlreadyInited);
+        dispatch(handle, InitStatus::AlreadyInited.to_str().as_ref());
         return -1;
     }
 
@@ -134,55 +117,44 @@ pub extern "C" fn tray_init(
     let icon = unsafe { string::from_raw_parts(path_ptr, path_len) };
 
     *thread = Some(thread::spawn(move || {
-        let (ev_tx, ev_rx) = mpsc::channel::<Event>();
-        let on_notice = Box::new(move || {
-            let Some(ui) = (unsafe { UI.as_ref() }) else {
-                return;
-            };
-            while let Ok(ev) = ev_rx.try_recv() {
-                Event::dispatch(ev, ui);
-            }
-        });
-        let ui = unsafe { &mut *&raw mut UI };
-        match tray_init_inner(&mut *ui, name, icon, handle, on_notice) {
+        let ui = match tray_init_inner(name, icon, handle) {
             Err(e) => {
                 let _ = init_tx.send(e);
                 return;
             }
-            Ok(sender) => {
-                let mut tx = TX.lock().unwrap_or_else(PoisonError::into_inner);
-                *tx = Some((sender, ev_tx));
+            Ok(ui) => {
+                let mut executer = EXECUTER.lock().unwrap_or_else(PoisonError::into_inner);
+                *executer = Arc::downgrade(&ui.executer);
+                Some(ui)
             }
-        }
+        };
         if init_tx.send(InitStatus::Success).is_err() {
             return;
         }
         nwg::dispatch_thread_events();
-        *ui = None;
+        drop(ui);
     }));
 
     let status = init_rx
         .recv()
         .unwrap_or_else(|_| InitStatus::InitError(nwg::NwgError::Unknown));
-    SystemTray::dispatch(handle, &status);
-    match status {
-        InitStatus::Success => drop(thread),
-        _ => *thread = None,
-    }
-    match status {
-        InitStatus::Success => 0,
-        _ => -1,
-    }
+    dispatch(handle, status.to_str().as_ref());
+    let InitStatus::Success = status else {
+        *thread = None;
+        return -1;
+    };
+    0
 }
 
 #[no_mangle]
 pub extern "C" fn tray_deinit() {
-    let tx = TX.lock().unwrap_or_else(PoisonError::into_inner);
-    let Some((ref sender, ref ev_tx)) = *tx else {
+    let executer = EXECUTER.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(executer) = Weak::upgrade(&*executer) else {
         return;
     };
-    let _ = ev_tx.send(Event::Deinit);
-    sender.notice();
+    executer.execute(|_| {
+        nwg::stop_thread_dispatch();
+    });
     let mut thread = THREAD.lock().unwrap_or_else(PoisonError::into_inner);
     if let Some(thread) = (*thread).take() {
         let _ = thread.join();
@@ -191,14 +163,20 @@ pub extern "C" fn tray_deinit() {
 
 #[no_mangle]
 pub extern "C" fn show_console(show: i32) -> i32 {
-    let tx = TX.lock().unwrap_or_else(PoisonError::into_inner);
-    if let Some((ref sender, ref ev_tx)) = *tx {
-        let (tx, rx) = mpsc::channel::<i32>();
-        let _ = ev_tx.send(Event::ShowConsole(tx, show));
-        sender.notice();
-        if let Ok(ret) = rx.recv() {
-            return ret;
-        }
+    let executer = EXECUTER.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(executer) = Weak::upgrade(&*executer) else {
+        return -1;
+    };
+    if let Some(ret) = executer.execute(move |ui| {
+        let show = show != 0;
+
+        ui.find("show").map(|item| item.set_enabled(!show));
+        ui.find("hide").map(|item| item.set_enabled(show));
+
+        let show = if show { SW_SHOW } else { SW_HIDE };
+        unsafe { ShowWindow(GetConsoleWindow(), show) }
+    }) {
+        return ret;
     }
     -1
 }
@@ -210,15 +188,16 @@ pub extern "C" fn tray_notification(
     title_ptr: *const u8,
     title_len: usize,
 ) {
-    let tx = TX.lock().unwrap_or_else(PoisonError::into_inner);
-    if let Some((ref sender, ref ev_tx)) = *tx {
-        let text = unsafe { string::from_raw_parts(text_ptr, text_len) };
-        let title = unsafe { string::from_raw_parts(title_ptr, title_len) };
-        let title = if title_len > 0 { Some(title) } else { None };
+    let executer = EXECUTER.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(executer) = Weak::upgrade(&*executer) else {
+        return;
+    };
 
-        let (tx, rx) = mpsc::channel::<()>();
-        let _ = ev_tx.send(Event::Notification(tx, text, title));
-        sender.notice();
-        let _ = rx.recv();
-    }
+    let text = unsafe { string::from_raw_parts(text_ptr, text_len) };
+    let title = unsafe { string::from_raw_parts(title_ptr, title_len) };
+    let title = if title_len > 0 { Some(title) } else { None };
+
+    let _ = executer.execute(move |ui| {
+        ui.notification(text, title);
+    });
 }
