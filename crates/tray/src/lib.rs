@@ -185,6 +185,23 @@ pub extern "C" fn show_console(show: i32) -> i32 {
 }
 
 #[no_mangle]
+pub extern "C" fn tray_pick(handle: Handle, flags: u32) -> i32 {
+    let executer = EXECUTER.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(executer) = Weak::upgrade(&*executer) else {
+        return -1;
+    };
+    let is_dir = flags & 0x1 != 0;
+    if let Some(_) = executer.execute_async(move |ui| {
+        let item = ui.pick(is_dir);
+        let item = item.as_deref().map(OsStr::to_str).flatten();
+        dispatch(handle, item.unwrap_or(""));
+    }) {
+        return 0;
+    }
+    -1
+}
+
+#[no_mangle]
 pub extern "C" fn tray_notification(
     text_ptr: *const u8,
     text_len: usize,

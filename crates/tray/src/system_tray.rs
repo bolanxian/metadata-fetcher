@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::Cell;
 use std::ffi::OsString;
 use std::ops::Deref;
 use std::rc::{Rc, Weak};
@@ -53,7 +53,7 @@ pub struct Executer {
 pub struct SystemTrayUi {
     inner: Rc<SystemTrayInner>,
     pub executer: Arc<Executer>,
-    default_handler: RefCell<Vec<nwg::EventHandler>>,
+    handler_list: Cell<Box<[nwg::EventHandler]>>,
 }
 
 impl SystemTrayInit<'_> {
@@ -162,6 +162,14 @@ impl Executer {
         self.notice_sender.notice();
         rx.recv().ok()
     }
+    pub fn execute_async<F>(&self, f: F) -> Option<()>
+    where
+        F: FnOnce(&SystemTrayInner) + Send + 'static,
+    {
+        self.notice_tx.send(Box::new(f)).ok()?;
+        self.notice_sender.notice();
+        Some(())
+    }
 }
 
 impl<OnBuild, OnClick, OnSelect> nwg::NativeUi<SystemTrayUi>
@@ -227,22 +235,18 @@ where
                 notice_tx,
                 notice_sender,
             }),
-            default_handler: Default::default(),
+            handler_list: Default::default(),
         };
 
-        let evt_ui = Rc::downgrade(&ui.inner);
-        let handle_events = move |evt, _evt_data, handle| {
-            if let Some(evt_ui) = Weak::upgrade(&evt_ui) {
-                SystemTrayInner::handle_event(&evt_ui, &evt, &handle);
+        let handler = nwg::full_bind_event_handler(&ui.window.handle, {
+            let evt_ui = Rc::downgrade(&ui.inner);
+            move |evt, _evt_data, handle| {
+                if let Some(evt_ui) = Weak::upgrade(&evt_ui) {
+                    SystemTrayInner::handle_event(&evt_ui, &evt, &handle);
+                }
             }
-        };
-
-        ui.default_handler
-            .borrow_mut()
-            .push(nwg::full_bind_event_handler(
-                &ui.window.handle,
-                handle_events,
-            ));
+        });
+        ui.handler_list.set(Box::from([handler]));
 
         Ok(ui)
     }
@@ -250,8 +254,8 @@ where
 
 impl Drop for SystemTrayUi {
     fn drop(&mut self) {
-        let mut handlers = self.default_handler.borrow_mut();
-        for handler in handlers.drain(0..) {
+        let handlers = self.handler_list.take();
+        for handler in handlers {
             nwg::unbind_event_handler(&handler);
         }
     }
@@ -259,13 +263,13 @@ impl Drop for SystemTrayUi {
 
 impl Deref for SystemTrayUi {
     type Target = SystemTrayInner;
-    fn deref(&self) -> &SystemTrayInner {
+    fn deref(&self) -> &Self::Target {
         &self.inner
     }
 }
 impl Deref for SystemTrayInner {
     type Target = SystemTrayInnerInner;
-    fn deref(&self) -> &SystemTrayInnerInner {
+    fn deref(&self) -> &Self::Target {
         &self.inner
     }
 }
