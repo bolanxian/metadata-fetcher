@@ -457,7 +457,7 @@ let args: string[] | undefined
 export const open = args != null ? (url: string) => new Promise<number | null>(ok => {
   const [command, ...$args] = args
   const i = indexOf($args, '$1')
-  if (!(i > 0)) { throw new TypeError('Not found: "$1"', { cause: args }) }
+  if (!(i >= 0)) { throw new TypeError('Not found: "$1"', { cause: args }) }
   $args[i] = url
   const process = spawn(command!, $args, { stdio: 'inherit', shell: false })
   process.on('exit', ok)
