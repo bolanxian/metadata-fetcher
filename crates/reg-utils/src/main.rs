@@ -1,6 +1,5 @@
 use json;
 use json::{object, JsonValue};
-use shell_words;
 use std::collections::BTreeMap as Map;
 use std::io;
 use winreg::{enums as e, RegKey};
@@ -29,7 +28,7 @@ pub struct BrowserInfo {
 }
 impl From<BrowserInfo> for JsonValue {
     fn from(info: BrowserInfo) -> JsonValue {
-        let words = shell_words::split(&info.command).unwrap_or_else(|_| vec![]);
+        let words = shell_words::split(&info.command).ok();
         object! {
             name: info.name,
             command: info.command,
@@ -54,7 +53,7 @@ pub fn collect_webbrowser() -> Map<String, String> {
         .map(Result::as_ref)
         .filter_map(Result::ok)
         .flat_map(|key: &RegKey| {
-            key.enum_keys().filter_map(Result::ok).map(|name| {
+            key.enum_keys().filter_map(Result::ok).map(|name: String| {
                 let key = key.open_subkey(&name)?;
                 let name = key.get_value("")?;
                 let path = r"Capabilities\URLAssociations";
@@ -96,8 +95,8 @@ pub fn get_installed_software() -> Map<String, SoftwareInfo> {
     keys.iter()
         .map(Result::as_ref)
         .filter_map(Result::ok)
-        .flat_map(|key| {
-            key.enum_keys().filter_map(Result::ok).map(|id| {
+        .flat_map(|key: &RegKey| {
+            key.enum_keys().filter_map(Result::ok).map(|id: String| {
                 let key = key.open_subkey(&id)?;
                 let info = SoftwareInfo {
                     name: key.get_value("DisplayName")?,
@@ -111,32 +110,56 @@ pub fn get_installed_software() -> Map<String, SoftwareInfo> {
         .collect()
 }
 
-pub fn main() -> Result<(), String> {
-    let mut args = std::env::args().skip(1);
-    let arg1 = args.next();
-    match arg1.as_deref() {
-        Some("browser") => {
+fn help<D: std::fmt::Display>(arg0: D) -> ! {
+    let lnk = "{ targetPath, iconPath, savePath }";
+    eprintln!("Usage:");
+    eprintln!("\t$ {} <browser|software|default>", &arg0);
+    eprintln!("\t$ {} <shortcut> \"{}\"", &arg0, lnk);
+    std::process::exit(-1)
+}
+
+pub fn main() -> io::Result<()> {
+    let args: Box<[String]> = std::env::args().collect();
+    if !(args.len() >= 2) {
+        help(&args[0]);
+    }
+    match args[1].as_ref() {
+        "browser" => {
             let map = collect_webbrowser_info();
             let default_id = get_default_webbrowser_id().ok();
             let mut json = JsonValue::from(map);
             json["$default"] = JsonValue::from(default_id);
             println!("{}", json::stringify(json));
         }
-        Some("software") => {
+        "software" => {
             let map = get_installed_software();
             println!("{}", json::stringify(map));
         }
-        Some("default") | None => {
+        "default" => {
             let command = get_default_webbrowser_command().ok();
-            let words = match command {
-                Some(ref command) => shell_words::split(command).ok(),
-                None => None,
-            };
-            let obj = object! { command: command, words: words };
+            let words = command.as_deref().map(shell_words::split).map(Result::ok);
+            let obj = object! { command: command, words: words.flatten() };
             println!("{}", json::stringify(obj));
         }
-        Some(arg1) => {
-            return Err(format!("unknown command: {arg1}"));
+        "shortcut" => {
+            let Some(arg2) = args.get(2) else {
+                help(&args[0]);
+            };
+            let mut data = json::parse(arg2).map_err(io::Error::other)?;
+            let icon_path = data["iconPath"].take_string();
+            let (Some(target_path), Some(save_path)) =
+                (data["targetPath"].as_str(), data["savePath"].as_str())
+            else {
+                help(&args[0]);
+            };
+
+            let mut shortcut = mslnk::ShellLink::new(target_path).map_err(io::Error::other)?;
+            shortcut.set_icon_location(icon_path);
+            shortcut.create_lnk(save_path).map_err(io::Error::other)?;
+        }
+        arg1 => {
+            eprintln!("Unknown command: {}", arg1);
+            help(&args[0]);
         }
     }
     Ok(())

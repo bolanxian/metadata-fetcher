@@ -5,5 +5,6 @@ edition = "2021"
 
 [dependencies]
 json = "0.12.4"
+mslnk = "0.1.8"
 shell-words = "1.1.0"
 winreg = "0.52.0"

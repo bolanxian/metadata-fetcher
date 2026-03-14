@@ -17,6 +17,7 @@
     "preview": "vite preview",
     "preview:pages": "vite preview --outDir ../dist-pages",
     "build": "vue-tsc --noEmit && bun run build:client && bun run build:server",
+    "build:min": "vue-tsc --noEmit && bun run build:client -- --minify && bun run build:server -- --minify",
     "build:client": "vite build",
     "build:server": "vite build --ssr main.ssr.ts",
     "build:koishi": "export VITE_TARGET=koishi && bun run build:client --",
@@ -28,12 +29,13 @@
     "crate:tray": "cd crates/tray && cargo build --release && mv -f target/release/tray.dll ../../dist/",
     "convert:png": "cat ./public/favicon.svg | convert-svg png > ./dist/favicon.png",
     "convert:ico": "cat ./public/favicon.svg | convert-svg ico > ./dist/favicon.ico",
-    "tar": "tar cf metadata-fetcher.tar deno.json \\*.md run.bat lib/\\*.ts dist/\\*",
-    "zip": "7z a metadata-fetcher.zip -- deno.json \\*.md run.bat lib/\\*.ts dist/\\*",
-    "7z": "7z a metadata-fetcher.7z -m0=LZMA2 -mx=9 -mhc=off -ms=on -mqs=on -- deno.json \\*.md run.bat lib/\\*.ts dist/\\*"
+    "tar": "tar cf metadata-fetcher.tar LICENSE\\* deno.json \\*.md run.bat lib/\\*.ts dist/\\*",
+    "zip": "7z a metadata-fetcher.zip -- LICENSE\\* deno.json \\*.md run.bat lib/\\*.ts dist/\\*",
+    "7z": "7z a metadata-fetcher.7z -m0=LZMA2 -mx=9 -mhc=off -ms=on -mqs=on -- LICENSE\\* deno.json \\*.md run.bat lib/\\*.ts dist/\\*"
   },
   "dependencies": {
     "@vue/runtime-dom": "^3.5.29",
+    "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
     "bind-script": "github:bolanxian/BindScript",

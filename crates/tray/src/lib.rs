@@ -70,6 +70,8 @@ fn tray_init_inner(name: &str, icon: &str, handle: Handle) -> Result<SystemTrayU
             list.push_item("pick_file", "打开文件")?;
             list.push_item("pick_directory", "打开目录")?;
             list.push_separator()?;
+            list.push_item("create_lnk", "创建桌面快捷方式")?;
+            list.push_separator()?;
             list.push_item("show", "显示控制台")?;
             list.push_item("hide", "隐藏控制台")?;
             list.push_separator()?;

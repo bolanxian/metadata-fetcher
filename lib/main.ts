@@ -5,12 +5,14 @@ export let [, , task, ...args]: [any, any, string | ImportMeta, ...string[]]
     ? argv as any
     : [, , import.meta]
 
+import { resolve } from 'node:path'
 import process, { argv, env, exit } from 'node:process'
+import { spawn } from 'node:child_process'
 const MAIN = import('@/main.ssr')
 const { log, error } = console
 
 if (task === 'start') {
-  log(String(() => {/*
+  log(String.raw`
   _   _          __                __            __               
  / \_/ \        /\ \__            /\ \          /\ \__            
 /\      \     __\ \  _\   ____    \_\ \    ____ \ \  _\   ____    
@@ -26,7 +28,7 @@ if (task === 'start') {
   \ \ \/\  __/\ \ \_/\ \__/\ \ \ \ \/\  __/\ \ \/ 
    \ \_\ \____\\ \__\ \____\\ \_\ \_\ \____\\ \_\ 
     \/_/\/____/ \/__/\/____/ \/_/\/_/\/____/ \/_/ 
-*/}).slice(10, -3))
+`)
   let step = 0
   try {
     const { setConsoleOutputCP, setTitle, hideConsole, init, deinit, notification } = await import('./tray.ts')
@@ -40,10 +42,20 @@ if (task === 'start') {
     const icon = './dist/favicon.ico'
     const onClick = () => { open?.(url) }
     await init(name, icon, onClick)
-    $['reset-tray'] = async ({ remoteAddr }) => {
-      if (!startsWith(remoteAddr, '127.')) {
-        return $error(403, name)
-      }
+    addEventListener('tray:create-lnk', e => {
+      const targetPath = resolve('./run.bat')
+      const iconPath = resolve(icon)
+      const savePath = resolve(env['USERPROFILE'] ?? '.', 'Desktop', `${name}.lnk`)
+      const data = JSON.stringify({ targetPath, iconPath, savePath })
+      const process = spawn('./dist/reg-utils', ['shortcut', data], { stdio: 'inherit', shell: false })
+      process.on('exit', exitCode => {
+        exitCode == 0
+          ? notification(savePath, '已创建快捷方式')
+          : notification(`退出代码：${exitCode}`, '创建快捷方式失败')
+      })
+    })
+    $['reset-tray'] = async ({ remoteAddr, request: { headers } }) => {
+      if (!startsWith(remoteAddr, '127.') || headers.has('origin')) { return $error(403, name) }
       deinit()
       await init(name, icon, onClick)
       return $error(200, name, '已复位')

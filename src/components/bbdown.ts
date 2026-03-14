@@ -10,6 +10,7 @@ const TARGET = import.meta.env.TARGET
 type Xterm = InstanceType<typeof Xterm>
 let Xterm: typeof import('@xterm/xterm').Terminal
 let WebglAddon: typeof import('@xterm/addon-webgl').WebglAddon
+let FitAddon: typeof import('@xterm/addon-fit').FitAddon
 let ready: Promise<void>
 
 const $rowAttrs = { style: 'margin-bottom:24px' }
@@ -60,7 +61,7 @@ export const BBDown = defineComponent(TARGET != 'client' ? {
   mounted() {
     const vm = this
     ready ??= $then(import('@/deps/dep-xterm'), $ => {
-      ({ Terminal: Xterm, WebglAddon } = $)
+      ({ Terminal: Xterm, WebglAddon, FitAddon } = $)
     })
     $then(ready, _ => {
       vm.status = 'ready'
@@ -309,9 +310,14 @@ export const Terminal = defineComponent({
     let term: Xterm | null
     const onVnodeMounted = (vnode: VNode) => {
       term = new Xterm()
-      term.loadAddon(new WebglAddon())
-      term.resize(96, 32)
+
+      const webglAddon = new WebglAddon()
+      term.loadAddon(webglAddon)
+      const fitAddon = new FitAddon()
+      term.loadAddon(fitAddon)
+
       term.open(vnode.el as any)
+      fitAddon.fit()
       term.onData(e => emit('data', e))
     }
     const onVnodeBeforeUnmount = (vnode: VNode) => {
