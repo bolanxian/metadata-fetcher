@@ -13,7 +13,7 @@ import { resolve, xparse, getPluginComponent } from '@/meta-fetch/mod'
 import type { ResolvedInfo, ParsedInfo } from '@/meta-fetch/mod'
 import ConfigVue from './config.vue'
 import { Dialog } from './dialog'
-import { QRCode } from './qrcode'
+import { Scannable } from './scannable.vue'
 import './bilibili.vue'
 
 const TARGET = import.meta.env.TARGET
@@ -253,8 +253,8 @@ export default defineComponent({
             onOnEnter: handleSearch
           }, {
             prepend: () => data.maybeHttp != null
-              ? h(QRCode, { icon: 'ios-globe-outline', text: `https://${data.maybeHttp}` })
-              : h(QRCode, { icon: 'ios-search', text: store.input }),
+              ? h(Scannable, { icon: 'ios-globe-outline', text: `https://${data.maybeHttp}` })
+              : h(Scannable, { icon: 'ios-search', text: store.input }),
             append: () => {
               const disabled = SSR ? true : (
                 (!PAGES && data.disabled) || (store.resolved == null && data.batchResolved == null)
@@ -271,7 +271,7 @@ export default defineComponent({
             onOnFocus: handleFocus,
             readonly: true
           }, {
-            prepend: () => h(QRCode, { icon: 'md-link', text: store.resolved?.url ?? '' }),
+            prepend: () => h(Scannable, { icon: 'md-link', text: store.resolved?.url ?? '' }),
           }) : null,
           data.mode === 'default' ? h(Input, {
             style: store.resolved?.shortUrl ? null : 'display:none',
@@ -279,7 +279,7 @@ export default defineComponent({
             onOnFocus: handleFocus,
             readonly: true
           }, {
-            prepend: () => h(QRCode, { icon: 'md-share', text: store.resolved?.shortUrl ?? '' }),
+            prepend: () => h(Scannable, { icon: 'md-share', text: store.resolved?.shortUrl ?? '' }),
           }) : null,
           data.mode === 'batch' ? h(Input, {
             modelValue: data.batchResolved,
