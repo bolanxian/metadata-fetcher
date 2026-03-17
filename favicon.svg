@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="120" height="120" viewBox="0 0 120 120">
+  <title>きりたんの包丁</title>
+  <rect width="120" height="120" rx="20" fill="#FFFFFF" opacity=".2"/>
+  <g transform="translate(4 64) rotate(-30)">
+    <path fill="#CCCCCC" stroke="none" d="
+M 0 0
+L 120 0
+Q 100 60 20 60
+L 0 60
+L 0 0 Z"/>    
+  <path fill="#393939" stroke="none" transform="scale(.875 .75)" d="
+M 0 0
+L 120 0
+Q 100 60 20 60
+L 0 60
+L 0 0 Z"/>
+    <path fill="none" stroke="#000" d="
+M 0 0
+L 120 0
+Q 100 60 20 60
+L 0 60
+L 0 0 Z"/>
+    <path fill="none" stroke="#000" d="
+M 105 0
+Q 87.5 45 17.5 45
+L 0 45"><!--
+  <path fill="none" stroke="#000" transform="scale(.875 .75)" d="
+M 120 0
+Q 100 60 20 60
+L 0 60"/>
+    --></path>
+  </g>
+</svg>
