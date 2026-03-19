@@ -9,17 +9,18 @@ use winapi::um::winuser::{ShowWindow, SW_HIDE, SW_SHOW};
 mod system_tray;
 use system_tray::{Executer, SystemTray, SystemTrayUi};
 static THREAD: Mutex<Option<thread::JoinHandle<()>>> = Mutex::new(None);
-static EXECUTER: Mutex<Weak<Executer>> = Mutex::new(Weak::new());
+static UI: Mutex<Weak<Executer>> = Mutex::new(Weak::new());
 
 mod string {
-    use std::os::windows::ffi;
-    use std::{iter, slice, str};
-    pub fn to_wide(string: &str) -> iter::Chain<ffi::EncodeWide<'_>, iter::Once<u16>> {
-        use ffi::OsStrExt;
-        use std::ffi::OsStr;
-        OsStr::new(string).encode_wide().chain(iter::once(0))
+    use std::{ffi, iter, slice, str};
+    pub fn to_wide(string: &str) -> Box<[u16]> {
+        use std::os::windows::ffi::OsStrExt;
+        ffi::OsStr::new(string)
+            .encode_wide()
+            .chain(iter::once(0))
+            .collect()
     }
-    pub unsafe fn from_raw_parts<'a>(pointer: *const u8, length: usize) -> &'a str {
+    pub unsafe fn from_raw_parts(pointer: *const u8, length: usize) -> &'static str {
         str::from_utf8_unchecked(slice::from_raw_parts(pointer, length))
     }
 }
@@ -32,7 +33,7 @@ pub extern "C" fn set_console_output_code_page(code_page_id: u32) -> i32 {
 #[no_mangle]
 pub extern "C" fn set_title(title_ptr: *const u8, title_len: usize) -> i32 {
     let title = unsafe { string::from_raw_parts(title_ptr, title_len) };
-    let wide: Box<[u16]> = string::to_wide(title).collect();
+    let wide = string::to_wide(title);
     unsafe { SetConsoleTitleW(wide.as_ptr()) }
 }
 
@@ -49,7 +50,7 @@ enum InitStatus {
     TrayBuildError(nwg::NwgError),
 }
 impl InitStatus {
-    fn to_str(&self) -> Cow<str> {
+    fn to_str(&self) -> Cow<'static, str> {
         match *self {
             Self::Success => Cow::Borrowed("@success"),
             Self::AlreadyInited => Cow::Borrowed("!Already inited"),
@@ -58,13 +59,22 @@ impl InitStatus {
         }
     }
 }
+impl Default for InitStatus {
+    fn default() -> Self {
+        Self::InitError(nwg::NwgError::Unknown)
+    }
+}
 
-fn tray_init_inner(name: &str, icon: &str, handle: Handle) -> Result<SystemTrayUi, InitStatus> {
+fn tray_init_inner(
+    name: &str,
+    icon_path: &str,
+    handle: Handle,
+) -> Result<SystemTrayUi, InitStatus> {
     nwg::init().map_err(InitStatus::InitError)?;
 
     let ui = SystemTray {
         name,
-        icon_path: icon,
+        icon_path,
         on_build: |list| {
             list.push_item("open", "打开WebUI")?;
             list.push_item("pick_file", "打开文件")?;
@@ -81,17 +91,23 @@ fn tray_init_inner(name: &str, icon: &str, handle: Handle) -> Result<SystemTrayU
         on_click: move |_| {
             dispatch(handle, "@click");
         },
-        on_select: move |ui, name| {
+        on_select: move |ui, name, _| {
+            use nwg::FileDialogAction as Action;
             if name.starts_with("pick_") {
-                let is_dir = match name {
-                    "pick_file" => false,
-                    "pick_directory" => true,
+                let action = match name {
+                    "pick_file" => Action::Open,
+                    "pick_directory" => Action::OpenDirectory,
                     _ => return,
                 };
-                let item = ui.pick(is_dir);
+                let item = ui.pick(action);
                 let item = item.as_deref().map(OsStr::to_str).flatten();
                 let Some(item) = item else { return };
-                let item = format!("#{}{}", if is_dir { "D" } else { "F" }, item);
+                let action = match action {
+                    Action::Open => "F",
+                    Action::OpenDirectory => "D",
+                    _ => return,
+                };
+                let item = format!("#{}{}", action, item);
                 dispatch(handle, item);
             } else {
                 dispatch(handle, format!("@{}", name));
@@ -117,7 +133,7 @@ pub extern "C" fn tray_init(
         return -1;
     };
 
-    let (init_tx, init_rx) = mpsc::channel::<InitStatus>();
+    let (init_tx, init_rx) = mpsc::sync_channel::<InitStatus>(0);
     let name = unsafe { string::from_raw_parts(name_ptr, name_len) };
     let icon = unsafe { string::from_raw_parts(path_ptr, path_len) };
 
@@ -128,7 +144,7 @@ pub extern "C" fn tray_init(
                 return;
             }
             Ok(ui) => {
-                let mut executer = EXECUTER.lock().unwrap_or_else(PoisonError::into_inner);
+                let mut executer = UI.lock().unwrap_or_else(PoisonError::into_inner);
                 *executer = Arc::downgrade(&ui.executer);
                 ui
             }
@@ -140,9 +156,7 @@ pub extern "C" fn tray_init(
         drop(ui);
     }));
 
-    let status = init_rx
-        .recv()
-        .unwrap_or_else(|_| InitStatus::InitError(nwg::NwgError::Unknown));
+    let status = init_rx.recv().unwrap_or_default();
     dispatch(handle, status.to_str().as_ref());
     let InitStatus::Success = status else {
         *thread = None;
@@ -153,26 +167,26 @@ pub extern "C" fn tray_init(
 
 #[no_mangle]
 pub extern "C" fn tray_deinit() {
-    let executer = EXECUTER.lock().unwrap_or_else(PoisonError::into_inner);
-    let Some(executer) = Weak::upgrade(&*executer) else {
+    let ui = UI.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(ui) = Weak::upgrade(&*ui) else {
         return;
     };
-    executer.execute(|_| {
+    ui.run_async(|_| {
         nwg::stop_thread_dispatch();
     });
     let mut thread = THREAD.lock().unwrap_or_else(PoisonError::into_inner);
-    if let Some(thread) = (*thread).take() {
+    if let Some(thread) = Option::take(&mut *thread) {
         let _ = thread.join();
     }
 }
 
 #[no_mangle]
 pub extern "C" fn show_console(show: i32) -> i32 {
-    let executer = EXECUTER.lock().unwrap_or_else(PoisonError::into_inner);
-    let Some(executer) = Weak::upgrade(&*executer) else {
-        return -1;
+    let ui = UI.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(ui) = Weak::upgrade(&*ui) else {
+        return 0;
     };
-    if let Some(ret) = executer.execute(move |ui| {
+    if let Some(ret) = ui.run(move |ui| {
         let show = show != 0;
 
         ui.find("show").map(|item| item.set_enabled(!show));
@@ -183,18 +197,22 @@ pub extern "C" fn show_console(show: i32) -> i32 {
     }) {
         return ret;
     }
-    -1
+    0
 }
 
 #[no_mangle]
 pub extern "C" fn tray_pick(handle: Handle, flags: u32) -> i32 {
-    let executer = EXECUTER.lock().unwrap_or_else(PoisonError::into_inner);
-    let Some(executer) = Weak::upgrade(&*executer) else {
+    let ui = UI.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(ui) = Weak::upgrade(&*ui) else {
         return -1;
     };
-    let is_dir = flags & 0x1 != 0;
-    if let Some(_) = executer.execute_async(move |ui| {
-        let item = ui.pick(is_dir);
+    use nwg::FileDialogAction as Action;
+    let action = match flags & 0x1 {
+        0 => Action::Open,
+        _ => Action::OpenDirectory,
+    };
+    if let Some(_) = ui.run_async(move |ui| {
+        let item = ui.pick(action);
         let item = item.as_deref().map(OsStr::to_str).flatten();
         dispatch(handle, item.unwrap_or(""));
     }) {
@@ -210,8 +228,8 @@ pub extern "C" fn tray_notification(
     title_ptr: *const u8,
     title_len: usize,
 ) {
-    let executer = EXECUTER.lock().unwrap_or_else(PoisonError::into_inner);
-    let Some(executer) = Weak::upgrade(&*executer) else {
+    let ui = UI.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(ui) = Weak::upgrade(&*ui) else {
         return;
     };
 
@@ -219,7 +237,7 @@ pub extern "C" fn tray_notification(
     let title = unsafe { string::from_raw_parts(title_ptr, title_len) };
     let title = if title_len > 0 { Some(title) } else { None };
 
-    let _ = executer.execute(move |ui| {
+    let _ = ui.run(move |ui| {
         ui.notification(text, title);
     });
 }

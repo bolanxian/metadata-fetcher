@@ -15,7 +15,7 @@ pub struct SystemTray<
     'a,
     OnBuild: FnOnce(&mut SystemTrayInit) -> BuildResult,
     OnClick: Fn(&SystemTrayInner),
-    OnSelect: Fn(&SystemTrayInner, &str),
+    OnSelect: Fn(&SystemTrayInner, &str, &nwg::MenuItem),
 > {
     pub name: &'a str,
     pub icon_path: &'a str,
@@ -33,7 +33,7 @@ pub struct SystemTrayInnerInner {
     notice: nwg::Notice,
     icon: nwg::Icon,
     tray: nwg::TrayNotification,
-    tray_menu: nwg::Menu,
+    menu: nwg::Menu,
     picker_file: nwg::FileDialog,
     picker_directory: nwg::FileDialog,
 }
@@ -42,12 +42,12 @@ pub struct SystemTrayInner {
     item_list: Box<[MenuEnum]>,
 
     on_click: Box<dyn Fn(&SystemTrayInner)>,
-    on_select: Box<dyn Fn(&SystemTrayInner, &str)>,
+    on_select: Box<dyn Fn(&SystemTrayInner, &str, &nwg::MenuItem)>,
 
     notice_rx: mpsc::Receiver<ExecuterHandle>,
 }
 pub struct Executer {
-    notice_tx: mpsc::Sender<ExecuterHandle>,
+    notice_tx: mpsc::SyncSender<ExecuterHandle>,
     notice_sender: nwg::NoticeSender,
 }
 pub struct SystemTrayUi {
@@ -76,19 +76,21 @@ impl SystemTrayInit<'_> {
     }
 }
 impl SystemTrayInner {
-    fn show_menu(&self) {
+    pub fn show_menu(&self) {
         let (x, y) = nwg::GlobalCursor::position();
-        self.tray_menu.popup(x, y);
+        self.menu.popup(x, y);
     }
     pub fn notification<'a>(&self, text: &'a str, title: Option<&'a str>) {
         use nwg::TrayNotificationFlags as Flags;
         let flags = Flags::USER_ICON | Flags::LARGE_ICON;
         self.tray.show(text, title, Some(flags), Some(&self.icon));
     }
-    pub fn pick(&self, is_dir: bool) -> Option<OsString> {
-        let picker = match is_dir {
-            true => &self.picker_directory,
-            false => &self.picker_file,
+    pub fn pick(&self, action: nwg::FileDialogAction) -> Option<OsString> {
+        use nwg::FileDialogAction as Action;
+        let picker = match action {
+            Action::OpenDirectory => &self.picker_directory,
+            Action::Open => &self.picker_file,
+            Action::Save => return None,
         };
         if !picker.run(Some(&self.window)) {
             return None;
@@ -120,9 +122,9 @@ impl SystemTrayInner {
             None
         })
     }
-    fn handle_event(&self, evt: &nwg::Event, handle: &nwg::ControlHandle) {
+    fn handle_event(&self, e: &nwg::Event, handle: &nwg::ControlHandle) {
         use nwg::Event as E;
-        match evt {
+        match e {
             E::OnMousePress(nwg::MousePressEvent::MousePressLeftUp) => match () {
                 () if handle == &self.tray => (self.on_click)(self),
                 () => (),
@@ -132,9 +134,10 @@ impl SystemTrayInner {
                 () => (),
             },
             E::OnMenuItemSelected => {
-                let item = Self::find_handle(self, handle);
-                let Some((name, _)) = item else { return };
-                (self.on_select)(self, name);
+                let Some((name, item)) = Self::find_handle(self, handle) else {
+                    return;
+                };
+                (self.on_select)(self, name, item);
             }
             E::OnNotice => match () {
                 () if handle == &self.notice => {
@@ -149,12 +152,12 @@ impl SystemTrayInner {
     }
 }
 impl Executer {
-    pub fn execute<F, T>(&self, f: F) -> Option<T>
+    pub fn run<F, T>(&self, f: F) -> Option<T>
     where
         F: FnOnce(&SystemTrayInner) -> T + Send + 'static,
         T: Send + 'static,
     {
-        let (tx, rx) = mpsc::channel::<T>();
+        let (tx, rx) = mpsc::sync_channel::<T>(0);
         let handle: ExecuterHandle = Box::new(move |ui| {
             let _ = tx.send(f(ui));
         });
@@ -162,7 +165,7 @@ impl Executer {
         self.notice_sender.notice();
         rx.recv().ok()
     }
-    pub fn execute_async<F>(&self, f: F) -> Option<()>
+    pub fn run_async<F>(&self, f: F) -> Option<()>
     where
         F: FnOnce(&SystemTrayInner) + Send + 'static,
     {
@@ -177,7 +180,7 @@ impl<OnBuild, OnClick, OnSelect> nwg::NativeUi<SystemTrayUi>
 where
     OnBuild: FnOnce(&mut SystemTrayInit) -> BuildResult + 'static,
     OnClick: Fn(&SystemTrayInner) + 'static,
-    OnSelect: Fn(&SystemTrayInner, &str) + 'static,
+    OnSelect: Fn(&SystemTrayInner, &str, &nwg::MenuItem) + 'static,
 {
     fn build_ui(options: Self) -> Result<SystemTrayUi, nwg::NwgError> {
         let name = Some(options.name);
@@ -204,7 +207,7 @@ where
         nwg::Menu::builder()
             .popup(true)
             .parent(&data.window)
-            .build(&mut data.tray_menu)?;
+            .build(&mut data.menu)?;
 
         nwg::FileDialog::builder()
             .action(nwg::FileDialogAction::Open)
@@ -216,11 +219,11 @@ where
 
         let mut init = SystemTrayInit {
             list: Vec::new(),
-            menu: &data.tray_menu,
+            menu: &data.menu,
         };
         (options.on_build)(&mut init)?;
         let item_list = init.list.into_boxed_slice();
-        let (notice_tx, notice_rx) = mpsc::channel();
+        let (notice_tx, notice_rx) = mpsc::sync_channel(1);
         let notice_sender = data.notice.sender();
 
         let ui = SystemTrayUi {
@@ -239,10 +242,10 @@ where
         };
 
         let handler = nwg::full_bind_event_handler(&ui.window.handle, {
-            let evt_ui = Rc::downgrade(&ui.inner);
-            move |evt, _evt_data, handle| {
-                if let Some(evt_ui) = Weak::upgrade(&evt_ui) {
-                    SystemTrayInner::handle_event(&evt_ui, &evt, &handle);
+            let ui = Rc::downgrade(&ui.inner);
+            move |e, _evt_data, handle| {
+                if let Some(ui) = Weak::upgrade(&ui) {
+                    SystemTrayInner::handle_event(&ui, &e, &handle);
                 }
             }
         });
