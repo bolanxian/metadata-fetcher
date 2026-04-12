@@ -36,7 +36,13 @@ definePlugin<[any, any]>({
   },
   async fetch(cache, { id, url }) {
     const text = await cache.tryGet(`${id}.html`, async () => {
-      const resp = await $fetch(url, htmlInit)
+      const resp = await $fetch(url, {
+        ...htmlInit,
+        headers: {
+          ...htmlInit.headers,
+          'accept-language': 'en-US',
+        }
+      })
       const { status } = resp
       if (status !== 200) {
         throw new TypeError(`Request failed with status code ${status}`)
@@ -61,14 +67,17 @@ definePlugin<[any, any]>({
       return title
     },
     ownerName(data, info) {
+      const $ = data[1].owner.videoOwnerRenderer
       let ownerName = ''
-      for (const { text } of data[1].owner.videoOwnerRenderer.title.runs) {
+      for (const { text } of $.title?.runs ?? []) {
         ownerName += text
       }
       return ownerName
     },
     ownerUrl(data, info) {
-      const { url } = data[1].owner.videoOwnerRenderer.navigationEndpoint.commandMetadata.webCommandMetadata
+      const $ = data[1].owner.videoOwnerRenderer
+      const url = $.navigationEndpoint.commandMetadata.webCommandMetadata?.url ?? ''
+      if (!url) { return }
       return new URL(url, `https://${host}/`).href
     },
     publishDate(data, info) {

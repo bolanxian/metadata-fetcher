@@ -75,18 +75,21 @@ fn tray_init_inner(
     let ui = SystemTray {
         name,
         icon_path,
-        on_build: |list| {
-            list.push_item("open", "打开WebUI")?;
-            list.push_item("pick_file", "打开文件")?;
-            list.push_item("pick_directory", "打开目录")?;
-            list.push_separator()?;
-            list.push_item("create_lnk", "创建桌面快捷方式")?;
-            list.push_separator()?;
-            list.push_item("show", "显示控制台")?;
-            list.push_item("hide", "隐藏控制台")?;
-            list.push_separator()?;
-            list.push_item("exit", "退出")?;
-            Ok(())
+        on_build: |ui| {
+            ui.item("打开WebUI(&O)", "open");
+            ui.item("打开文件(&F)", "pick_file");
+            ui.item("打开目录(&D)", "pick_directory");
+            ui.separator();
+            ui.submenu("附件", |ui| {
+                ui.item("创建桌面快捷方式", "create_lnk");
+            });
+            ui.separator();
+            ui.submenu("控制台", |ui| {
+                ui.item("显示(&S)", "show");
+                ui.item("隐藏(&H)", "hide");
+            });
+            ui.separator();
+            ui.item("退出", "exit");
         },
         on_click: move |_| {
             dispatch(handle, "@click");
@@ -94,29 +97,22 @@ fn tray_init_inner(
         on_select: move |ui, name, _| {
             use nwg::FileDialogAction as Action;
             if name.starts_with("pick_") {
-                let action = match name {
-                    "pick_file" => Action::Open,
-                    "pick_directory" => Action::OpenDirectory,
+                let (action, prefix) = match name {
+                    "pick_file" => (Action::Open, "F"),
+                    "pick_directory" => (Action::OpenDirectory, "D"),
                     _ => return,
                 };
                 let item = ui.pick(action);
                 let item = item.as_deref().map(OsStr::to_str).flatten();
                 let Some(item) = item else { return };
-                let action = match action {
-                    Action::Open => "F",
-                    Action::OpenDirectory => "D",
-                    _ => return,
-                };
-                let item = format!("#{}{}", action, item);
+                let item = format!("#{}{}", prefix, item);
                 dispatch(handle, item);
             } else {
                 dispatch(handle, format!("@{}", name));
             }
         },
     };
-    let ui = SystemTray::build_ui(ui).map_err(InitStatus::TrayBuildError)?;
-
-    return Ok(ui);
+    SystemTray::build_ui(ui).map_err(InitStatus::TrayBuildError)
 }
 
 #[no_mangle]
@@ -175,9 +171,9 @@ pub extern "C" fn tray_deinit() {
         nwg::stop_thread_dispatch();
     });
     let mut thread = THREAD.lock().unwrap_or_else(PoisonError::into_inner);
-    if let Some(thread) = Option::take(&mut *thread) {
-        let _ = thread.join();
-    }
+    let _ = Option::take(&mut *thread)
+        .map(thread::JoinHandle::join)
+        .transpose();
 }
 
 #[no_mangle]

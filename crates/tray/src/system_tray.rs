@@ -4,16 +4,20 @@ use std::ops::Deref;
 use std::rc::{Rc, Weak};
 use std::sync::{mpsc, Arc};
 
-type BuildResult = Result<(), nwg::NwgError>;
 type ExecuterHandle = Box<dyn FnOnce(&SystemTrayInner) + Send>;
 
 pub enum MenuEnum {
-    Item(&'static str, nwg::MenuItem),
+    #[allow(unused)]
+    SubMenu(nwg::Menu),
+
+    Item(nwg::MenuItem, &'static str),
+
+    #[allow(unused)]
     Separator(nwg::MenuSeparator),
 }
 pub struct SystemTray<
     'a,
-    OnBuild: FnOnce(&mut SystemTrayInit) -> BuildResult,
+    OnBuild: FnOnce(&mut SystemTrayInit),
     OnClick: Fn(&SystemTrayInner),
     OnSelect: Fn(&SystemTrayInner, &str, &nwg::MenuItem),
 > {
@@ -25,6 +29,7 @@ pub struct SystemTray<
 }
 pub struct SystemTrayInit<'a> {
     list: Vec<MenuEnum>,
+    error_list: Vec<nwg::NwgError>,
     menu: &'a nwg::Menu,
 }
 #[derive(Default)]
@@ -57,22 +62,54 @@ pub struct SystemTrayUi {
 }
 
 impl SystemTrayInit<'_> {
-    pub fn push_item(&mut self, name: &'static str, text: &str) -> BuildResult {
-        let mut item: nwg::MenuItem = Default::default();
-        nwg::MenuItem::builder()
+    pub fn submenu<OnBuild>(&mut self, text: &str, on_build: OnBuild)
+    where
+        OnBuild: FnOnce(&mut SystemTrayInit) + 'static,
+    {
+        let mut menu: nwg::Menu = Default::default();
+        if let Err(e) = nwg::Menu::builder()
             .text(text)
             .parent(self.menu)
-            .build(&mut item)?;
-        self.list.push(MenuEnum::Item(name, item));
-        Ok(())
+            .build(&mut menu)
+        {
+            self.error_list.push(e);
+            return;
+        }
+
+        let mut init = SystemTrayInit {
+            list: Vec::new(),
+            error_list: Vec::new(),
+            menu: &menu,
+        };
+        on_build(&mut init);
+        let item_list = init.list;
+
+        self.error_list.extend(init.error_list);
+        self.list.push(MenuEnum::SubMenu(menu));
+        self.list.extend(item_list);
     }
-    pub fn push_separator(&mut self) -> BuildResult {
-        let mut sep: nwg::MenuSeparator = Default::default();
-        nwg::MenuSeparator::builder()
+    pub fn item(&mut self, text: &str, name: &'static str) {
+        let mut item: nwg::MenuItem = Default::default();
+        if let Err(e) = nwg::MenuItem::builder()
+            .text(text)
             .parent(self.menu)
-            .build(&mut sep)?;
+            .build(&mut item)
+        {
+            self.error_list.push(e);
+            return;
+        }
+        self.list.push(MenuEnum::Item(item, name));
+    }
+    pub fn separator(&mut self) {
+        let mut sep: nwg::MenuSeparator = Default::default();
+        if let Err(e) = nwg::MenuSeparator::builder()
+            .parent(self.menu)
+            .build(&mut sep)
+        {
+            self.error_list.push(e);
+            return;
+        }
         self.list.push(MenuEnum::Separator(sep));
-        Ok(())
     }
 }
 impl SystemTrayInner {
@@ -99,7 +136,7 @@ impl SystemTrayInner {
     }
     pub fn find(&self, name: &str) -> Option<&nwg::MenuItem> {
         self.item_list.iter().find_map(|item| {
-            if let MenuEnum::Item(target_name, item) = item {
+            if let MenuEnum::Item(item, target_name) = item {
                 if name == *target_name {
                     return Some(item);
                 }
@@ -109,14 +146,9 @@ impl SystemTrayInner {
     }
     fn find_handle(&self, handle: &nwg::ControlHandle) -> Option<(&str, &nwg::MenuItem)> {
         self.item_list.iter().find_map(|item| {
-            match item {
-                MenuEnum::Item(target_name, item) => {
-                    if handle == item {
-                        return Some((*target_name, item));
-                    }
-                }
-                MenuEnum::Separator(item) => {
-                    let _ = item;
+            if let MenuEnum::Item(item, target_name) = item {
+                if handle == item {
+                    return Some((*target_name, item));
                 }
             }
             None
@@ -134,10 +166,9 @@ impl SystemTrayInner {
                 () => (),
             },
             E::OnMenuItemSelected => {
-                let Some((name, item)) = Self::find_handle(self, handle) else {
-                    return;
-                };
-                (self.on_select)(self, name, item);
+                if let Some((name, item)) = Self::find_handle(self, handle) {
+                    (self.on_select)(self, name, item);
+                }
             }
             E::OnNotice => match () {
                 () if handle == &self.notice => {
@@ -178,7 +209,7 @@ impl Executer {
 impl<OnBuild, OnClick, OnSelect> nwg::NativeUi<SystemTrayUi>
     for SystemTray<'_, OnBuild, OnClick, OnSelect>
 where
-    OnBuild: FnOnce(&mut SystemTrayInit) -> BuildResult + 'static,
+    OnBuild: FnOnce(&mut SystemTrayInit) + 'static,
     OnClick: Fn(&SystemTrayInner) + 'static,
     OnSelect: Fn(&SystemTrayInner, &str, &nwg::MenuItem) + 'static,
 {
@@ -219,9 +250,13 @@ where
 
         let mut init = SystemTrayInit {
             list: Vec::new(),
+            error_list: Vec::new(),
             menu: &data.menu,
         };
-        (options.on_build)(&mut init)?;
+        (options.on_build)(&mut init);
+        for e in init.error_list {
+            return Err(e);
+        }
         let item_list = init.list.into_boxed_slice();
         let (notice_tx, notice_rx) = mpsc::sync_channel(1);
         let notice_sender = data.notice.sender();
