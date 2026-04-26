@@ -7,7 +7,9 @@ export let [, , task, ...args]: [any, any, string | ImportMeta, ...string[]]
 
 import { resolve } from 'node:path'
 import process, { argv, env, exit } from 'node:process'
-import { spawn } from 'node:child_process'
+import { spawn, type SpawnOptions } from 'node:child_process'
+import { Readable } from 'node:stream'
+
 const MAIN = import('@/main.ssr')
 const { log, error } = console
 
@@ -36,23 +38,26 @@ if (task === 'start') {
     setTitle(name)
     step = 1
     const { main, open, $, $error } = await import('./server.ts')
-    const { ready, $string: { startsWith } } = await MAIN
+    const { ready, $string: { startsWith, trim } } = await MAIN
     await ready
     const { url } = await main()!
     const icon = './dist/favicon.ico'
     const onClick = () => { open?.(url) }
     await init(name, icon, onClick)
-    addEventListener('tray:create-lnk', e => {
+    addEventListener('tray:create-lnk', async e => {
+      const options: SpawnOptions = { stdio: ['ignore', 'pipe', 'inherit'], shell: false }
+
+      const { stdout } = spawn('./dist/reg-utils', ['known-folder', 'Desktop'], options)
+      const desktopPath = trim(await new Response(Readable.toWeb(stdout!) as any).text())
+
       const targetPath = resolve('./run.bat')
       const iconPath = resolve(icon)
-      const savePath = resolve(env['USERPROFILE'] ?? '.', 'Desktop', `${name}.lnk`)
+      const savePath = resolve(desktopPath || '.', `${name}.lnk`)
       const data = JSON.stringify({ targetPath, iconPath, savePath })
-      const process = spawn('./dist/reg-utils', ['shortcut', data], { stdio: 'inherit', shell: false })
-      process.on('exit', exitCode => {
-        exitCode == 0
-          ? notification(savePath, '已创建快捷方式')
-          : notification(`退出代码：${exitCode}`, '创建快捷方式失败')
-      })
+
+      const process = spawn('./dist/reg-utils', ['shortcut', data], options)
+      const exitCode = await new Promise(ok => { process.on('exit', ok) })
+      notification(savePath, exitCode == 0 ? '已创建快捷方式' : `创建快捷方式失败(退出代码：${exitCode})`)
     })
     $['reset-tray'] = async ({ remoteAddr, request: { headers } }) => {
       if (!startsWith(remoteAddr, '127.') || headers.has('origin')) { return $error(403, name) }

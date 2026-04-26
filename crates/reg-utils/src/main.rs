@@ -1,7 +1,10 @@
-use json;
+#[macro_use]
+extern crate mashup;
 use json::{object, JsonValue};
 use std::collections::BTreeMap as Map;
 use std::io;
+use windows_sys::core::{GUID, PWSTR};
+use windows_sys::Win32::UI::Shell;
 use winreg::{enums as e, RegKey};
 
 static HKCU: RegKey = RegKey::predef(e::HKEY_CURRENT_USER);
@@ -110,11 +113,64 @@ pub fn get_installed_software() -> Map<String, SoftwareInfo> {
         .collect()
 }
 
+macro_rules! known_folder_id {
+    [$($x:ident),+ $(,)?] => (
+        #[allow(unused)]
+        static KNOWN_FOLDER_ID_LIST: &[&'static str] = &[$(stringify!($x)),+];
+        fn known_folder_id(input: &str) -> Option<&GUID> {
+            Some(match input {
+                $(stringify!($x) => {
+                    mashup!{ m[$x] = FOLDERID_ $x; }
+                    &m! { Shell::$x }
+                })+
+                _ => return None
+            })
+        }
+    );
+}
+
+known_folder_id![Desktop, Documents, SendTo, StartMenu, Startup];
+
+unsafe fn len<T: Copy + Default + std::cmp::PartialEq>(ptr: *const T) -> usize {
+    use std::hint::unreachable_unchecked;
+    let default: T = Default::default();
+    for i in 0.. {
+        if unsafe { *ptr.add(i) } == default {
+            return i;
+        }
+    }
+    unsafe { unreachable_unchecked() }
+}
+
+fn known_folder(input: &str) -> Option<String> {
+    use std::ffi::OsString;
+    use std::os::windows::ffi::OsStringExt;
+    use std::ptr::null_mut;
+
+    let rfid = known_folder_id(input)?;
+    let mut path: PWSTR = null_mut();
+    unsafe { Shell::SHGetKnownFolderPath(rfid, 0, null_mut(), &mut path) };
+
+    let wide = unsafe { std::slice::from_raw_parts(path, len(path)) };
+    OsString::from_wide(wide).into_string().ok()
+}
+
+fn help_known_folder<D: std::fmt::Display>(arg0: D) -> ! {
+    eprintln!("Usage:");
+    eprintln!("\t$ {} <known-folder> <", &arg0);
+    for item in KNOWN_FOLDER_ID_LIST {
+        eprintln!("\t\t| \"{}\"", item);
+    }
+    eprintln!("\t>");
+    std::process::exit(-1)
+}
+
 fn help<D: std::fmt::Display>(arg0: D) -> ! {
     let lnk = "{ targetPath, iconPath, savePath }";
     eprintln!("Usage:");
     eprintln!("\t$ {} <browser|software|default>", &arg0);
     eprintln!("\t$ {} <shortcut> \"{}\"", &arg0, lnk);
+    eprintln!("\t$ {} <known-folder> <...>", &arg0);
     std::process::exit(-1)
 }
 
@@ -156,6 +212,15 @@ pub fn main() -> io::Result<()> {
             let mut shortcut = mslnk::ShellLink::new(target_path).map_err(io::Error::other)?;
             shortcut.set_icon_location(icon_path);
             shortcut.create_lnk(save_path).map_err(io::Error::other)?;
+        }
+        "known-folder" => {
+            let Some(arg2) = args.get(2) else {
+                help_known_folder(&args[0]);
+            };
+            let Some(path) = known_folder(arg2) else {
+                help_known_folder(&args[0]);
+            };
+            println!("{}", path);
         }
         arg1 => {
             eprintln!("Unknown command: {}", arg1);
