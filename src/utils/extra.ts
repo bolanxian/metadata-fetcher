@@ -164,8 +164,12 @@ const software = SSR || CSR ? definePlugin<Software>({
     if (!SSR) { return }
     const cp = await import('node:child_process')
     const stream = await import('node:stream')
-    const { stdout } = cp.spawn('./dist/reg-utils', ['software'], { stdio: ['ignore', 'pipe', 'inherit'] })
-    const text = await new Response(stream.Readable.toWeb(stdout) as any).text()
+    const sub = cp.spawn('./dist/reg-utils', ['software'], { stdio: ['ignore', 'pipe', 'inherit'] })
+    await new Promise((ok, reject) => {
+      sub.on('spawn', ok)
+      sub.on('error', reject)
+    })
+    const text = await new Response(stream.Readable.toWeb(sub.stdout) as any).text()
     const data = parse(text)
     return data
   },

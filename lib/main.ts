@@ -40,7 +40,8 @@ if (task === 'start') {
     const { main, open, $, $error } = await import('./server.ts')
     const { ready, $string: { startsWith, trim } } = await MAIN
     await ready
-    const { url } = await main()!
+    const port = env['MF_PORT'], hostname = env['MF_HOST']
+    const { url } = await main(port != null ? +port : void 0, hostname)!
     const icon = './dist/favicon.ico'
     const onClick = () => { open?.(url) }
     await init(name, icon, onClick)
@@ -55,9 +56,13 @@ if (task === 'start') {
       const savePath = resolve(desktopPath || '.', `${name}.lnk`)
       const data = JSON.stringify({ targetPath, iconPath, savePath })
 
-      const process = spawn('./dist/reg-utils', ['shortcut', data], options)
-      const exitCode = await new Promise(ok => { process.on('exit', ok) })
-      notification(savePath, exitCode == 0 ? '已创建快捷方式' : `创建快捷方式失败(退出代码：${exitCode})`)
+      const sub = spawn('./dist/reg-utils', ['shortcut', data], options)
+      const exitCode = await new Promise((ok, reject) => {
+        sub.on('exit', ok)
+        sub.on('error', reject)
+      })
+      const status = exitCode == 0 ? '成功' : `失败(退出代码：${exitCode})`
+      notification(savePath, `创建快捷方式${status}`)
     })
     $['reset-tray'] = async ({ remoteAddr, request: { headers } }) => {
       if (!startsWith(remoteAddr, '127.') || headers.has('origin')) { return $error(403, name) }
@@ -102,7 +107,7 @@ if (task === 'fetch') {
   for await (const $ of renderBatch(_args, type!)) { log($.error ?? $.value) }
 } else if (task === 'serve' || task == null) {
   const { main, open } = await import('./server.ts')
-  const port = env['PORT'], hostname = env['HOSTNAME']
+  const port = env['MF_PORT'], hostname = env['MF_HOST']
   const { url } = await main(port != null ? +port : void 0, hostname)!
   await open?.(url)
   process.on('uncaughtException', e => error(e))

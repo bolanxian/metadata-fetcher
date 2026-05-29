@@ -89,9 +89,12 @@ export const init = async () => {
       try {
         const cp = await import('node:child_process')
         const stream = await import('node:stream')
-        const { stdout } = cp.spawn('./dist/reg-utils', ['browser'], { stdio: ['ignore', 'pipe', 'inherit'] })
-        const text = await new Response(stream.Readable.toWeb(stdout) as any).text()
-        if (!text) { throw null }
+        const sub = cp.spawn('./dist/reg-utils', ['browser'], { stdio: ['ignore', 'pipe', 'inherit'] })
+        await new Promise((ok, reject) => {
+          sub.on('spawn', ok)
+          sub.on('error', reject)
+        })
+        const text = await new Response(stream.Readable.toWeb(sub.stdout) as any).text()
         const data = parse(text)
         const browsers: NonNullable<Config['browsers']> = { __proto__: null! }
         for (const key of keys(data)) {
