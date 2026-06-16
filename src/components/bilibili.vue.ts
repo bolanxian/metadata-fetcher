@@ -9,7 +9,7 @@ import { BBDown } from './bbdown'
 import { toHttps } from '@/bind'
 import { instantToString, formatDuration } from '@/utils/temporal'
 import { definePluginComponent } from '@/meta-fetch/plugin'
-import { type Data, toUrl, toSpaceUrl, bilibiliVideo } from '@/meta-fetch/platforms/bilibili-video'
+import { type ChannelData, type Data, toUrl, toSpaceUrl, bilibiliVideo } from '@/meta-fetch/platforms/bilibili-video'
 
 export const errorMap = {
   '-400': '请求错误',
@@ -19,7 +19,7 @@ export const errorMap = {
   62004: '稿件审核中',
   62012: '仅UP主自己可见'
 }
-export const copyrightMap = { 1: '自制', 2: '转载' }
+export const copyrightMap = { 1: '自制', 2: '转载', 3: '未填写' }
 export const copyrightValues = JSON.stringify(copyrightMap)
 export const enum ArgueType {
   NEUTRAL = 0,
@@ -70,9 +70,20 @@ const renderArgue = (videoData: any, inner: VNode): (VNode | null)[] => {
     before ? null : $argue
   ]
 }
-type Channel = { name: string, url: string, desc?: string }
-const resolveChannel = (videoData: { tid: number, tname: string }, channelKv: any): [Channel | null, Channel | null] => {
+
+type Channel = { name: string }
+const resolveChannel = (
+  videoData: { tid: number, tname: string }, channelData: ChannelData, channelKv: any
+): [Channel, Channel | null] => {
   const { tid, tname } = videoData
+  if (hasOwn(channelData, tid)) {
+    const channel = channelData[tid]!
+    const parent = channelData[channel.parent]
+    if (channel === parent || parent == null) {
+      return [channel, null]
+    }
+    return [parent, channel]
+  }
   if (channelKv != null) {
     for (const channel of channelKv) {
       if (!hasOwn(channel, 'sub')) { continue }
@@ -88,7 +99,7 @@ const resolveChannel = (videoData: { tid: number, tname: string }, channelKv: an
       }
     }
   }
-  return [null, { name: tname, url: '' }]
+  return [{ name: tname }, null]
 }
 
 export default definePluginComponent(bilibiliVideo, defineComponent({
@@ -124,7 +135,7 @@ export default definePluginComponent(bilibiliVideo, defineComponent({
         subChannel_v2: null,
       }
       if ($data == null) { return }
-      const { error, channelKv, videoData } = $data
+      const { error, channelData, channelKv, videoData } = $data
       if (error != null && keys(error).length !== 0) {
         data.error = getOwn(errorMap, +error.code) ?? error.message ?? '未知错误'
         return
@@ -138,10 +149,10 @@ export default definePluginComponent(bilibiliVideo, defineComponent({
         const { title, ep_count } = videoData.ugc_season
         data.episodesTitle = `${title}[${ep_count}]`
       }
-      !([data.channel, data.subChannel] = resolveChannel(videoData, channelKv))
+      !([data.channel, data.subChannel] = resolveChannel(videoData, channelData, channelKv))
       if (hasOwn(videoData, 'tid_v2') && hasOwn(videoData, 'tname_v2')) {
         const dummyData = { tid: videoData.tid_v2, tname: videoData.tname_v2 }
-        !([data.channel_v2, data.subChannel_v2] = resolveChannel(dummyData, channelKv))
+        !([data.channel_v2, data.subChannel_v2] = resolveChannel(dummyData, channelData, channelKv))
       }
     })
     const handle = {
@@ -198,25 +209,21 @@ export default definePluginComponent(bilibiliVideo, defineComponent({
           ])),
           default: () => [
             h('div', null, [
-              h('a', {
-                ...$a,
-                href: data.subChannel?.url || data.channel?.url || null,
-                title: `tid=${videoData.tid}\n${data.subChannel?.desc ?? ''}`
+              h('span', {
+                title: `tid=${videoData.tid}`
               }, [
                 h(Tag, { color: 'blue' }, () => [
                   data.channel?.name,
-                  h(Icon, { type: 'ios-arrow-forward' }),
+                  data.subChannel != null ? h(Icon, { type: 'ios-arrow-forward' }) : null,
                   data.subChannel?.name
                 ])
               ]),
-              data.channel_v2 != null || data.subChannel_v2 != null ? h('a', {
-                ...$a,
-                href: data.subChannel_v2?.url || data.channel_v2?.url || null,
-                title: `tid_v2=${videoData.tid_v2}\n${data.subChannel_v2?.desc ?? ''}`
+              data.channel_v2 != null || data.subChannel_v2 != null ? h('span', {
+                title: `tid_v2=${videoData.tid_v2}`
               }, [
                 h(Tag, { color: 'blue' }, () => [
                   data.channel_v2?.name,
-                  h(Icon, { type: 'ios-arrow-forward' }),
+                  data.subChannel_v2 != null ? h(Icon, { type: 'ios-arrow-forward' }) : null,
                   data.subChannel_v2?.name
                 ])
               ]) : null,

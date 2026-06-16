@@ -1,6 +1,6 @@
 
 import * as cheerio from 'cheerio'
-import { assert, getOwn, test } from 'bind:utils'
+import { assert, getOwn, $then, test } from 'bind:utils'
 import { slice } from 'bind:String'
 import { keys } from 'bind:Object'
 import { $fetch, htmlInit, jsonInit } from '../fetch'
@@ -67,8 +67,16 @@ defineDiscover({
   }
 })
 
-export type Data = Record<'error' | 'redirect' | 'videoData' | 'tags' | 'channelKv', any>
+export type ChannelData = Record<string, {
+  name: string
+  route: string | null
+  parent: number
+}>
+let channelDataPromise: Promise<void>
+let channelData: ChannelData
+export type Data = Record<'error' | 'redirect' | 'videoData' | 'tags' | 'channelKv', any> & { channelData: ChannelData }
 let channelKv: any
+
 export const bilibiliVideo = definePlugin<Data>({
   name: 'Bilibili Video',
   path: 'bilibili/video',
@@ -90,7 +98,14 @@ export const bilibiliVideo = definePlugin<Data>({
     }
   },
   async fetch(cache, { cacheId: id, url }) {
-    let data: any, extraData: any
+    let data: any
+    let extraData: Partial<Awaited<ReturnType<typeof loadAsJson>>> | undefined
+    if (channelData == null) {
+      channelDataPromise ??= $then(import('@/utils/bilibili-channel.json'), $ => {
+        channelData = $.default
+      })
+      await channelDataPromise
+    }
     return {
       error: null, redirect: null, videoData: null, tags: null,
       ...await cache.json(id, async () => {
@@ -126,6 +141,7 @@ export const bilibiliVideo = definePlugin<Data>({
         return { videoData, tags }
       }),
       channelKv: channelKv ??= await cache.json('bili!channel', () => data?.channelKv) ?? null,
+      channelData,
       ...extraData
     }
   },
