@@ -74,8 +74,7 @@ export type ChannelData = Record<string, {
 }>
 let channelDataPromise: Promise<void>
 let channelData: ChannelData
-export type Data = Record<'error' | 'redirect' | 'videoData' | 'tags' | 'channelKv', any> & { channelData: ChannelData }
-let channelKv: any
+export type Data = Record<'error' | 'redirect' | 'videoData' | 'tags', any> & { channelData: ChannelData }
 
 export const bilibiliVideo = definePlugin<Data>({
   name: 'Bilibili Video',
@@ -98,9 +97,13 @@ export const bilibiliVideo = definePlugin<Data>({
     }
   },
   async fetch(cache, { cacheId: id, url }) {
-    let data: any
+    type FetchData = {
+      redirect?: string
+      videoData: any
+      tags: any
+    }
     let extraData: Partial<Awaited<ReturnType<typeof loadAsJson>>> | undefined
-    if (channelData == null) {
+    if (channelData == null && import.meta.env.TARGET == 'server') {
       channelDataPromise ??= $then(import('@/utils/bilibili-channel.json'), $ => {
         channelData = $.default
       })
@@ -108,7 +111,7 @@ export const bilibiliVideo = definePlugin<Data>({
     }
     return {
       error: null, redirect: null, videoData: null, tags: null,
-      ...await cache.json(id, async () => {
+      ...await cache.json<FetchData | undefined>(id, async () => {
         let text = await cache.get(`${id}.html`)
         if (text == null) {
           const resp = await $fetch(url, htmlInit)
@@ -127,7 +130,7 @@ export const bilibiliVideo = definePlugin<Data>({
           text = await resp.text()
         }
         const $ = cheerio.load(text, { baseURI: url })
-        data = fromHTML($, REG_INIT)
+        const data = fromHTML($, REG_INIT)
         if (data == null) {
           const ret = await loadAsJson(id)
           if (ret.error != null) { extraData = ret; return }
@@ -140,7 +143,6 @@ export const bilibiliVideo = definePlugin<Data>({
         }
         return { videoData, tags }
       }),
-      channelKv: channelKv ??= await cache.json('bili!channel', () => data?.channelKv) ?? null,
       channelData,
       ...extraData
     }

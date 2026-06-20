@@ -2,12 +2,14 @@
 import { type VNode, type Prop, defineComponent, shallowReactive, watchEffect, onMounted, createVNode as h, withDirectives } from 'vue'
 import { Alert, ButtonGroup, Button, Card, CellGroup, Cell, Divider, Drawer, Icon, Tag } from 'view-ui-plus'
 import lineClamp from 'view-ui-plus/src/directives/line-clamp'
-import { hasOwn, getOwn } from 'bind:utils'
+import { hasOwn, getOwn, matchAll } from 'bind:utils'
+import { slice } from 'bind:String'
 import { keys } from 'bind:Object'
 import { from } from 'bind:Array'
 import { BBDown } from './bbdown'
 import { toHttps } from '@/bind'
 import { instantToString, formatDuration } from '@/utils/temporal'
+import { getDiscoverGlobalRegExp } from '@/meta-fetch/discover'
 import { definePluginComponent } from '@/meta-fetch/plugin'
 import { type ChannelData, type Data, toUrl, toSpaceUrl, bilibiliVideo } from '@/meta-fetch/platforms/bilibili-video'
 
@@ -29,6 +31,11 @@ export const enum ArgueType {
 export const enum DescInfoType {
   ORDINARY = 1,
   USER_HREF = 2,
+}
+export type DescV2Segment = {
+  type: DescInfoType
+  raw_text: string
+  biz_id: number
 }
 
 const $a = { referrerpolicy: 'no-referrer', target: '_blank' }
@@ -73,7 +80,7 @@ const renderArgue = (videoData: any, inner: VNode): (VNode | null)[] => {
 
 type Channel = { name: string }
 const resolveChannel = (
-  videoData: { tid: number, tname: string }, channelData: ChannelData, channelKv: any
+  videoData: { tid: number, tname: string }, channelData: ChannelData
 ): [Channel, Channel | null] => {
   const { tid, tname } = videoData
   if (hasOwn(channelData, tid)) {
@@ -84,22 +91,31 @@ const resolveChannel = (
     }
     return [parent, channel]
   }
-  if (channelKv != null) {
-    for (const channel of channelKv) {
-      if (!hasOwn(channel, 'sub')) { continue }
-      for (const sub of channel.sub) {
-        if (sub.tid === tid && (tname ? sub.name === tname : true)) {
-          return [channel, sub]
+  return [{ name: tname }, null]
+}
+
+function* xrenderDesc(desc_v2: DescV2Segment[]) {
+  for (const segment of desc_v2) {
+    switch (segment.type) {
+      case DescInfoType.ORDINARY: {
+        const text = segment.raw_text
+        let index = 0
+        for (const m of matchAll(getDiscoverGlobalRegExp(), text)) {
+          yield slice(text, index, m.index!)
+          yield h('a', {
+            ...$a, href: `./.search?.=${encodeURIComponent(m[0])}`
+          }, [m[0]])
+          index = m.index! + m[0].length
         }
-      }
-    }
-    for (const channel of channelKv) {
-      if (channel.tid === tid && (tname ? channel.name === tname : true)) {
-        return [channel, null]
-      }
+        yield slice(text, index)
+      } break
+      case DescInfoType.USER_HREF: {
+        yield h('a', {
+          ...$a, href: toSpaceUrl(segment.biz_id as any)
+        }, [`@${segment.raw_text} `])
+      } break
     }
   }
-  return [{ name: tname }, null]
 }
 
 export default definePluginComponent(bilibiliVideo, defineComponent({
@@ -135,7 +151,7 @@ export default definePluginComponent(bilibiliVideo, defineComponent({
         subChannel_v2: null,
       }
       if ($data == null) { return }
-      const { error, channelData, channelKv, videoData } = $data
+      const { error, channelData, videoData } = $data
       if (error != null && keys(error).length !== 0) {
         data.error = getOwn(errorMap, +error.code) ?? error.message ?? '未知错误'
         return
@@ -149,10 +165,10 @@ export default definePluginComponent(bilibiliVideo, defineComponent({
         const { title, ep_count } = videoData.ugc_season
         data.episodesTitle = `${title}[${ep_count}]`
       }
-      !([data.channel, data.subChannel] = resolveChannel(videoData, channelData, channelKv))
+      !([data.channel, data.subChannel] = resolveChannel(videoData, channelData))
       if (hasOwn(videoData, 'tid_v2') && hasOwn(videoData, 'tname_v2')) {
         const dummyData = { tid: videoData.tid_v2, tname: videoData.tname_v2 }
-        !([data.channel_v2, data.subChannel_v2] = resolveChannel(dummyData, channelData, channelKv))
+        !([data.channel_v2, data.subChannel_v2] = resolveChannel(dummyData, channelData))
       }
     })
     const handle = {
@@ -262,12 +278,7 @@ export default definePluginComponent(bilibiliVideo, defineComponent({
             h(Divider, { style: 'margin:16px 0' }),
             h('div', {
               title: `简介${videoData.desc_v2 != null ? '' : '为空'}`, style: 'white-space:pre-line'
-            }, from(videoData.desc_v2 ?? [{ type: 1, raw_text: '\u200B' }], (_: any) => {
-              switch (_.type) {
-                case DescInfoType.ORDINARY: return _.raw_text
-                case DescInfoType.USER_HREF: return h('a', { ...$a, href: toSpaceUrl(_.biz_id) }, [`@${_.raw_text} `])
-              }
-            })),
+            }, [...xrenderDesc(videoData.desc_v2 ?? [{ type: 1, raw_text: '\u200B' }])]),
             h(Divider, { style: 'margin:16px 0' }),
             h(ButtonGroup, null, () => [
               h(Button, {

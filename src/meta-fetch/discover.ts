@@ -1,8 +1,9 @@
 
 import { createBinder } from 'bind:core'
-import { getOwn, match } from 'bind:utils'
+import { getOwn, test, match, replace } from 'bind:utils'
+import { slice, endsWith } from 'bind:String'
 import { freeze } from 'bind:Object'
-import { resolveAsHttp } from '@/bind'
+import { join, resolveAsHttp } from '@/bind'
 const { get, set, keys } = createBinder<Map<RegExp, Discover>>(Map.prototype)
 
 export type Discover = Readonly<{
@@ -14,6 +15,7 @@ export type Discover = Readonly<{
 export const discoverList: Discover[] = []
 export const discoverMap: Map<RegExp, Discover> = new Map()
 export const discoverHttpMap: Map<RegExp, Discover> = new Map()
+export let discoverGlobalRegExp: RegExp | undefined
 
 export function* xresolveDiscover(input: string) {
   if (!(input.length > 0)) { return }
@@ -39,6 +41,7 @@ export const resolveDiscover = (input: string) => {
 }
 export const defineDiscover = (discover: Discover) => {
   freeze(discover)
+  discoverGlobalRegExp = void 0
   discoverList[discoverList.length] = discover
   let include: readonly RegExp[] | undefined
   if ((include = getOwn(discover, 'discover')) != null) {
@@ -54,4 +57,23 @@ export const defineDiscover = (discover: Discover) => {
     }
   }
   return discover
+}
+const getDiscoverGlobalRegExpInner = () => {
+  const REG1 = /^\^|\$$/g, REG2 = /^\w+$/
+  function* transform(map: Map<RegExp, any>) {
+    for (let { source } of keys(map)) {
+      source = replace(REG1, source, '')
+      if (test(REG2, source)) { continue }
+      if (endsWith(source, '(?=$|[?#])')) {
+        source = slice(source, 0, -10)
+      }
+      yield source
+    }
+  }
+  const discoverHttpSource = join(transform(discoverHttpMap), '|')
+  const discoverSource = join(transform(discoverMap), '|')
+  return RegExp(`(?:(?:https?://)?(?:${discoverHttpSource}))|(?:${discoverSource})`, 'g')
+}
+export const getDiscoverGlobalRegExp = () => {
+  return discoverGlobalRegExp ??= getDiscoverGlobalRegExpInner()
 }
