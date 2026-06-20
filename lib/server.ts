@@ -11,9 +11,10 @@ import { STATUS_CODES } from 'node:http'
 import {
   name, ready, cheerioLoad, $string, $array,
   call, getOwn, encodeText as encode, join,
-  test, match, replace, split,
+  test, match, split,
   type FsCache, cache, redirect,
-  discoverMap, discoverHttpMap,
+  discoverGlobalRegExp,
+  getDiscoverGlobalRegExp,
   xresolve, resolve, xparse,
   config, readConfig, writeConfig,
   render, renderBatch,
@@ -31,7 +32,7 @@ type RouteFn = (ctx: RouteCtx) => Promise<Response> | Response
 export const $: Record<string, RouteFn> = { __proto__: null! }
 
 const { stringify } = JSON, { log, error } = console
-const { trim, concat, startsWith, endsWith, slice, includes, lastIndexOf, replaceAll } = $string
+const { trim, concat, startsWith, slice, includes, lastIndexOf, replaceAll } = $string
 const { indexOf } = $array
 const server = navigator.userAgent
 const TYPE = 'content-type'
@@ -157,24 +158,8 @@ $['suggest'] = ({ url }) => {
   })
 }
 
-let REG_ID: RegExp
-let init_reg_id = () => {
-  init_reg_id = null!
-  const ret = [], REG1 = /^\^|\$$/g, REG2 = /^\w+$/
-  for (const keys of [discoverMap.keys(), discoverHttpMap.keys()]) {
-    for (let { source } of keys) {
-      source = replace(REG1, source, '')
-      if (test(REG2, source)) { continue }
-      if (endsWith(source, '(?=$|[?#])')) {
-        source = slice(source, 0, -10)
-      }
-      ret[ret.length] = source
-    }
-  }
-  return RegExp(join(ret, '|'), 'g')
-}
 function* matchId(data: string) {
-  for (const id of match(REG_ID, data) ?? []) {
+  for (const id of match(getDiscoverGlobalRegExp(), data) ?? []) {
     let newId = resolve(id)?.id
     if (newId != null) { yield newId }
   }
@@ -222,7 +207,6 @@ const matcher = (getIter: GetIter): RouteFn => async (ctx) => {
     && headers.get('Sec-Fetch-Mode') === 'navigate')) {
     return $error(403, name)
   }
-  REG_ID ??= init_reg_id()
   const params = ctx.url.searchParams
   if (params.get('output') === 'batch') {
     return new Response(ReadableStream.from(xmatcher(getIter, ctx, params)) as any as ReadableStream, {
@@ -311,7 +295,7 @@ data: ${stringify({ cpu: getCpuUsage(), memory: getMemoryUsage() })}
     memoryUsage: getMemoryUsage(),
     os: getOs(), runtime: getRuntime(), pm: getPm(),
     routeList: Object.keys($),
-    regId: REG_ID?.source ?? null
+    regId: discoverGlobalRegExp?.source ?? null
   }), {
     headers: { server, [TYPE]: types.json }
   })

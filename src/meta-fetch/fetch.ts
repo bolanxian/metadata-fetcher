@@ -5,11 +5,13 @@ export let initFetch = (_fetch: typeof fetch, _userAgent: string) => {
   initFetch = null!
   $fetch = _fetch
   userAgent = _userAgent
+  htmlInit.headers['user-agent'] = userAgent
+  jsonInit.headers['user-agent'] = userAgent
 }
 
 const _headers = {
   'accept-language': '*',
-  'user-agent': userAgent
+  'user-agent': ''
 }
 const _init: RequestInit = {
   headers: _headers,
