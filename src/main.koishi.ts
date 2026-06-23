@@ -3,16 +3,16 @@ export const name = 'metadata-fetcher'
 export const inject = ['database']
 
 import { getOwn } from 'bind:utils'
-import { type Session, type Tables, Context, Field, Schema, h } from 'koishi'
+import type { Session, Tables, Context, Field } from 'koishi'
+import { Schema, h } from 'koishi'
 import { LRUCache } from 'lru-cache'
 import { join } from './bind'
 import type { ResolvedInfo, ParsedInfo } from './meta-fetch/mod'
 import { init, NoCache, xparse } from './meta-fetch/mod'
-import {/*init as initConfig,*/config as defaultConfig } from './config'
+import { config as defaultConfig } from './config'
 import { render, renderLine } from './render'
 const ready = (async () => {
   init({ cache: new NoCache(), fetch })
-  // await initConfig()
 })()
 
 export interface Config {
@@ -56,13 +56,12 @@ const fields: Field.Extension<Tables[typeof name]> = {
   description: 'text'
 }
 
-const cache: LRUCache<string, ParsedInfo, { context: Context, resolved: ResolvedInfo }> = new LRUCache({
+const cache: LRUCache<string, ResolvedInfo & ParsedInfo, { context: Context, resolved: ResolvedInfo }> = new LRUCache({
   max: 20,
   async fetchMethod(cacheId, staleValue, { signal, context: { context: ctx, resolved } }) {
     const [_parsed]: Tables[typeof name][] = await ctx.database.get(name, { id: cacheId })
     if (_parsed != null) {
-      const { shortUrl, url } = resolved
-      return { ..._parsed, id: void 0, shortUrl, url }
+      return { ..._parsed, ...resolved }
     }
     const [, , redirectedPromise, , parsedPromise] = xparse(resolved.id)
     if (redirectedPromise != null) {
@@ -83,9 +82,10 @@ const cache: LRUCache<string, ParsedInfo, { context: Context, resolved: Resolved
   }
 })
 const empty = Promise.resolve(Object.freeze([] as []))
-const parse = async (ctx: Context, input: string): Promise<readonly [ResolvedInfo?, ParsedInfo?]> => {
+const parse = async (ctx: Context, input: string): Promise<readonly [ResolvedInfo?, (ResolvedInfo & (ParsedInfo | {}))?]> => {
   const [, resolved] = xparse(input)
   if (resolved == null) { return empty }
+  if (!resolved.cacheId) { return [resolved, resolved] }
   const parsed = await cache.fetch(resolved.cacheId, { context: { context: ctx, resolved } })
   return [resolved, parsed]
 }
@@ -125,7 +125,7 @@ export const apply = (ctx: Context, config: Config) => {
   ctx.command('meta.img <input>').action(async ({ session }, input) => {
     const [resolved, parsed] = await parse(ctx, input)
     if (resolved == null) { return session!.text(UNKNOWN) }
-    const image = parsed?.thumbnailUrl
+    const image = getOwn(parsed!, 'thumbnailUrl')
     if (image == null) { return session!.text(FAIL) }
     return h.image(image)
   })
