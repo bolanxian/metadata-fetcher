@@ -1,7 +1,7 @@
 
 import { createBinder } from 'bind:core'
 import { getOwn, test, match, replace } from 'bind:utils'
-import { slice, startsWith, endsWith } from 'bind:String'
+import { slice, endsWith } from 'bind:String'
 import { freeze } from 'bind:Object'
 import { join, resolveAsHttp } from '@/bind'
 const { get, set, keys } = createBinder<Map<RegExp, Discover>>(Map.prototype)
@@ -59,11 +59,13 @@ export const defineDiscover = (discover: Discover) => {
   return discover
 }
 const getDiscoverGlobalRegExpInner = () => {
-  const REG1 = /^\^|\$$/g, REG2 = /^\w+$/, REG3 = /(?<!(?<!\\)\\)\((?!\?)/g
+  const REG1 = /^\^|\$$/g
+  const REG2 = /^@|^\(\?!noGlobal\)|^\w+$/
+  const REG3 = /(?<!(?<!\\)\\)\((?!\?)/g
   function* transform(map: Map<RegExp, any>) {
     for (let { source } of keys(map)) {
       source = replace(REG1, source, '')
-      if (startsWith(source, '@') || test(REG2, source)) { continue }
+      if (test(REG2, source)) { continue }
       if (endsWith(source, '(?=$|[?#])')) {
         source = slice(source, 0, -10)
       }

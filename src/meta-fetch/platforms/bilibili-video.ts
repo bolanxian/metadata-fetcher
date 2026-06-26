@@ -47,8 +47,8 @@ defineDiscover({
   discover: [
     /^@(b23)!([-\w]+)$/,
     /^bilibili:\/\/(video)\/(?!0\d)(\d{1,16})$/,
-    /^(bv)!([aA][vV](?!0\d)\d{1,16})$/,
-    /^(raw)!([bB][vV]1\w{9})$/
+    /^(?!noGlobal)(bv)!([aA][vV](?!0\d)\d{1,16})$/,
+    /^(?!noGlobal)(raw)!([bB][vV]1\w{9})$/
   ],
   handle(m) {
     assert?.<Record<0 | 1 | 2, string>>(m)

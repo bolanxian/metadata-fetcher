@@ -6,18 +6,18 @@ import { definePlugin } from '../plugin'
 
 defineDiscover({
   name: '',
-  discover: [/^(?:web\+)?meta:\/([!#$%&*+\-./:=?@\w~]+)$/],
+  discover: [/^(?!noGlobal)(?:web\+)?meta:\/([!#$%&*+\-./:=?@\w~]+)$/],
   handle: m => m[1]
 })
 
 defineDiscover({
   name: 'Thunder Link Decode',
-  discover: [/^thunder:\/\/([+/0-9A-Za-z]+)={0,3}$/],
+  discover: [/^(?!noGlobal)thunder:\/\/([+/0-9A-Za-z]+)={0,3}$/],
   handle: m => `thunder/decode/${m[1]}`
 })
 defineDiscover({
   name: 'Thunder Link Encode',
-  discover: [/^thunder-encode:(.*)$/],
+  discover: [/^(?!noGlobal)thunder-encode:(.*)$/],
   handle: m => `thunder/encode/${encodeURIComponent(m[1]!)}`
 })
 definePlugin({
