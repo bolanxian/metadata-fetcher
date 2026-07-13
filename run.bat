@@ -11,6 +11,10 @@ set "EXEC_DENO=%cd%\__deno__\deno.exe"
 set "DENO_DIR=%cd%\__deno__\"
 if exist ".\__deno__\deno.exe" ( goto start )
 
+if not "%PROCESSOR_ARCHITECTURE%" == "AMD64" ( 
+  echo 不支持的架构: %PROCESSOR_ARCHITECTURE%
+  pause
+)
 if not exist ".\__deno__" ( mkdir ".\__deno__" )
 set "DOWNLOAD_DENO=https://github.com/denoland/deno/releases/latest/download/deno-x86_64-pc-windows-msvc.zip"
 set "DOWNLOAD_DENO_UNPKG=https://unpkg.com/@deno/win32-x64@latest/deno.exe"

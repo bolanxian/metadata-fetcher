@@ -3,7 +3,7 @@ import type { CheerioAPI } from 'cheerio'
 import { match, replace } from 'bind:utils'
 import { indexOf, slice, repeat } from 'bind:String'
 
-const REG1 = /".*?(?<!\\)"/sg
+const REG1 = /".*?(?<!(?<!\\)\\)"/sg
 const REG2 = /(?<!^){[^{}]*?}/g
 let replaced = false
 const REG_CB = (m: string) => {
