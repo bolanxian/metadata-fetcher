@@ -70,6 +70,9 @@ definePlugin({
       }
       const $ = cheerio.load(text, { baseURI: url })
       const data = fromHTML($, REG_INIT)
+      if (data == null && $('title').text() === '\u9A8C\u8BC1\u7801_\u54D4\u54E9\u54D4\u54E9') {
+        throw new TypeError(`Request failed. Please download "${url}" to "${id}.html".`)
+      }
       return data.detail
     })
   },
