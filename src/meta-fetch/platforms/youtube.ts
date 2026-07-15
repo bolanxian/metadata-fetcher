@@ -1,6 +1,6 @@
 
 import * as cheerio from 'cheerio'
-import { hasOwn, test, match, replace } from 'bind:utils'
+import { hasOwn, getOwn, test, match, replace } from 'bind:utils'
 import { find, map, join } from 'bind:Array'
 import { fromHTML } from '@/utils/find-json-object'
 import { parseRfc2822Date } from '@/utils/temporal'
@@ -68,11 +68,17 @@ definePlugin<[any, any]>({
     },
     ownerName(data, info) {
       const $ = data[1].owner.videoOwnerRenderer
-      let ownerName = ''
-      for (const { text } of $.title?.runs ?? []) {
-        ownerName += text
+      let title: any
+      if ((title = getOwn($, 'title')) != null) {
+        let ownerName = ''
+        for (const { text } of title.runs) {
+          ownerName += text
+        }
+        return ownerName
       }
-      return ownerName
+      if ((title = getOwn($, 'attributedTitle')) != null) {
+        return title.content
+      }
     },
     ownerUrl(data, info) {
       const $ = data[1].owner.videoOwnerRenderer

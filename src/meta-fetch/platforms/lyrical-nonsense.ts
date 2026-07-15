@@ -7,29 +7,30 @@ import { htmlToText } from '@/bind'
 import { $fetch, htmlInit } from '../fetch'
 import { defineDiscover } from '../discover'
 import { definePlugin } from '../plugin'
-const REG_LRC = /^lyrical-nonsense[!:]([-\w]+)[!/]([-\w]+)$/
+const REG_LRC = /^(?:utatime|lyrical-nonsense)[!:]([-\w]+)[!/]([-\w]+)$/
 
 defineDiscover({
-  name: '歌詞リリ',
+  name: 'UtaTime',
   discover: [REG_LRC],
   discoverHttp: [
-    /^www\.lyrical-nonsense\.com\/(?:global\/)?lyrics\/([-\w]+)\/([-\w]+)\//
+    /^(?:www\.)?(?:utatime|lyrical-nonsense)\.com\/(?:global\/)?lyrics\/([-\w]+)\/([-\w]+)\//
   ],
-  handle: m => `lyrical-nonsense/lyrics/${m[1]}/${m[2]}`
+  handle: m => `utatime/lyrics/${m[1]}/${m[2]}`
 })
 definePlugin({
-  name: '歌詞リリ',
-  path: 'lyrical-nonsense/lyrics',
+  name: 'UtaTime',
+  path: 'utatime/lyrics',
   resolve(path) {
     if (path.length !== 2) { return }
-    const id = `lyrical-nonsense!${path[0]}!${path[1]}`
+    const id = `utatime!${path[0]}!${path[1]}`
     if (!test(REG_LRC, id)) { return }
-    const displayId = `lyrical-nonsense:${path[0]}/${path[1]}`
-    const url = `https://www.lyrical-nonsense.com/global/lyrics/${path[0]}/${path[1]}/`
-    return { id, displayId, cacheId: id, shortUrl: '', url }
+    const displayId = `utatime:${path[0]}/${path[1]}`
+    const cacheId = `lyrical-nonsense!${path[0]}!${path[1]}`
+    const url = `https://www.utatime.com/global/lyrics/${path[0]}/${path[1]}/`
+    return { id, displayId, cacheId, shortUrl: '', url }
   },
-  async fetch(cache, { id, url }) {
-    const text = await cache.tryGet(`${id}.html`, async () => {
+  async fetch(cache, { cacheId, url }) {
+    const text = await cache.tryGet(`${cacheId}.html`, async () => {
       const resp = await $fetch(url, htmlInit)
       const { status } = resp
       if (status !== 200) {
@@ -46,11 +47,10 @@ definePlugin({
     for (const el of reverse(from($('.olyrictext')))) {
       let text = join(from($('.line-text', el), line => $(line).text()), '\n')
       if (!text) { text = trim(htmlToText(trim($(el).html()!))) }
-      desc += `\n${text}\n`
+      desc += `${text}\n\n`
     }
     return {
-      title: $('input[type="hidden"][name="pagetitle"]').attr('value') ?? '',
-      publishDate: $('meta[property="article:modified_time"]').attr('content') ?? '',
+      title: $('.site-header .pageheader').text(),
       thumbnailUrl: $('meta[property="og:image"]').attr('content') ?? '',
       description: desc
     }
