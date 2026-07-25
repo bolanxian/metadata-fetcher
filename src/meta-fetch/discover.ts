@@ -1,10 +1,9 @@
 
-import { createBinder } from 'bind:core'
 import { getOwn, test, match, replace } from 'bind:utils'
 import { slice, endsWith } from 'bind:String'
 import { freeze } from 'bind:Object'
 import { join, resolveAsHttp } from '@/bind'
-const { get, set, keys } = createBinder<Map<RegExp, Discover>>(Map.prototype)
+import { SortedMap } from '@/utils/sorted-map'
 
 export type Discover = Readonly<{
   name: string
@@ -13,8 +12,8 @@ export type Discover = Readonly<{
   handle: (m: RegExpMatchArray, reg: RegExp) => Iterable<string> | string | undefined
 }>
 export const discoverList: Discover[] = []
-export const discoverMap: Map<RegExp, Discover> = new Map()
-export const discoverHttpMap: Map<RegExp, Discover> = new Map()
+export const discoverMap: SortedMap<RegExp, Discover> = new SortedMap()
+export const discoverHttpMap: SortedMap<RegExp, Discover> = new SortedMap()
 export let discoverGlobalRegExp: RegExp | undefined
 
 export function* xresolveDiscover(input: string) {
@@ -25,11 +24,12 @@ export function* xresolveDiscover(input: string) {
     map = discoverHttpMap
     input = maybeHttp
   }
-  for (const reg of keys(map)) {
+  for (const reg of map.keys()) {
     const m = match(reg, input)
     if (m == null) { continue }
-    const discover = get(map, reg)!.handle(m, reg)
+    const discover = map.get(reg)!.handle(m, reg)
     if (discover == null) { continue }
+    map.addScore(reg, 1)
     if (typeof discover === 'string') { yield discover }
     else { yield* discover }
   }
@@ -47,13 +47,13 @@ export const defineDiscover = (discover: Discover) => {
   if ((include = getOwn(discover, 'discover')) != null) {
     freeze(include)
     for (const reg of include) {
-      set(discoverMap, reg, discover)
+      discoverMap.set(reg, discover)
     }
   }
   if ((include = getOwn(discover, 'discoverHttp')) != null) {
     freeze(include)
     for (const reg of include) {
-      set(discoverHttpMap, reg, discover)
+      discoverHttpMap.set(reg, discover)
     }
   }
   return discover
@@ -63,7 +63,7 @@ const getDiscoverGlobalRegExpInner = () => {
   const REG2 = /^@|^\(\?!noGlobal\)|^\w+$/
   const REG3 = /(?<!(?<!\\)\\)\((?!\?)/g
   function* transform(map: Map<RegExp, any>) {
-    for (let { source } of keys(map)) {
+    for (let { source } of map.keys()) {
       source = replace(REG1, source, '')
       if (test(REG2, source)) { continue }
       if (endsWith(source, '(?=$|[?#])')) {

@@ -13,6 +13,7 @@ import {
   call, getOwn, encodeText as encode, join,
   test, match, split,
   type FsCache, cache, redirect,
+  discoverMap, discoverHttpMap,
   discoverGlobalRegExp,
   getDiscoverGlobalRegExp,
   xresolve, resolve, xparse,
@@ -24,6 +25,7 @@ import {
   checkVersion, renderToHtml,
 } from '@/main.ssr'
 import { getCpu, getCpuUsage, getMemoryUsage, getOs, getRuntime, getPm } from './info.ts'
+import type { SortedMap } from '@/utils/sorted-map.ts'
 declare const { ReadableStream }: typeof import('node:stream/web')
 await ready
 
@@ -33,7 +35,7 @@ export const $: Record<string, RouteFn> = { __proto__: null! }
 
 const { stringify } = JSON, { log, error } = console
 const { trim, concat, startsWith, slice, includes, lastIndexOf, replaceAll } = $string
-const { indexOf } = $array
+const { indexOf, map } = $array
 const server = navigator.userAgent
 const TYPE = 'content-type'
 const types = {
@@ -289,13 +291,20 @@ data: ${stringify({ cpu: getCpuUsage(), memory: getMemoryUsage() })}
       headers: { server, [TYPE]: 'text/event-stream' }
     })
   }
+  const data = {
+    mapper(this: SortedMap<any, any>, reg: RegExp) {
+      return `${this.getScore(reg) ?? null}:${reg.source}`
+    }
+  }
   return new Response(stringify({
     remoteAddr, cpu: getCpu(),
     cpuUsage: getCpuUsage(),
     memoryUsage: getMemoryUsage(),
     os: getOs(), runtime: getRuntime(), pm: getPm(),
     routeList: Object.keys($),
-    regId: discoverGlobalRegExp?.source ?? null
+    regId: discoverGlobalRegExp?.source ?? null,
+    sortedReg: map([...discoverMap.keys()], data.mapper, discoverMap),
+    sortedHttpReg: map([...discoverHttpMap.keys()], data.mapper, discoverHttpMap),
   }), {
     headers: { server, [TYPE]: types.json }
   })
