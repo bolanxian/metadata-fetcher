@@ -1,15 +1,15 @@
 
 import { defineComponent, shallowReactive, toRaw, watch, createVNode as h, onMounted } from 'vue'
-import type { Component, Prop } from 'vue'
-import { Row, Col, Input, Button, Message, Menu, Submenu, MenuItem } from 'view-ui-plus'
-import { type Override, getOwn, test, split } from 'bind:utils'
+import type { Component, Prop, ComponentPublicInstance } from 'vue'
+import { Row, Col, Card, Input, Button, Message, Menu, Submenu, MenuItem } from 'view-ui-plus'
+import { type Override, getOwn, test, split, matchAll } from 'bind:utils'
 import { assign, entries } from 'bind:Object'
 import { from, join } from 'bind:Array'
 import { trim, slice, startsWith, replaceAll } from 'bind:String'
 import { nextTick, resolveAsHttp } from '@/bind'
 import { type Config, config, writeConfig } from '@/config'
 import { type OnParsed, render as _render, renderBatch } from '@/render'
-import { resolve, xparse, getPluginComponent } from '@/meta-fetch/mod'
+import { resolve, xparse, getPluginComponent, getDiscoverGlobalRegExp } from '@/meta-fetch/mod'
 import type { ResolvedInfo, ParsedInfo } from '@/meta-fetch/mod'
 import ConfigVue from './config.vue'
 import { Dialog } from './dialog'
@@ -60,6 +60,8 @@ export type Data = (DataDefault | DataBatch | DataDialog) & {
   loading: boolean
   disabled: boolean
   maybeHttp: string | null
+  outputRef: ComponentPublicInstance | null
+  outputReadonly: boolean
   component: Component | undefined
 }
 
@@ -94,6 +96,8 @@ export const createData = (store: Store): Data => {
     loading: false,
     disabled: true,
     maybeHttp: null,
+    outputRef: null,
+    outputReadonly: true,
     component: void 0,
   } satisfies Data as Data
   if (startsWith(store.mode, 'batch:')) {
@@ -172,10 +176,15 @@ export default defineComponent({
     })
     const handleRefOutput = (vm: any) => {
       if (vm != null) { nextTick(vm.resizeTextarea) }
+      data.outputRef = vm
     }
     const handleSelect = CSR ? (name: string) => {
       if (data.disabled) { return }
-      if (startsWith(name, 'batch:')) {
+      if (name === 'document') {
+        store.data = { store, el: data.outputRef?.$el }
+        data.outputReadonly = false
+        data.component = DocumentComp
+      } else if (startsWith(name, 'batch:')) {
         location.href = `./.batch?${createBatchParams(slice(name, 6), resolveBatch(trim(store.input)))}`
       } else {
         const id = resolve(split(S, trim(store.input), 1)[0]!)?.id
@@ -241,11 +250,12 @@ export default defineComponent({
           }, () => [
             h(MenuItem, { name: 'default' }, () => ['元数据']),
             h(Submenu, { name: 'batch' }, {
-              title: () => ['批量模式', data.batchTitle],
+              title: () => ['批量', data.batchTitle],
               default: () => from(entries(config.batch), ([key, { name }]) =>
                 h(MenuItem, { name: `batch:${key}`, style: name ? null : 'display:none' }, () => [name || key])
               )
-            })
+            }),
+            h(MenuItem, { name: 'document' }, () => ['文档']),
           ]) : null,
           h(Input, {
             modelValue: store.input,
@@ -294,7 +304,10 @@ export default defineComponent({
                 type: 'textarea',
                 autosize: { minRows: 20, maxRows: 1 / 0 },
                 modelValue: store.output,
-                readonly: true
+                'onUpdate:modelValue': CSR && !data.outputReadonly
+                  ? (value: string) => { store.output = value }
+                  : null,
+                readonly: data.outputReadonly,
               })
               : h('div', { class: 'ivu-input-wrapper', style: 'margin-top:20px' }, [
                 h('textarea', { class: 'ivu-input', style: 'min-height:430px', readonly: true }, [store.output])
@@ -312,5 +325,29 @@ export default defineComponent({
         ? h(Dialog, { type: data.dialogType, path: store.input })
         : null
     ]
+  }
+})
+
+export const DocumentComp = defineComponent({
+  props: { data: null! as Prop<{ store: Store, el: HTMLElement }> },
+  setup(props) {
+    const $a = { referrerpolicy: 'no-referrer', target: '_blank' }
+    function* xrender(text: string) {
+      let index = 0
+      for (const m of matchAll(getDiscoverGlobalRegExp(), text)) {
+        yield slice(text, index, m.index!)
+        yield h('a', {
+          ...$a, href: `./.search?.=${encodeURIComponent(m[0])}`
+        }, [m[0]])
+        index = m.index! + m[0].length
+      }
+      yield slice(text, index)
+    }
+    return () => {
+      const { store, el } = props.data!
+      return h(Card, { style: `white-space:pre-line;margin-top:${(store.input, el.offsetTop)}px` }, () => [
+        ...xrender(store.output)
+      ])
+    }
   }
 })

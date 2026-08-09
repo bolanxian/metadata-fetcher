@@ -15,7 +15,7 @@ defineDiscover({
     /^pixiv:\/\/illusts\/(\d+)(?=$|[?#])/
   ],
   discoverHttp: [
-    /^www\.pixiv\.net\/artworks\/(\d+)(?=$|[?#])/
+    /^www\.pixiv\.net\/(?:en\/)?artworks\/(\d+)(?=$|[?#])/
   ],
   handle(m) {
     const suffix = m[2] != null ? `/${m[2]}` : ''

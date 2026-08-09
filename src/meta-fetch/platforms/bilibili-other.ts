@@ -6,7 +6,7 @@ import { toHttps } from '@/bind'
 import { defineDiscover } from '../discover'
 import { definePlugin, redirectPlugin } from '../plugin'
 import { $fetch, htmlInit } from '../fetch'
-import { REG_INIT } from './bilibili-video'
+import { REG_INIT, toSpaceUrl } from './bilibili-video'
 import { fromHTML } from '@/utils/find-json-object'
 import { instantToString } from '@/utils/temporal'
 export const REG_CV = /^cv((?!0\d)\d+)$/
@@ -104,7 +104,7 @@ definePlugin({
     return {
       title,
       ownerName: author.name,
-      ownerUrl: author.mid,
+      ownerUrl: toSpaceUrl(author.mid),
       relatedUrl,
       thumbnailUrl: thumb,
       publishDate: instantToString(author.pub_ts * 1000),
