@@ -437,6 +437,9 @@ let args: string[] | undefined
       if (!(i > 0)) { break }
       args = $args; args[i] = '$1'
     } break
+    case 'linux': {
+      args = ['open', '$1']
+    } break
   }
   if (args == null) {
     error('获取默认浏览器失败', browser)

@@ -10,7 +10,7 @@ import process, { argv, env, exit } from 'node:process'
 import { spawn, type SpawnOptions } from 'node:child_process'
 import { Readable } from 'node:stream'
 
-const MAIN = import('@/main.ssr')
+const $MAIN = import('@/main.ssr')
 const { log, error } = console
 
 if (task === 'start') {
@@ -38,7 +38,7 @@ if (task === 'start') {
     setTitle(name)
     step = 1
     const { main, open, $, $error } = await import('./server.ts')
-    const { ready, $string: { startsWith, trim } } = await MAIN
+    const { ready, $string: { startsWith, trim } } = await $MAIN
     await ready
     const port = env['MF_PORT'], hostname = env['MF_HOST']
     const { url } = await main(port != null ? +port : void 0, hostname)!
@@ -78,10 +78,11 @@ if (task === 'start') {
   }
 }
 
-const { ready, xparse, render, renderBatch } = await MAIN
-await ready
+const MAIN = await $MAIN
+await MAIN.ready
 
 if (task === 'fetch') {
+  const { xparse, render } = MAIN
   for (const arg of args) {
     try {
       const [, resolved, redirectedPromise, , parsedPromise] = xparse(arg)
@@ -103,6 +104,7 @@ if (task === 'fetch') {
     }
   }
 } else if (task === 'batch') {
+  const { renderBatch } = MAIN
   const [type, ..._args] = args
   for await (const $ of renderBatch(_args, type!)) { log($.error ?? $.value) }
 } else if (task === 'serve' || task == null) {
@@ -113,6 +115,43 @@ if (task === 'fetch') {
   process.on('uncaughtException', e => error(e))
 } else if (task === 'start') {
 
+} else if (task === 'tiny:desktop') {
+  const { env } = await import('node:process')
+  const { readFile, writeFile } = await import('node:fs/promises')
+  const { match, $string: { startsWith, slice } } = MAIN
+
+  const home = env['HOME']
+  let desktopDir = '.'
+  if (home != null) {
+    const configHome = env['XDG_CONFIG_HOME'] ?? resolve(home, '.config')
+    const dirs = await readFile(resolve(configHome, 'user-dirs.dirs'), { encoding: 'utf-8' })
+    let dir = match(/^XDG_DESKTOP_DIR="(.+)"$/m, dirs)![1]!
+    const prefix = '$HOME/'
+    if (startsWith(dir, prefix)) {
+      dir = slice(dir, prefix.length)
+      dir = resolve(home, dir)
+      desktopDir = dir
+    }
+  }
+  const cwd = resolve('.')
+  const icon = resolve('dist/favicon.svg')
+  const desktopEntry = `\
+[Desktop Entry]
+Name=${name}
+Comment=获取元数据 (支持 Bilibili 等)
+Icon=${icon}
+Path=${cwd}
+Exec=deno task --cwd '${cwd}' serve
+Type=Application
+Categories=Metadata;
+Terminal=true
+StartupNotify=true
+`
+  const options = { mode: 0o777 }
+  for (const dirName of [desktopDir, '/usr/share/applications']) {
+    const fileName = resolve(dirName, 'metadata-fetcher.desktop')
+    await writeFile(fileName, desktopEntry, options)
+  }
 } else if (task !== import.meta) {
   error(new RangeError(`unrecognized subcommand '${task}'`))
   exit(1)

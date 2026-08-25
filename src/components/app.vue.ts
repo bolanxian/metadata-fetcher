@@ -1,12 +1,12 @@
 
 import { defineComponent, shallowReactive, toRaw, watch, createVNode as h, onMounted } from 'vue'
-import type { Component, Prop, ComponentPublicInstance } from 'vue'
+import type { Component, Prop, VNode, ComponentPublicInstance } from 'vue'
 import { Row, Col, Card, Input, Button, Message, Menu, Submenu, MenuItem } from 'view-ui-plus'
 import { type Override, getOwn, test, split, matchAll } from 'bind:utils'
 import { assign, entries } from 'bind:Object'
-import { from, join } from 'bind:Array'
+import { from } from 'bind:Array'
 import { trim, slice, startsWith, replaceAll } from 'bind:String'
-import { nextTick, resolveAsHttp } from '@/bind'
+import { nextTick, join, resolveAsHttp } from '@/bind'
 import { type Config, config, writeConfig } from '@/config'
 import { type OnParsed, render as _render, renderBatch } from '@/render'
 import { resolve, xparse, getPluginComponent, getDiscoverGlobalRegExp } from '@/meta-fetch/mod'
@@ -181,9 +181,14 @@ export default defineComponent({
     const handleSelect = CSR ? (name: string) => {
       if (data.disabled) { return }
       if (name === 'document') {
+        if (data.component === DocumentComp) { return }
         store.data = { store, el: data.outputRef?.$el }
         data.outputReadonly = false
         data.component = DocumentComp
+        data.mode = 'batch'
+        data.batchType = '.id'
+        data.batchResolved = ''
+        store.input = ''
       } else if (startsWith(name, 'batch:')) {
         location.href = `./.batch?${createBatchParams(slice(name, 6), resolveBatch(trim(store.input)))}`
       } else {
@@ -258,6 +263,7 @@ export default defineComponent({
             h(MenuItem, { name: 'document' }, () => ['文档']),
           ]) : null,
           h(Input, {
+            key: 'input',
             modelValue: store.input,
             'onUpdate:modelValue'(value: string) { store.input = value },
             onOnEnter: handleSearch
@@ -277,6 +283,7 @@ export default defineComponent({
             }
           }),
           data.mode === 'default' ? h(Input, {
+            key: 'resolved-url',
             modelValue: store.resolved?.url ?? '',
             onOnFocus: handleFocus,
             readonly: true
@@ -284,6 +291,7 @@ export default defineComponent({
             prepend: () => h(Scannable, { icon: 'md-link', text: store.resolved?.url ?? '' }),
           }) : null,
           data.mode === 'default' ? h(Input, {
+            key: 'resolved-shortUrl',
             style: store.resolved?.shortUrl ? null : 'display:none',
             modelValue: store.resolved?.shortUrl ?? '',
             onOnFocus: handleFocus,
@@ -292,6 +300,7 @@ export default defineComponent({
             prepend: () => h(Scannable, { icon: 'md-share', text: store.resolved?.shortUrl ?? '' }),
           }) : null,
           data.mode === 'batch' ? h(Input, {
+            key: 'batchResolved',
             modelValue: data.batchResolved,
             onOnFocus: handleFocus,
             readonly: true
@@ -299,6 +308,7 @@ export default defineComponent({
           SSR || CSR || (PAGES && !data.disabled)
             ? PAGES || (CSR && !data.disabled)
               ? h(Input, {
+                key: 'output',
                 ref: handleRefOutput,
                 style: 'margin-top:20px',
                 type: 'textarea',
@@ -343,9 +353,26 @@ export const DocumentComp = defineComponent({
       }
       yield slice(text, index)
     }
+    watch(() => props.data!.store.output, output => {
+      const set = new Set<string>()
+      for (const m of matchAll(getDiscoverGlobalRegExp(), output)) {
+        const id = resolve(m[0])?.id
+        if (id != null) { set.add(id) }
+      }
+      props.data!.store.input = join(set, ' ')
+    }, { immediate: true })
+    const onVnodeMounted = (vnode: VNode) => {
+      const input = (props.data!.el.querySelector('.ivu-input')! as HTMLElement)
+      const el = (vnode.el as HTMLElement).querySelector('.ivu-card-body')! as HTMLElement
+      el.style.padding = '4px 7px'
+      el.style.minHeight = input.style.minHeight
+    }
     return () => {
       const { store, el } = props.data!
-      return h(Card, { style: `white-space:pre-line;margin-top:${(store.input, el.offsetTop)}px` }, () => [
+      return h(Card, {
+        style: `white-space:pre-line;margin-top:${(store.input, el.offsetTop)}px`,
+        onVnodeMounted
+      }, () => [
         ...xrender(store.output)
       ])
     }

@@ -4,7 +4,10 @@
 只要输入ID(av号、BV号等)或链接  
 就可以获取元数据或生成借物表  
 
-### [下载](https://pan.baidu.com/s/1MAvtaVs9RA0tWvReXNj__w?pwd=rc18)
+### 下载
+- [Gitee](https://gitee.com/bolanxian/metadata-fetcher/releases)
+- [百度网盘](https://pan.baidu.com/s/1MAvtaVs9RA0tWvReXNj__w?pwd=rc18)
+
 下载并解压后，双击`run.bat`启动  
 启动完成后会有提示，并显示托盘图标  
 点击托盘图标打开WebUI  
@@ -31,13 +34,29 @@ deno task fetch [...]
 deno task batch <".id" | "list" | "name" | ...> [...]
 
 ::完整构建
-bun create https://github.com/bolanxian/metadata-fetcher
+bun create https://github.com/bolanxian/metadata-fetcher/
 cd metadata-fetcher
 bun run build && bun run crate && bun run convert:ico
 start "" deno run --no-prompt -P=start ./lib/main.ts start
 ```
 
-### Koishi 插件
+### 小小容器
+可通过[小小容器](https://github.com/Cateners/tiny_container/)，在 Android 上运行
+```bash
+#依赖
+sudo apt update
+sudo apt install nodejs npm
+npm i -g deno
+
+#运行 WebUI
+deno task serve
+
+#创建 .desktop 文件（用于桌面捷径）
+deno task tiny:desktop
+```
+
+### Koishi
+可安装为 [Koishi](https://koishi.chat/zh-CN/) 插件
 ```batch
 bun run build:koishi
 cd koishi-plugin

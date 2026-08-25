@@ -25,6 +25,7 @@
     }
   },
   "tasks": {
+    "tiny:desktop": "deno run --quiet --no-prompt --no-remote -P -R -W ./lib/main.ts tiny:desktop",
     "fetch:node": "node --import=./lib/preload.node.ts ./lib/main.ts fetch",
     "batch:node": "node --import=./lib/preload.node.ts ./lib/main.ts batch",
     "serve:bun": "bun run --preload=./lib/preload.bun.ts ./lib/main.ts serve",
