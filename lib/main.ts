@@ -37,7 +37,7 @@ if (task === 'start') {
     setConsoleOutputCP(65001)
     setTitle(name)
     step = 1
-    const { main, open, $, $error } = await import('./server.ts')
+    const { main, open, $, $error, isNavigateDocument } = await import('./server.ts')
     const { ready, $string: { startsWith, trim } } = await $MAIN
     await ready
     const port = env['MF_PORT'], hostname = env['MF_HOST']
@@ -65,7 +65,9 @@ if (task === 'start') {
       notification(savePath, `创建快捷方式${status}`)
     })
     $['reset-tray'] = async ({ remoteAddr, request: { headers } }) => {
-      if (!startsWith(remoteAddr, '127.') || headers.has('origin')) { return $error(403, name) }
+      if (!(startsWith(remoteAddr, '127.') && isNavigateDocument(headers))) {
+        return $error(403, name)
+      }
       deinit()
       await init(name, icon, onClick)
       return $error(200, name, '已复位')

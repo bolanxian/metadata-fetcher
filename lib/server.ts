@@ -32,6 +32,10 @@ await ready
 type RouteCtx = { request: Request, remoteAddr: string, url: URL, 0: string }
 type RouteFn = (ctx: RouteCtx) => Promise<Response> | Response
 export const $: Record<string, RouteFn> = { __proto__: null! }
+export const isNavigateDocument = (headers: Headers) => {
+  return headers.get('Sec-Fetch-Mode') === 'navigate'
+    && headers.get('Sec-Fetch-Dest') === 'document'
+}
 
 const { stringify } = JSON, { log, error } = console
 const { trim, concat, startsWith, slice, includes, lastIndexOf, replaceAll } = $string
@@ -201,12 +205,8 @@ async function* xmatcher(getIter: GetIter, ctx: RouteCtx, params: URLSearchParam
   }
 }
 const matcher = (getIter: GetIter): RouteFn => async (ctx) => {
-  if (!startsWith(ctx.remoteAddr, '127.')) {
-    return $error(403, name)
-  }
-  const { headers } = ctx.request
-  if (!(headers.get('Sec-Fetch-Dest') === 'document'
-    && headers.get('Sec-Fetch-Mode') === 'navigate')) {
+  const { remoteAddr, request: { headers } } = ctx
+  if (!(startsWith(remoteAddr, '127.') && isNavigateDocument(headers))) {
     return $error(403, name)
   }
   const params = ctx.url.searchParams
@@ -325,8 +325,8 @@ $['config'] = async ({ request, remoteAddr }) => {
     headers: { server, [TYPE]: types.json }
   })
 }
-$['clear-lru'] = ({ remoteAddr }) => {
-  if (!startsWith(remoteAddr, '127.')) {
+$['clear-lru'] = ({ remoteAddr, request: { headers } }) => {
+  if (!(startsWith(remoteAddr, '127.') && isNavigateDocument(headers))) {
     return $error(403, name)
   }
   (cache as FsCache).lru.clear()

@@ -1,7 +1,7 @@
 {
   "name": "metadata-fetcher",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "type": "module",
   "devEngines": {
     "packageManager": {
@@ -13,6 +13,7 @@
     "test": "vitest",
     "test:ui": "vitest --ui",
     "test:run": "vitest run",
+    "coverage": "vitest --coverage.enabled --coverage.provider=istanbul --coverage.reportsDirectory=../__coverage__",
     "dev": "vite",
     "preview": "vite preview",
     "preview:pages": "vite preview --outDir ../dist-pages",
@@ -34,7 +35,7 @@
     "7z": "7z a metadata-fetcher.7z -m0=LZMA2 -mx=9 -mhc=off -ms=on -mqs=on -- LICENSE\\* deno.json \\*.md run.bat lib/\\*.ts dist/\\*"
   },
   "dependencies": {
-    "@vue/runtime-dom": "^3.5.29",
+    "@vue/runtime-dom": "^3.5.42",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/addon-webgl": "^0.19.0",
     "@xterm/xterm": "^6.0.0",
@@ -42,25 +43,26 @@
     "cheerio": "^1.2.0",
     "code-128-encoder": "^3.1.1",
     "datamatrix-svg-ts": "^1.0.2",
-    "lru-cache": "^11.2.6",
+    "lru-cache": "^11.5.2",
     "qrcode": "^1.5.4",
-    "temporal-polyfill": "^0.3.0",
-    "view-ui-plus": "^1.3.23",
-    "vue": "^3.5.29"
+    "temporal-polyfill": "^0.3.2",
+    "view-ui-plus": "^1.3.24",
+    "vue": "^3.5.42"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.9",
-    "@types/deno": "^2.5.0",
-    "@types/node": "^25.3.0",
+    "@types/bun": "^1.4.0",
+    "@types/deno": "^2.7.0",
+    "@types/node": "^25.9.5",
     "@types/qrcode": "^1.5.6",
-    "@vitejs/plugin-vue": "^6.0.4",
-    "@vitest/ui": "^4.0.18",
-    "koishi": "^4.18.10",
-    "rollup": "^4.59.0",
+    "@vitejs/plugin-vue": "^6.0.8",
+    "@vitest/coverage-istanbul": "^4.1.11",
+    "@vitest/ui": "^4.1.11",
+    "koishi": "^4.18.11",
+    "rollup": "^4.63.1",
     "typescript": "^5.9.3",
-    "vite": "^7.3.1",
-    "vitest": "^4.0.18",
-    "vue-tsc": "^3.2.5"
+    "vite": "^7.3.6",
+    "vitest": "^4.1.11",
+    "vue-tsc": "^3.3.11"
   },
   "workspaces": [
     "koishi-plugin"
