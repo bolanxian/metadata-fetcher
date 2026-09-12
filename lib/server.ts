@@ -5,12 +5,12 @@ const pathbase = `/${basename}/`
 import { platform } from 'node:process'
 import { spawn } from 'node:child_process'
 import { extname } from 'node:path/posix'
-import { opendir, readFile } from 'node:fs/promises'
+import { opendir, readFile, open as openFileHandle } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { STATUS_CODES } from 'node:http'
 import {
-  name, ready, cheerioLoad, $string, $array,
-  call, getOwn, encodeText as encode, join,
+  name, ready, regUtils, cheerioLoad, $string, $array,
+  call, getOwn, $then, encodeText as encode, join,
   test, match, split,
   type FsCache, cache, redirect,
   discoverMap, discoverHttpMap,
@@ -32,6 +32,18 @@ await ready
 type RouteCtx = { request: Request, remoteAddr: string, url: URL, 0: string }
 type RouteFn = (ctx: RouteCtx) => Promise<Response> | Response
 export const $: Record<string, RouteFn> = { __proto__: null! }
+export const isLocalHost = (remoteAddr: string, headers: Headers) => {
+  return remoteAddr in localAddr && host === headers.get('host')
+}
+export const isOrigin = (headers: Headers) => {
+  return origin === headers.get('origin')
+}
+export const isLocalHostOrigin = (remoteAddr: string, headers: Headers) => {
+  return remoteAddr in localAddr && host === headers.get('host') && origin === headers.get('origin')
+}
+export const isNavigateDocument = (headers: Headers) => {
+  return headers.get('Sec-Fetch-Mode') === 'navigate' && headers.get('Sec-Fetch-Dest') === 'document'
+}
 
 const { stringify } = JSON, { log, error } = console
 const { trim, concat, startsWith, slice, includes, lastIndexOf, replaceAll } = $string
@@ -57,6 +69,12 @@ switch (`${typeof Deno}:${typeof Bun}`) {
   case 'object:undefined': runtime = 'deno'; break
   case 'undefined:object': runtime = 'bun'; break
 }
+
+const localAddr: Record<string, null> = { __proto__: null }
+for (const addr of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
+  localAddr[addr] = null
+}
+Object.freeze(localAddr)
 
 const allowOrigin: Record<string, null> = { __proto__: null }
 const _allowOrigin = trim(config.allowOrigin)
@@ -136,11 +154,15 @@ $['search'] = ({ url }) => {
   }
   return $html('default', input)
 }
-$['suggest'] = ({ url }) => {
+$['suggest'] = ({ url, remoteAddr, request: { headers } }) => {
   const _input = url.searchParams.get('.')
   const input = trim(_input ?? '')
   if (!input) {
-    const data = stringify([_input, [...cache.keys()]])
+    let list: string[] | undefined
+    if (isLocalHost(remoteAddr, headers)) {
+      list = [...cache.keys()]
+    }
+    const data = stringify([_input, list ?? []])
     return new Response(data, {
       headers: { server, [TYPE]: types.trending }
     })
@@ -173,7 +195,7 @@ function* matchIllust(line: string) {
 type GetIter = (...args: [RouteCtx]) => AsyncIterableIterator<string>
 async function* xmatcher(getIter: GetIter, ctx: RouteCtx, params: URLSearchParams) {
   try {
-    yield encode('\r\nchcp 65001\r\npause\r\n')
+    yield encode('\r\nchcp 65001\r\npause\r\n\r\n')
     if (params.get('mode') === 'illust') {
       for await (const line of getIter(ctx)) {
         const name = await illustName(line)
@@ -194,19 +216,15 @@ async function* xmatcher(getIter: GetIter, ctx: RouteCtx, params: URLSearchParam
         }
       }
     }
-    yield encode('pause\r\n')
+    yield encode('\r\n:end\r\npause\r\n')
   } catch (e) {
     reportError(e)
     yield encode(':error\r\n')
   }
 }
 const matcher = (getIter: GetIter): RouteFn => async (ctx) => {
-  if (!startsWith(ctx.remoteAddr, '127.')) {
-    return $error(403, name)
-  }
-  const { headers } = ctx.request
-  if (!(headers.get('Sec-Fetch-Dest') === 'document'
-    && headers.get('Sec-Fetch-Mode') === 'navigate')) {
+  const { remoteAddr, request: { headers } } = ctx
+  if (!(isLocalHost(remoteAddr, headers) && isNavigateDocument(headers))) {
     return $error(403, name)
   }
   const params = ctx.url.searchParams
@@ -227,7 +245,7 @@ const matcher = (getIter: GetIter): RouteFn => async (ctx) => {
     for (let id of matchFn(data)) {
       set.add(id)
       if (128 < ++i) {
-        set.add('@truncate')
+        set.add('!truncate')
         break loop
       }
     }
@@ -237,8 +255,16 @@ const matcher = (getIter: GetIter): RouteFn => async (ctx) => {
   return $redirect(location)
 }
 $['file'] = matcher(async function* ({ url }) {
-  const data = await readFile(url.searchParams.get('path')!, { encoding: 'utf-8' })
-  for (const line of split(S, data)) { yield line }
+  const MAX_SIZE = 16 * 1024 * 1024
+  const fileHandle = await openFileHandle(url.searchParams.get('path')!, 'r');
+  try {
+    const stat = await fileHandle.stat()
+    if (stat.size > MAX_SIZE) { return }
+    const data = await fileHandle.readFile({ encoding: 'utf-8' })
+    for (const line of split(S, data)) { yield line }
+  } finally {
+    await fileHandle.close()
+  }
 })
 $['directory'] = matcher(async function* ({ url }) {
   const dir = await opendir(url.searchParams.get('path')!)
@@ -252,20 +278,21 @@ $['directory'] = matcher(async function* ({ url }) {
 })
 let bbdownCwd: string
 $['bbdown'] = ({ request, remoteAddr }) => {
-  if (!startsWith(remoteAddr, '127.')) {
+  const { headers } = request
+  if (!(isLocalHostOrigin(remoteAddr, headers))) {
     return $error(403, name)
   }
-  if (request.headers.get('upgrade') !== 'websocket') {
+  if (headers.get('upgrade') !== 'websocket') {
     return $error(426, name)
   }
   bbdownCwd ??= fileURLToPath(import.meta.resolve('../__download__/'))
   return handleRequestBbdown(request, bbdownCwd) ?? $error(400, name)
 }
-$['info'] = ({ remoteAddr, request }) => {
-  if (!startsWith(remoteAddr, '127.')) {
+$['info'] = ({ remoteAddr, request: { headers } }) => {
+  if (!isLocalHost(remoteAddr, headers)) {
     return $error(403, name)
   }
-  if (request.headers.get('accept') === 'text/event-stream') {
+  if (headers.get('accept') === 'text/event-stream') {
     let timer: ReturnType<typeof setTimeout>
     return new Response(new ReadableStream({
       start(controller) {
@@ -302,35 +329,49 @@ data: ${stringify({ cpu: getCpuUsage(), memory: getMemoryUsage() })}
     memoryUsage: getMemoryUsage(),
     os: getOs(), runtime: getRuntime(), pm: getPm(),
     routeList: Object.keys($),
-    regId: discoverGlobalRegExp?.source ?? null,
-    sortedReg: map([...discoverMap.keys()], data.mapper, discoverMap),
-    sortedHttpReg: map([...discoverHttpMap.keys()], data.mapper, discoverHttpMap),
+    discoverGlobalRegExp: discoverGlobalRegExp?.source ?? null,
+    sortedRegList: map([...discoverMap.keys()], data.mapper, discoverMap),
+    sortedHttpRegList: map([...discoverHttpMap.keys()], data.mapper, discoverHttpMap),
   }), {
     headers: { server, [TYPE]: types.json }
   })
 }
+let softwarePromise: any
+$['software'] = async ({ remoteAddr, request: { headers } }) => {
+  if (!isLocalHost(remoteAddr, headers)) {
+    return $error(403, name)
+  }
+  softwarePromise ??= $then(regUtils(['software']), $ => $.stdout)
+  return new Response(await (await softwarePromise), {
+    headers: { server, [TYPE]: types.json }
+  })
+}
 $['config'] = async ({ request, remoteAddr }) => {
+  const { headers } = request
   if (request.method === 'POST') {
-    if (!(startsWith(remoteAddr, '127.') && origin === request.headers.get('origin'))) {
+    if (!isLocalHostOrigin(remoteAddr, headers)) {
       return $error(403, name)
     }
     const config = await request.json()
     await writeConfig(config)
-    return new Response(null, {
-      status: 204, headers: { server }
-    })
+    return $success()
   }
-  const config = await readConfig()
+  const config = { ...await readConfig() }
+  if (!isLocalHost(remoteAddr, headers)) {
+    config.browsers = null
+    config.defaultBrowser = null
+  }
   return new Response(stringify(config), {
     headers: { server, [TYPE]: types.json }
   })
 }
-$['clear-lru'] = ({ remoteAddr }) => {
-  if (!startsWith(remoteAddr, '127.')) {
+$['clear-lru'] = ({ remoteAddr, request }) => {
+  const { headers } = request
+  if (!(request.method === 'POST' && isLocalHostOrigin(remoteAddr, headers))) {
     return $error(403, name)
   }
   (cache as FsCache).lru.clear()
-  return $error(200, name, '已复位')
+  return $success()
 }
 async function* _json(input: string) {
   let step = 0
@@ -404,7 +445,9 @@ const $html = async (mode: string, input: string) => {
   })
 }
 $html.init = null! as HeadersInit
-const $redirect = (location: string, status = 302) => new Response(null, { status, headers: { server, location } })
+export const $redirect = (location: string, status = 302) => new Response(null, { status, headers: { server, location } })
+export const $success = () => new Response(null, { status: 204, headers: { server } })
+
 export const $error = (status: number, name: string, title?: string) => {
   title ??= `${status} ${getOwn(STATUS_CODES, status) ?? 'Unknown'}`
   return new Response(`\
@@ -517,11 +560,13 @@ const fetch = (request: Request, remoteAddr: string) => {
 const afterListen = async (server: typeof serverInst, localAddr: typeof localAddrPromise) => {
   let { hostname, port } = await localAddr
   if (hostname === '0.0.0.0') { hostname = '127.0.0.1' }
-  origin = `http://${hostbase}localhost:${port}`
+  // 高危操作专用 host / origin
+  host = `${hostbase}localhost:${port}`
+  origin = `http://${host}`
   url = `${origin}/`
   allowOrigin[origin] = null
   log(`Listening on ${url}`)
-  return { server, hostname, port, url }
+  return { server, hostname, port, host, origin, url }
 }
 const onError = (e: any) => { error(e); return $error(500, name) }
 export const main = (port = 6702, hostname = '127.0.0.1') => {
@@ -567,6 +612,6 @@ if (typeof addEventListener == 'function') {
   }
 }
 
-let url: string, origin: string
+export let host: string, origin: string, url: string
 let serverInst: Deno.HttpServer<Deno.NetAddr> | Bun.Server<void>
 let localAddrPromise: Promise<Deno.NetAddr | Bun.Server<void>>

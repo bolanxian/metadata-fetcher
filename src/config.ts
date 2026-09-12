@@ -1,6 +1,7 @@
 
 import { assign, keys } from 'bind:Object'
 import { cache } from './meta-fetch/plugin'
+import { regUtils } from './bind'
 const { parse, stringify } = JSON
 const { error } = console
 
@@ -87,15 +88,7 @@ export const init = async () => {
   if (SSR) {
     if (config.browsers == null) {
       try {
-        const cp = await import('node:child_process')
-        const stream = await import('node:stream')
-        const sub = cp.spawn('./dist/reg-utils', ['browser'], { stdio: ['ignore', 'pipe', 'inherit'] })
-        await new Promise((ok, reject) => {
-          sub.on('spawn', ok)
-          sub.on('error', reject)
-        })
-        const text = await new Response(stream.Readable.toWeb(sub.stdout) as any).text()
-        const data = parse(text)
+        const data = parse(await (await regUtils(['browser'])).stdout)
         const browsers: NonNullable<Config['browsers']> = { __proto__: null! }
         for (const key of keys(data)) {
           if (key[0] === '$') { continue }

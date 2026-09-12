@@ -1,7 +1,7 @@
 
 import { defineComponent, shallowReactive, watchEffect, createVNode as h } from 'vue'
 import type { Prop } from 'vue'
-import { Row, Col, Input, Checkbox, ButtonGroup, Button, Select, Option, Modal } from 'view-ui-plus'
+import { Row, Col, Input, Checkbox, ButtonGroup, Button, Select, Option, Message, Modal } from 'view-ui-plus'
 import { entries } from 'bind:Object'
 import { from } from 'bind:Array'
 import { nextTick } from '@/bind'
@@ -15,6 +15,19 @@ export default defineComponent({
     }>({
       status: void 0
     })
+
+    const createProcessor = (url: string) => async () => {
+      let ok = false
+      try {
+        ok = (await fetch(url, { method: 'POST' })).ok
+      } finally {
+        if (ok) { Message['success']('操作成功') }
+        else { Message['error']('操作失败') }
+      }
+    }
+    const clearLru = createProcessor('./.clear-lru')
+    const resetTray = createProcessor('./.reset-tray')
+
     const config = shallowReactive(props.config!)
     const handleOk = () => { data.status = 'pending' }
     const handleCancel = () => { data.status = null }
@@ -89,16 +102,6 @@ export default defineComponent({
             ])
           ]),
           h(Row, $rowAttrs, () => [
-            h(Col, $colAttrs2, () => [
-              h(Checkbox, {
-                border: true,
-                disabled: import.meta.env.TARGET == 'pages',
-                modelValue: config.ssr,
-                'onUpdate:modelValue'(_: any) { config.ssr = _ }
-              }, () => ['服务端渲染'])
-            ])
-          ]),
-          h(Row, $rowAttrs, () => [
             h(Col, $colAttrs0, () => ['分隔符：']),
             h(Col, $colAttrs1, () => [
               h(Input, {
@@ -117,7 +120,18 @@ export default defineComponent({
                 'onUpdate:modelValue'(_: any) { config.template = _ }
               })
             ])
-          ])
+          ]),
+          import.meta.env.TARGET !== 'pages' ? h(Row, $rowAttrs, () => [
+            h(Col, $colAttrs2, () => [
+              h(Checkbox, {
+                border: true,
+                modelValue: config.ssr,
+                'onUpdate:modelValue'(_: any) { config.ssr = _ }
+              }, () => ['服务端渲染']),
+              h(Button, { style: 'margin-left:8px', onClick: clearLru }, () => ['清除LRU']),
+              h(Button, { style: 'margin-left:8px', onClick: resetTray }, () => ['重置托盘']),
+            ])
+          ]) : null
         ]
       }) : null
     ]

@@ -1,6 +1,8 @@
 
 export { default as $string } from 'bind:String'
 export { default as $array } from 'bind:Array'
+
+import type { SpawnOptions } from 'node:child_process'
 import { test, replace } from 'bind:utils'
 import { toString } from 'bind:Number'
 import { fromCharCode, codePointAt, charCodeAt, indexOf, padStart, slice, toUpperCase } from 'bind:String'
@@ -85,3 +87,33 @@ export const htmlToText = import.meta.env.TARGET != 'client' ? (html: string, pr
   _.find('div,p,br').after('\n')
   return _.text()
 } : null!
+
+let cp: typeof import('node:child_process')
+let stream: typeof import('node:stream')
+let regUtilsOptions: SpawnOptions
+
+export const regUtils = async (args: string[]): Promise<{
+  exitCode: Promise<number>
+  stdout: Promise<string>
+}> => {
+  cp ??= await import('node:child_process')
+  stream ??= (await import('node:stream')).default
+  regUtilsOptions ??= { stdio: ['ignore', 'pipe', 'inherit'], shell: false }
+  const sub = cp.spawn('./dist/reg-utils', args, regUtilsOptions)
+  await new Promise((ok, reject) => {
+    sub.on('spawn', ok)
+    sub.on('error', reject)
+  })
+  let exitCode: Promise<number>, stdout: Promise<string>
+  return {
+    get exitCode() {
+      return exitCode ??= new Promise<number>((ok, reject) => {
+        sub.on('exit', ok)
+        sub.on('error', reject)
+      })
+    },
+    get stdout() {
+      return stdout ??= new Response(stream.Readable.toWeb(sub.stdout!) as any).text()
+    }
+  }
+}

@@ -153,33 +153,25 @@ SSR || CSR ? defineDiscover({
   handle: m => 'extra/software/'
 }) : null!
 type Software = Record<string, { name: string, version: string, path: string }>
-const software = SSR || CSR ? definePlugin<Software>({
+const software = SSR || CSR ? definePlugin({
   name: '', path: 'extra/software',
   resolve(path) {
     if (!(path.length === 1 && path[0] === '')) { return }
     const id = 'software'
     return { id, displayId: id, cacheId: id, shortUrl: '', url: '' }
   },
-  async fetch() {
-    if (!SSR) { return }
-    const cp = await import('node:child_process')
-    const stream = await import('node:stream')
-    const sub = cp.spawn('./dist/reg-utils', ['software'], { stdio: ['ignore', 'pipe', 'inherit'] })
-    await new Promise((ok, reject) => {
-      sub.on('spawn', ok)
-      sub.on('error', reject)
-    })
-    const text = await new Response(stream.Readable.toWeb(sub.stdout) as any).text()
-    const data = parse(text)
-    return data
-  },
+  fetch: defaultFetch,
   parse: () => ({ title: '软件' })
 }) : null!
 SSR || CSR ? definePluginComponent(software, defineComponent({
-  props: { data: null! },
+  props: null!,
   setup(props, ctx) {
+    let data = shallowReactive<{ data: Software }>({ data: {} })
+    onMounted(async () => {
+      data.data = await (await fetch('./.software')).json()
+    })
     return () => h(Card, null, () => [
-      h(CellGroup, null, () => from(values(props.data!), $ => h(Cell, {
+      h(CellGroup, null, () => from(values(data.data), $ => h(Cell, {
         title: $.name, label: $.version
       })))
     ])

@@ -64,5 +64,9 @@ if not %ERRORLEVEL% == 0 (
   pause
 )
 
+::代理
+::set HTTPS_PROXY=socks5://127.0.0.1:<port>
+::set NO_PROXY=127.0.0.1,localhost,b23.tv,bilibili.com,bilivideo.com,vsqx.top,aplaybox.com
+
 :exist-cache
 start "" "%EXEC_DENO%" run --quiet --no-prompt --no-remote -P=start ./lib/main.ts start

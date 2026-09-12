@@ -1,6 +1,7 @@
 
 import { pipeTo, test, on } from 'bind:utils'
 import { replaceAll } from 'bind:String'
+import { seal, assign } from 'bind:Object'
 import { join } from 'bind:Array'
 import { defaultUserAgent as userAgent } from '@/meta-fetch/mod'
 const { error } = console
@@ -100,12 +101,13 @@ export const echo = (id: string, opts: BBDownOptions) => {
 export const handleRequest = (request: Request, cwd: string) => {
   if (!import.meta.env.SSR) { return null! }
   const { searchParams } = new URL(request.url)
-  let id: string = null!, args: BBDownOptions = null!
+  let id: string | undefined, args: BBDownOptions | undefined
   try {
     id = searchParams.get('id')!
     args = JSON.parse(searchParams.get('args')!)
   } catch { }
-  if (id == null || args == null) { return null }
+  if (id == null || id[0] === '-') { return null }
+  args = assign(seal(create()), args)
 
   const { socket, response } = Deno.upgradeWebSocket(request, { protocol: $command })
   socket.binaryType = 'arraybuffer'

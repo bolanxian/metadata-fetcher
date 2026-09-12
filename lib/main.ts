@@ -7,8 +7,6 @@ export let [, , task, ...args]: [any, any, string | ImportMeta, ...string[]]
 
 import { resolve } from 'node:path'
 import process, { argv, env, exit } from 'node:process'
-import { spawn, type SpawnOptions } from 'node:child_process'
-import { Readable } from 'node:stream'
 
 const $MAIN = import('@/main.ssr')
 const { log, error } = console
@@ -37,8 +35,8 @@ if (task === 'start') {
     setConsoleOutputCP(65001)
     setTitle(name)
     step = 1
-    const { main, open, $, $error } = await import('./server.ts')
-    const { ready, $string: { startsWith, trim } } = await $MAIN
+    const { main, open, $, isLocalHostOrigin, $success, $error } = await import('./server.ts')
+    const { ready, regUtils, $string: { trim } } = await $MAIN
     await ready
     const port = env['MF_PORT'], hostname = env['MF_HOST']
     const { url } = await main(port != null ? +port : void 0, hostname)!
@@ -46,29 +44,25 @@ if (task === 'start') {
     const onClick = () => { open?.(url) }
     await init(name, icon, onClick)
     addEventListener('tray:create-lnk', async e => {
-      const options: SpawnOptions = { stdio: ['ignore', 'pipe', 'inherit'], shell: false }
-
-      const { stdout } = spawn('./dist/reg-utils', ['known-folder', 'Desktop'], options)
-      const desktopPath = trim(await new Response(Readable.toWeb(stdout!) as any).text())
+      const desktopPath = trim(await (await regUtils(['known-folder', 'Desktop'])).stdout)
 
       const targetPath = resolve('./run.bat')
       const iconPath = resolve(icon)
       const savePath = resolve(desktopPath || '.', `${name}.lnk`)
       const data = JSON.stringify({ targetPath, iconPath, savePath })
 
-      const sub = spawn('./dist/reg-utils', ['shortcut', data], options)
-      const exitCode = await new Promise((ok, reject) => {
-        sub.on('exit', ok)
-        sub.on('error', reject)
-      })
+      const exitCode = await (await regUtils(['shortcut', data])).exitCode
       const status = exitCode == 0 ? '成功' : `失败(退出代码：${exitCode})`
       notification(savePath, `创建快捷方式${status}`)
     })
-    $['reset-tray'] = async ({ remoteAddr, request: { headers } }) => {
-      if (!startsWith(remoteAddr, '127.') || headers.has('origin')) { return $error(403, name) }
+    $['reset-tray'] = async ({ remoteAddr, request }) => {
+      const { headers } = request
+      if (!(request.method === 'POST' && isLocalHostOrigin(remoteAddr, headers))) {
+        return $error(403, name)
+      }
       deinit()
       await init(name, icon, onClick)
-      return $error(200, name, '已复位')
+      return $success()
     }
     hideConsole()
     notification('已启动', name)
