@@ -88,15 +88,15 @@ export const init = async () => {
   if (SSR) {
     if (config.browsers == null) {
       try {
-        const data = parse(await (await regUtils(['browser'])).stdout)
+        const data: Pick<Config, 'browsers' | 'defaultBrowser'> = parse(await (await regUtils(['browser'])).stdout)
         const browsers: NonNullable<Config['browsers']> = { __proto__: null! }
-        for (const key of keys(data)) {
+        for (const key of keys(data.browsers!)) {
           if (key[0] === '$') { continue }
-          const { name, words } = data[key]
-          browsers[key] = { name, args: words }
+          const { name, args } = data.browsers![key]!
+          browsers[key] = { name, args }
         }
         config.browsers = browsers
-        config.defaultBrowser = data.$default
+        config.defaultBrowser = data.defaultBrowser
       } catch (e) {
         config.browsers = {}
         if (e != null) { error(e) }

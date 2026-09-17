@@ -3,6 +3,7 @@ use std::ffi::OsString;
 use std::ops::Deref;
 use std::rc::{Rc, Weak};
 use std::sync::{mpsc, Arc};
+use std::time::Duration;
 
 type ExecuterHandle = Box<dyn FnOnce(&SystemTrayInner) + Send>;
 
@@ -183,7 +184,7 @@ impl SystemTrayInner {
     }
 }
 impl Executer {
-    pub fn run<F, T>(&self, f: F) -> Option<T>
+    pub fn run<F, T>(&self, f: F, timeout: Duration) -> Result<T, mpsc::RecvTimeoutError>
     where
         F: FnOnce(&SystemTrayInner) -> T + Send + 'static,
         T: Send + 'static,
@@ -192,9 +193,10 @@ impl Executer {
         let handle: ExecuterHandle = Box::new(move |ui| {
             let _ = tx.send(f(ui));
         });
-        self.notice_tx.send(handle).ok()?;
+        let map = |_| mpsc::RecvTimeoutError::Disconnected;
+        self.notice_tx.send(handle).map_err(map)?;
         self.notice_sender.notice();
-        rx.recv().ok()
+        rx.recv_timeout(timeout)
     }
     pub fn run_async<F>(&self, f: F) -> Option<()>
     where

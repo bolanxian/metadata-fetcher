@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use std::ffi::OsStr;
 use std::sync::{mpsc, Arc, Mutex, PoisonError, Weak};
 use std::thread;
+use std::time::Duration;
 use winapi::um::wincon::{GetConsoleWindow, SetConsoleOutputCP, SetConsoleTitleW};
 use winapi::um::winuser::{ShowWindow, SW_HIDE, SW_SHOW};
 
@@ -20,8 +21,11 @@ mod string {
             .chain(iter::once(0))
             .collect()
     }
-    pub unsafe fn from_raw_parts(pointer: *const u8, length: usize) -> &'static str {
-        str::from_utf8_unchecked(slice::from_raw_parts(pointer, length))
+    pub fn from_raw_utf8(pointer: *const u8, length: usize) -> Option<&'static str> {
+        if pointer.is_null() {
+            return None;
+        }
+        str::from_utf8(unsafe { slice::from_raw_parts(pointer, length) }).ok()
     }
 }
 
@@ -32,7 +36,9 @@ pub extern "C" fn set_console_output_code_page(code_page_id: u32) -> i32 {
 
 #[no_mangle]
 pub extern "C" fn set_title(title_ptr: *const u8, title_len: usize) -> i32 {
-    let title = unsafe { string::from_raw_parts(title_ptr, title_len) };
+    let Some(title) = string::from_raw_utf8(title_ptr, title_len) else {
+        return 0;
+    };
     let wide = string::to_wide(title);
     unsafe { SetConsoleTitleW(wide.as_ptr()) }
 }
@@ -123,6 +129,14 @@ pub extern "C" fn tray_init(
     path_len: usize,
     handle: Handle,
 ) -> i32 {
+    let Some(name) = string::from_raw_utf8(name_ptr, name_len) else {
+        dispatch(handle, "!Invalid name");
+        return -1;
+    };
+    let Some(icon) = string::from_raw_utf8(path_ptr, path_len) else {
+        dispatch(handle, "!Invalid icon path");
+        return -1;
+    };
     let mut thread = THREAD.lock().unwrap_or_else(PoisonError::into_inner);
     let None = *thread else {
         dispatch(handle, InitStatus::AlreadyInited.to_str().as_ref());
@@ -130,9 +144,6 @@ pub extern "C" fn tray_init(
     };
 
     let (init_tx, init_rx) = mpsc::sync_channel::<InitStatus>(0);
-    let name = unsafe { string::from_raw_parts(name_ptr, name_len) };
-    let icon = unsafe { string::from_raw_parts(path_ptr, path_len) };
-
     *thread = Some(thread::spawn(move || {
         let ui = match tray_init_inner(name, icon, handle) {
             Err(e) => {
@@ -178,19 +189,23 @@ pub extern "C" fn tray_deinit() {
 
 #[no_mangle]
 pub extern "C" fn show_console(show: i32) -> i32 {
+    const TIMEOUT: Duration = Duration::from_secs(1);
     let ui = UI.lock().unwrap_or_else(PoisonError::into_inner);
     let Some(ui) = Weak::upgrade(&*ui) else {
         return 0;
     };
-    if let Some(ret) = ui.run(move |ui| {
-        let show = show != 0;
+    if let Ok(ret) = ui.run(
+        move |ui| {
+            let show = show != 0;
 
-        ui.find("show").map(|item| item.set_enabled(!show));
-        ui.find("hide").map(|item| item.set_enabled(show));
+            ui.find("show").map(|item| item.set_enabled(!show));
+            ui.find("hide").map(|item| item.set_enabled(show));
 
-        let show = if show { SW_SHOW } else { SW_HIDE };
-        unsafe { ShowWindow(GetConsoleWindow(), show) }
-    }) {
+            let show = if show { SW_SHOW } else { SW_HIDE };
+            unsafe { ShowWindow(GetConsoleWindow(), show) }
+        },
+        TIMEOUT,
+    ) {
         return ret;
     }
     0
@@ -228,12 +243,15 @@ pub extern "C" fn tray_notification(
     let Some(ui) = Weak::upgrade(&*ui) else {
         return;
     };
-
-    let text = unsafe { string::from_raw_parts(text_ptr, text_len) };
-    let title = unsafe { string::from_raw_parts(title_ptr, title_len) };
-    let title = if title_len > 0 { Some(title) } else { None };
-
-    let _ = ui.run(move |ui| {
+    let Some(text) = string::from_raw_utf8(text_ptr, text_len) else {
+        return;
+    };
+    let title = if title_len > 0 {
+        string::from_raw_utf8(title_ptr, title_len)
+    } else {
+        None
+    };
+    let _ = ui.run_async(move |ui| {
         ui.notification(text, title);
     });
 }

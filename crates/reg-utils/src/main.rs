@@ -3,7 +3,9 @@ extern crate mashup;
 use json::{object, JsonValue};
 use std::collections::BTreeMap as Map;
 use std::io;
+use std::ops::Deref;
 use windows_sys::core::{GUID, PWSTR};
+use windows_sys::Win32::System::Com;
 use windows_sys::Win32::UI::Shell;
 use winreg::{enums as e, RegKey};
 
@@ -31,11 +33,11 @@ pub struct BrowserInfo {
 }
 impl From<BrowserInfo> for JsonValue {
     fn from(info: BrowserInfo) -> JsonValue {
-        let words = shell_words::split(&info.command).ok();
+        let args = shell_words::split(&info.command).ok();
         object! {
             name: info.name,
             command: info.command,
-            words: words,
+            args: args,
         }
     }
 }
@@ -132,14 +134,15 @@ macro_rules! known_folder_id {
 known_folder_id![Desktop, Documents, SendTo, StartMenu, Startup];
 
 unsafe fn len<T: Copy + Default + std::cmp::PartialEq>(ptr: *const T) -> usize {
-    use std::hint::unreachable_unchecked;
-    let default: T = Default::default();
-    for i in 0.. {
-        if unsafe { *ptr.add(i) } == default {
-            return i;
-        }
+    if ptr.is_null() {
+        return 0;
     }
-    unsafe { unreachable_unchecked() }
+    let default: T = Default::default();
+    let mut i = 0usize;
+    while unsafe { *ptr.add(i) } != default {
+        i += 1;
+    }
+    i
 }
 
 fn known_folder(input: &str) -> Option<String> {
@@ -148,11 +151,18 @@ fn known_folder(input: &str) -> Option<String> {
     use std::ptr::null_mut;
 
     let rfid = known_folder_id(input)?;
-    let mut path: PWSTR = null_mut();
-    unsafe { Shell::SHGetKnownFolderPath(rfid, 0, null_mut(), &mut path) };
-
+    let path = {
+        let mut path: PWSTR = null_mut();
+        let hr = unsafe { Shell::SHGetKnownFolderPath(rfid, 0, null_mut(), &mut path) };
+        if hr < 0 || path.is_null() {
+            return None;
+        }
+        path
+    };
     let wide = unsafe { std::slice::from_raw_parts(path, len(path)) };
-    OsString::from_wide(wide).into_string().ok()
+    let result = OsString::from_wide(wide).into_string().ok();
+    unsafe { Com::CoTaskMemFree(path as *mut _) };
+    result
 }
 
 fn help_known_folder<D: std::fmt::Display>(arg0: D) -> ! {
@@ -181,11 +191,13 @@ pub fn main() -> io::Result<()> {
     }
     match args[1].as_ref() {
         "browser" => {
-            let map = collect_webbrowser_info();
-            let default_id = get_default_webbrowser_id().ok();
-            let mut json = JsonValue::from(map);
-            json["$default"] = JsonValue::from(default_id);
-            println!("{}", json::stringify(json));
+            let browsers = collect_webbrowser_info();
+            let default = get_default_webbrowser_id().ok();
+            let obj = object! {
+                browsers: browsers,
+                defaultBrowser: default,
+            };
+            println!("{}", json::stringify(obj));
         }
         "software" => {
             let map = get_installed_software();
@@ -193,8 +205,12 @@ pub fn main() -> io::Result<()> {
         }
         "default" => {
             let command = get_default_webbrowser_command().ok();
-            let words = command.as_deref().map(shell_words::split).map(Result::ok);
-            let obj = object! { command: command, words: words.flatten() };
+            let args = command
+                .as_deref()
+                .map(shell_words::split)
+                .map(Result::ok)
+                .flatten();
+            let obj = object! { command: command, args: args };
             println!("{}", json::stringify(obj));
         }
         "shortcut" => {
@@ -203,8 +219,8 @@ pub fn main() -> io::Result<()> {
             };
             let mut data = json::parse(arg2).map_err(io::Error::other)?;
             let icon_path = data["iconPath"].take_string();
-            let (Some(target_path), Some(save_path)) =
-                (data["targetPath"].as_str(), data["savePath"].as_str())
+            let Some((target_path, save_path)) =
+                Option::zip(data["targetPath"].as_str(), data["savePath"].as_str())
             else {
                 help(&args[0]);
             };
@@ -214,10 +230,14 @@ pub fn main() -> io::Result<()> {
             shortcut.create_lnk(save_path).map_err(io::Error::other)?;
         }
         "known-folder" => {
-            let Some(arg2) = args.get(2) else {
-                help_known_folder(&args[0]);
-            };
-            let Some(path) = known_folder(arg2) else {
+            let Some(path) = args
+                .get(2)
+                .as_ref()
+                .map(Deref::deref)
+                .map(Deref::deref)
+                .map(known_folder)
+                .flatten()
+            else {
                 help_known_folder(&args[0]);
             };
             println!("{}", path);
