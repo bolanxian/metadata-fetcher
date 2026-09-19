@@ -77,13 +77,12 @@ export const createBatchParams = (type: string, input: string | Iterable<string>
   return `.type=${encodeURIComponent(type)}${ids}`
 }
 
-export const createStore = (mode: string, input: string): Store => {
-  const store: Store = {
-    mode: mode as any, input: trim(input),
+export const createStore = (mode: Store['mode'], input: string): Store => {
+  return {
+    mode, input,
     resolved: null, data: null, parsed: null,
     output: '', config, [Data]: null
   }
-  return store
 }
 export const createData = (store: Store): Data => {
   const data = {

@@ -23,9 +23,13 @@ import {
   handleRequestBbdown,
   illustId, illustName,
   checkVersion, renderToHtml,
+  loadNodeServer,
 } from '@/main.ssr'
 import { getCpu, getCpuUsage, getMemoryUsage, getOs, getRuntime, getPm } from './info.ts'
-import type { SortedMap } from '@/utils/sorted-map.ts'
+import type { SortedMap } from '@/utils/sorted-map'
+import type { Store } from '@/components/app.vue'
+import type { ServerType as NodeServer } from '@hono/node-server'
+import type { AddressInfo as NodeAddr } from 'node:net'
 declare const { ReadableStream }: typeof import('node:stream/web')
 await ready
 
@@ -66,6 +70,7 @@ const types = {
 
 let runtime = 'unknown'
 switch (`${typeof Deno}:${typeof Bun}`) {
+  case 'undefined:undefined': runtime = 'node'; break
   case 'object:undefined': runtime = 'deno'; break
   case 'undefined:object': runtime = 'bun'; break
 }
@@ -406,7 +411,7 @@ $['dialog'] = ({ url }) => {
   const params = url.searchParams
   const type = params.get('type')
   const path = params.get('path')
-  return $html(`dialog:${type}`, path!)
+  return $html(`dialog:${type}` as any, path!)
 }
 $['id'] = ({ 0: input, url }) => {
   const params = createBatchParams(input, url.searchParams.getAll('id'))
@@ -433,18 +438,20 @@ $['batch'] = ({ url }) => {
   }
   return $error(400, name)
 }
-const $html = async (mode: string, input: string) => {
+const $html = async (mode: Store['mode'], input: string) => {
   let { status, head, attrs, app } = await renderToHtml(mode, input)
   head ??= `<title>${name}</title>`
   const html = concat(html0, head, html1!, attrs, html2!, app, html3!)
-  return new Response(html, {
-    status, headers: $html.init ??= {
+  const init = $html.init ??= {
+    status, headers: {
       server, [TYPE]: types.html,
       'content-security-policy': `default-src 'self';img-src * data: blob:;style-src 'self' 'unsafe-inline';`,
     }
-  })
+  }
+  init.status = status
+  return new Response(html, init)
 }
-$html.init = null! as HeadersInit
+$html.init = null! as ResponseInit
 export const $redirect = (location: string, status = 302) => new Response(null, { status, headers: { server, location } })
 export const $success = () => new Response(null, { status: 204, headers: { server } })
 
@@ -572,6 +579,23 @@ const onError = (e: any) => { error(e); return $error(500, name) }
 export const main = (port = 6702, hostname = '127.0.0.1') => {
   if (serverInst != null) { throw null }
   switch (runtime) {
+    default: localAddrPromise = $then(loadNodeServer(), ({ serve }) => new Promise((ok) => {
+      serverInst = serve({
+        port, hostname,
+        /**
+         * @hono/node-server@1.19.11 在
+         * 「轻量 Response + 复用 init / init.headers 普通对象 + body 长度不同」
+         * 的场景下会出现 Content-Length 与实际 body 不匹配的回归问题
+         * <https://github.com/honojs/node-server/pull/309>
+         */
+        overrideGlobalObjects: false,
+        fetch(request, env) {
+          const info = env.incoming.socket.address() as NodeAddr
+          return fetch(request, info.address)
+        }
+      }, ({ address, port }) => ok({ hostname: address, port }))
+    }))
+      break
     case 'deno': localAddrPromise = new Promise((onListen) => {
       serverInst = Deno.serve({
         port, hostname,
@@ -613,5 +637,5 @@ if (typeof addEventListener == 'function') {
 }
 
 export let host: string, origin: string, url: string
-let serverInst: Deno.HttpServer<Deno.NetAddr> | Bun.Server<void>
-let localAddrPromise: Promise<Deno.NetAddr | Bun.Server<void>>
+let serverInst: NodeServer | Deno.HttpServer<Deno.NetAddr> | Bun.Server<void>
+let localAddrPromise: Promise<{ hostname: string, port: number }>

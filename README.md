@@ -15,7 +15,7 @@
 ### 支持
 | 运行环境 | 托盘图标 | WebUI | CLI |
 | - | - | - | - |
-| [Node.js](https://nodejs.org/) | ❌ | ❌ | ✔️ |
+| [Node.js](https://nodejs.org/) | ❌ | <span title="基于 @hono/node-server">✔️*</span> | ✔️ |
 | [Deno](https://deno.com/) | ✔️ | ✔️ | ✔️ |
 | [Bun](https://bun.com/) | ❌ | ✔️ | ✔️ |
 

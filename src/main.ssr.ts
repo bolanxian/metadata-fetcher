@@ -12,10 +12,11 @@ export { S, P, createBatchParams } from './components/app.vue'
 export { handleRequest as handleRequestBbdown } from './utils/bbdown'
 export { illustId, illustName } from './utils/illust-name'
 export { default as checkVersion } from './utils/check-version.js?raw'
+export const loadNodeServer = () => import('./deps/dep-node-server')
 
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
-import { slice, startsWith, replaceAll } from 'bind:String'
+import { trim, slice, startsWith, replaceAll } from 'bind:String'
 import { getOwn } from 'bind:utils'
 import { join, onlyFirst32, escapeJson, escapeText, escapeAttr, escapeAttrApos } from './bind'
 import metaName from 'meta:name'
@@ -75,10 +76,11 @@ data-content-escaped="${escapeJson(parsed.title)}">`
   })
 }
 
-export const renderToHtml = async (mode: string, input: string): Promise<{
+export const renderToHtml = async (mode: Store['mode'], input: string): Promise<{
   status: number, head: string, attrs: string, app: string, context: {} | null
 }> => {
   let status: number | undefined
+  input = trim(input)
   const store = createStore(mode, input)
   store[Data] = createData(store)
   if (store.input) {
