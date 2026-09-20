@@ -24,7 +24,7 @@ export const S = /\s+/, P = /^\w/
 export const Data = Symbol('Data')
 
 export interface Store {
-  mode: 'default' | `batch:${string}` | `dialog:${DataDialog['dialogType']}`
+  mode: 'default' | `batch:${DataBatch['batchType']}` | `dialog:${DataDialog['dialogType']}`
   input: string
 
   resolved: ResolvedInfo | null
@@ -53,7 +53,7 @@ type DataBatch = Override<DataDefault, {
 }>
 type DataDialog = Override<DataDefault, {
   mode: 'dialog'
-  dialogType: 'file' | 'directory'
+  dialogType: string
 }>
 
 export type Data = (DataDefault | DataBatch | DataDialog) & {
@@ -331,7 +331,7 @@ export default defineComponent({
         ]) : null
       ]),
       CSR && !data.disabled && data.mode === 'dialog'
-        ? h(Dialog, { type: data.dialogType, path: store.input })
+        ? h(Dialog, { guid: data.dialogType, path: store.input })
         : null
     ]
   }

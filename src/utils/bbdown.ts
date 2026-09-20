@@ -43,7 +43,8 @@ export interface BBDownOptions {
 }
 
 export const create = (): BBDownOptions => {
-  return {
+  const opts = {
+    __proto__: null!,
     useTvApi: !1,
     useAppApi: !1,
     useIntlApi: !1,
@@ -58,6 +59,7 @@ export const create = (): BBDownOptions => {
     skipMux: !1,
     skipAi: !0,
   }
+  return opts
 }
 
 const filePattern = '[<ownerName>][av<aid>]<videoTitle>'

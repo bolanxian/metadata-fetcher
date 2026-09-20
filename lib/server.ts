@@ -9,7 +9,7 @@ import { opendir, readFile, open as openFileHandle } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { STATUS_CODES } from 'node:http'
 import {
-  name, ready, regUtils, cheerioLoad, $string, $array,
+  name, ready, regUtils, cheerioLoad, LRUCache, $string, $array,
   call, getOwn, $then, encodeText as encode, join,
   test, match, split,
   type FsCache, cache, redirect,
@@ -187,6 +187,9 @@ $['suggest'] = ({ url, remoteAddr, request: { headers } }) => {
   })
 }
 
+type FileMapKey = `${'F' | 'D'}-${string}`
+type GetIter = (path: string) => AsyncIterableIterator<string>
+const fileMap = new LRUCache<FileMapKey, string>({ max: 10 })
 function* matchId(data: string) {
   for (const id of match(getDiscoverGlobalRegExp(), data) ?? []) {
     let newId = resolve(id)?.id
@@ -197,18 +200,17 @@ function* matchIllust(line: string) {
   const id = illustId(line)
   if (id != null) { yield id }
 }
-type GetIter = (...args: [RouteCtx]) => AsyncIterableIterator<string>
-async function* xmatcher(getIter: GetIter, ctx: RouteCtx, params: URLSearchParams) {
+async function* xmatcher(getIter: GetIter, mode: string | null, path: string) {
   try {
     yield encode('\r\nchcp 65001\r\npause\r\n\r\n')
-    if (params.get('mode') === 'illust') {
-      for await (const line of getIter(ctx)) {
+    if (mode === 'illust') {
+      for await (const line of getIter(path)) {
         const name = await illustName(line)
         if (name == null) { continue }
         yield encode(`ren "${line}" "${name}"\r\n`)
       }
     } else {
-      for await (const line of getIter(ctx)) {
+      for await (const line of getIter(path)) {
         let name = line, ext = '', i = lastIndexOf(line, '.')
         if (i > 0) { name = slice(line, 0, i); ext = slice(line, i) }
         let id; for (id of matchId(name)) { break }
@@ -227,14 +229,21 @@ async function* xmatcher(getIter: GetIter, ctx: RouteCtx, params: URLSearchParam
     yield encode(':error\r\n')
   }
 }
-const matcher = (getIter: GetIter): RouteFn => async (ctx) => {
+const matcher = (prefix: 'F' | 'D', getIter: GetIter): RouteFn => async (ctx) => {
   const { remoteAddr, request: { headers } } = ctx
   if (!(isLocalHost(remoteAddr, headers) && isNavigateDocument(headers))) {
     return $error(403, name)
   }
   const params = ctx.url.searchParams
+  const guid = params.get('guid')
+  if (guid == null || guid[0] !== prefix) { return $error(400, name) }
+  const path = fileMap.get(guid as any)
+  if (path == null) { return $error(404, name) }
+
   if (params.get('output') === 'batch') {
-    return new Response(ReadableStream.from(xmatcher(getIter, ctx, params)) as any as ReadableStream, {
+    const mode = params.get('mode')
+    const body: ReadableStream = ReadableStream.from(xmatcher(getIter, mode, path)) as any
+    return new Response(body, {
       headers: {
         server, [TYPE]: `${types.txt};charset=UTF-8`,
         'content-disposition': `inline; filename="rename.bat"; filename*=UTF-8''rename.bat`,
@@ -246,7 +255,7 @@ const matcher = (getIter: GetIter): RouteFn => async (ctx) => {
     matchFn = matchIllust
   }
   const set = new Set<string>(); let i = 0
-  loop: for await (const data of getIter(ctx)) {
+  loop: for await (const data of getIter(path)) {
     for (let id of matchFn(data)) {
       set.add(id)
       if (128 < ++i) {
@@ -259,9 +268,9 @@ const matcher = (getIter: GetIter): RouteFn => async (ctx) => {
   const location = new URL(`./.batch?${createBatchParams(batch, set)}`, ctx.url).href
   return $redirect(location)
 }
-$['file'] = matcher(async function* ({ url }) {
+$['file'] = matcher('F', async function* (path) {
   const MAX_SIZE = 16 * 1024 * 1024
-  const fileHandle = await openFileHandle(url.searchParams.get('path')!, 'r');
+  const fileHandle = await openFileHandle(path, 'r');
   try {
     const stat = await fileHandle.stat()
     if (stat.size > MAX_SIZE) { return }
@@ -271,8 +280,8 @@ $['file'] = matcher(async function* ({ url }) {
     await fileHandle.close()
   }
 })
-$['directory'] = matcher(async function* ({ url }) {
-  const dir = await opendir(url.searchParams.get('path')!)
+$['directory'] = matcher('D', async function* (path) {
+  const dir = await opendir(path)
   try {
     for await (let dirent of dir) {
       yield dirent.name
@@ -284,7 +293,7 @@ $['directory'] = matcher(async function* ({ url }) {
 let bbdownCwd: string
 $['bbdown'] = ({ request, remoteAddr }) => {
   const { headers } = request
-  if (!(isLocalHostOrigin(remoteAddr, headers))) {
+  if (!isLocalHostOrigin(remoteAddr, headers)) {
     return $error(403, name)
   }
   if (headers.get('upgrade') !== 'websocket') {
@@ -357,16 +366,17 @@ $['config'] = async ({ request, remoteAddr }) => {
     if (!isLocalHostOrigin(remoteAddr, headers)) {
       return $error(403, name)
     }
-    const config = await request.json()
-    await writeConfig(config)
+    const $config: typeof config = { ...config, ...await request.json() }
+    $config.browsers = config.browsers
+    await writeConfig($config)
     return $success()
   }
-  const config = { ...await readConfig() }
+  const $config = { ...await readConfig() }
   if (!isLocalHost(remoteAddr, headers)) {
-    config.browsers = null
-    config.defaultBrowser = null
+    $config.browsers = null
+    $config.defaultBrowser = null
   }
-  return new Response(stringify(config), {
+  return new Response(stringify($config), {
     headers: { server, [TYPE]: types.json }
   })
 }
@@ -409,9 +419,11 @@ $['json'] = ({ url }) => {
 }
 $['dialog'] = ({ url }) => {
   const params = url.searchParams
-  const type = params.get('type')
-  const path = params.get('path')
-  return $html(`dialog:${type}` as any, path!)
+  const guid = params.get('guid')
+  if (guid == null) { return $error(400, name) }
+  const path = fileMap.get(guid as any)
+  if (path == null) { return $error(404, name) }
+  return $html(`dialog:${guid}`, path)
 }
 $['id'] = ({ 0: input, url }) => {
   const params = createBatchParams(input, url.searchParams.getAll('id'))
@@ -532,8 +544,7 @@ const fetch = (request: Request, remoteAddr: string) => {
         }
       } break
       case '!': {
-        const nextPath = decodeURIComponent(slice(path, 1))
-        return $redirect(`${base}${nextPath}`)
+        return $error(418, name)
       }
       default: {
         switch (path) {
@@ -630,8 +641,17 @@ if (typeof addEventListener == 'function') {
   for (const type of ['file', 'directory']) {
     addEventListener(`tray:open:${type}`, e => {
       if (url == null || open == null) { return }
-      const nextPath = `.dialog?${new URLSearchParams({ type, path: (e as CustomEvent<string>).detail })}`
-      open(`${url}!${encodeURIComponent(nextPath)}`)
+      const uuid = crypto.randomUUID()
+      const path = (e as CustomEvent<string>).detail
+      let guid: FileMapKey
+      switch (type) {
+        case 'file': guid = `F-${uuid}`; break
+        case 'directory': guid = `D-${uuid}`; break
+        default: return
+      }
+      fileMap.set(guid, path)
+      const nextPath = `.dialog?${new URLSearchParams({ guid })}`
+      open(`${url}${nextPath}`)
     })
   }
 }

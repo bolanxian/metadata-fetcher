@@ -1,5 +1,5 @@
 
-import { assign, keys } from 'bind:Object'
+import { seal, assign, keys } from 'bind:Object'
 import { cache } from './meta-fetch/plugin'
 import { regUtils } from './bind'
 const { parse, stringify } = JSON
@@ -25,7 +25,9 @@ export interface Config {
 
   nicoUrlType: 'watch' | 'tree'
 }
-export const config: Config = {
+export const config: Config = seal({
+  __proto__: null!,
+
   browsers: null,
   defaultBrowser: null,
   allowOrigin: '',
@@ -50,7 +52,7 @@ description="简介：\\n"
     escape: { name: '', template: '［${displayId|escape}］${title}' },
   },
   nicoUrlType: 'watch'
-}
+})
 
 export const readConfig = async () => {
   if (SSR || PAGES) {

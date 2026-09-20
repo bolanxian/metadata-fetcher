@@ -4,6 +4,7 @@ import { includes, trim, split, indexOf, slice } from 'bind:String'
 import { charToFullwidth, controlCharToPicture } from './bind'
 import { config } from './config'
 import { type ResolvedInfo, type ParsedInfo, resolve, parse, xparse } from '@/meta-fetch/mod'
+const { parse: parseJSON } = JSON
 
 export type Result<T, E extends {}> = { error: E, cause?: any } | { error: null, value: T }
 export type BatchResult = Result<string, string>
@@ -14,7 +15,10 @@ export const render = <K extends string>(data: { [_ in K]?: string }, template =
     const i = indexOf(line, '=')
     if (!(i > 0)) { continue }
     let prefix = trim(slice(line, i + 1))
-    if (prefix[0] === '"') { prefix = JSON.parse(prefix) }
+    if (prefix[0] === '"') {
+      try { prefix = parseJSON(prefix) }
+      catch { continue }
+    }
     for (const key of split(slice(line, 0, i), '||')) {
       let value = getOwn(data, trim(key))
       if (value) {

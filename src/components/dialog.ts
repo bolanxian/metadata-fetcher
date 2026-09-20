@@ -7,7 +7,7 @@ import { from } from 'bind:Array'
 import { config } from '../config'
 const TARGET = import.meta.env.TARGET
 
-const DialogProps: Record<'type' | 'path', Prop<string>> = { type: null!, path: null! }
+const DialogProps: Record<'guid' | 'path', Prop<string>> = { guid: null!, path: null! }
 export const Dialog = defineComponent(TARGET != 'client' ? {
   props: DialogProps,
   render: () => [null]
@@ -35,16 +35,16 @@ export const Dialog = defineComponent(TARGET != 'client' ? {
     })
     watchEffect(() => {
       let displayType = ''
-      switch (props.type) {
-        case 'file': displayType = '文件'; break
-        case 'directory': displayType = '目录'; break
+      switch (props.guid![0]) {
+        case 'F': displayType = '文件'; break
+        case 'D': displayType = '目录'; break
       }
       data.title = `打开${displayType}`
     })
     watchEffect(() => {
-      let { type } = props
-      switch (type) {
-        case 'file': case 'directory': break
+      let type: 'file' | 'directory'
+      switch (props.guid![0]) {
+        case 'D': type = 'directory'; break
         default: type = 'file'
       }
       const init: Record<string, string> = {
@@ -52,7 +52,7 @@ export const Dialog = defineComponent(TARGET != 'client' ? {
         mode: data.illustMode ? 'illust' : null!,
         batch: data.outputBatch ? null! : data.batchType,
         output: data.outputBatch ? 'batch' : null!,
-        path: props.path!
+        guid: props.guid!
       }
       for (const key in init) {
         if (init[key] == null) { delete init[key] }
