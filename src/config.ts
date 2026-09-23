@@ -1,5 +1,7 @@
 
+import { getOwn } from 'bind:utils'
 import { seal, assign, keys } from 'bind:Object'
+import { indexOf } from 'bind:Array'
 import { cache } from './meta-fetch/plugin'
 import { regUtils } from './bind'
 const { parse, stringify } = JSON
@@ -10,9 +12,10 @@ const SSR = TARGET == 'server'
 const PAGES = TARGET == 'pages'
 const configName = '_config.json'
 
+type Browser = { name: string, args: string[] }
 export interface Config {
 
-  browsers: null | Record<string, { name: string, args: string[] }>
+  browsers: null | Record<string, Browser>
   defaultBrowser: null | string
 
   /** 指定允许的`Origin`。使用空格分隔可指定多个值。 */
@@ -91,9 +94,8 @@ export const init = async () => {
     if (config.browsers == null) {
       try {
         const data: Pick<Config, 'browsers' | 'defaultBrowser'> = parse(await (await regUtils(['browser'])).stdout)
-        const browsers: NonNullable<Config['browsers']> = { __proto__: null! }
+        const browsers: Record<string, Browser> = { __proto__: null! }
         for (const key of keys(data.browsers!)) {
-          if (key[0] === '$') { continue }
           const { name, args } = data.browsers![key]!
           browsers[key] = { name, args }
         }
@@ -106,5 +108,28 @@ export const init = async () => {
         await writeConfig(config)
       }
     }
+  }
+}
+export const getBrowser = (name = config.defaultBrowser): Browser | undefined => {
+  let browser: Browser | undefined
+  if (config.browsers != null && name != null) {
+    browser = getOwn(config.browsers, name)
+  }
+  return browser
+}
+export const getBrowserArgs = (platform: NodeJS.Platform, browser?: Browser): string[] | undefined => {
+  switch (platform) {
+    case 'win32': {
+      if (browser == null) {
+        return ['explorer', '$1']
+      }
+      const args = [...browser.args]
+      const i = indexOf(args, '%1')
+      if (i > 0) {
+        args[i] = '$1'
+        return args
+      }
+    } break
+    case 'linux': return ['open', '$1']
   }
 }

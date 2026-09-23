@@ -15,7 +15,7 @@ defineDiscover({
   name: 'Jm',
   discover: [REG_JM],
   discoverHttp: [
-    /^(?:18comic|jm-?comic\d?|comic18j-[\da-z]+)\.[a-z]{2,4}\/(?:album(?:_download)?|photo)\/((?!0\d)\d+)(?!\w)/
+    /^(?:18-?comic\d?|jm-?comic\d?|comic18j)(?:-[-\w]+)?\.[-\w]+\/(?:album(?:_download)?|photo)\/((?!0\d)\d+)(?!\w)/
   ],
   handle: m => `jmcomic/album/${m[1]}`
 })

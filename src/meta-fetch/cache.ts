@@ -1,12 +1,19 @@
 
 import { LRUCache } from 'lru-cache'
 import { empty } from '@/bind'
-import { replaceAll, indexOf, slice } from 'bind:String'
+import { test } from 'bind:utils'
+import { indexOf, slice } from 'bind:String'
 import { keys } from 'bind:Array'
 type FS = typeof import('node:fs/promises')
 const { parse, stringify } = JSON
-const resolveName = (name: string) => replaceAll(name, '/', '!')
 
+export const REG_INVALID = /[\x00-\x1F\x7F\\/:*?"<>|]/
+export const resolveName = (name: string) => {
+  if (test(REG_INVALID, name)) {
+    throw new TypeError('Invalid name', { cause: name })
+  }
+  return name
+}
 export type TryGetFn = () => Promise<string | undefined>
 export abstract class BaseCache {
   abstract get(name: string): Promise<string | undefined>

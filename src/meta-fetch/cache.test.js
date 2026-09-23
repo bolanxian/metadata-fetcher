@@ -52,8 +52,9 @@ test('FsCache.keys', async () => {
   const cache = new FsCache(createMockFs(), '/cache')
   expect([...cache.keys()]).toEqual([])
 
-  await cache.set('a/b.json', 'x')
+  await cache.set('a!b.json', 'x')
   await cache.set('c.json', 'y')
+
   const keys = [...cache.keys()].sort()
 
   expect(keys).toEqual(['a!b', 'c'])
@@ -78,6 +79,10 @@ describe.each([
     await cache.set('foo', 'bar')
     expect(await cache.get('foo')).toBe('bar')
 
+    await expect(async () => cache.set('a/b', 'x')).rejects.toThrow('Invalid name')
+    await expect(async () => cache.set('a\\b', 'x')).rejects.toThrow('Invalid name')
+    await expect(async () => cache.set('a:b', 'x')).rejects.toThrow('Invalid name')
+
     //.tryGet returns undefined when fn returns undefined
     expect(await cache.tryGet('empty', async () => void 0)).toBeUndefined()
     expect(await cache.get('empty')).toBeUndefined()
@@ -91,10 +96,6 @@ describe.each([
     const tryGetFn2 = vi.fn(async () => 'no-computed')
     expect(await cache.tryGet('item', tryGetFn2)).toBe('computed')
     expect(tryGetFn2).toHaveBeenCalledTimes(0)
-
-    // resolves "/" in names to "!"
-    await cache.set('a/b.json', 'data')
-    expect(await cache.get('a!b.json')).toBe('data')
   })
   test(`${name}.json`, async () => {
     const cache = createCache()

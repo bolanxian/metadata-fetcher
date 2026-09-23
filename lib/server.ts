@@ -12,12 +12,13 @@ import {
   name, ready, regUtils, cheerioLoad, LRUCache, $string, $array,
   call, getOwn, $then, encodeText as encode, join,
   test, match, split,
-  type FsCache, cache, redirect,
+  FsCache, cache, redirect,
   discoverMap, discoverHttpMap,
   discoverGlobalRegExp,
   getDiscoverGlobalRegExp,
   xresolve, resolve, xparse,
   config, readConfig, writeConfig,
+  getBrowser, getBrowserArgs,
   render, renderBatch,
   S, P, createBatchParams,
   handleRequestBbdown,
@@ -53,6 +54,8 @@ const { stringify } = JSON, { log, error } = console
 const { trim, concat, startsWith, slice, includes, lastIndexOf, replaceAll } = $string
 const { indexOf, map } = $array
 const server = navigator.userAgent
+const CSP = 'content-security-policy'
+const CSP_VALUE = `default-src 'self';img-src * data: blob:;style-src 'self' 'unsafe-inline';`
 const TYPE = 'content-type'
 const types = {
   __proto__: null!,
@@ -350,13 +353,13 @@ data: ${stringify({ cpu: getCpuUsage(), memory: getMemoryUsage() })}
     headers: { server, [TYPE]: types.json }
   })
 }
-let softwarePromise: any
+let softwarePromise: Promise<string>
 $['software'] = async ({ remoteAddr, request: { headers } }) => {
   if (!isLocalHost(remoteAddr, headers)) {
     return $error(403, name)
   }
   softwarePromise ??= $then(regUtils(['software']), $ => $.stdout)
-  return new Response(await (await softwarePromise), {
+  return new Response(await softwarePromise, {
     headers: { server, [TYPE]: types.json }
   })
 }
@@ -385,8 +388,11 @@ $['clear-lru'] = ({ remoteAddr, request }) => {
   if (!(request.method === 'POST' && isLocalHostOrigin(remoteAddr, headers))) {
     return $error(403, name)
   }
-  (cache as FsCache).lru.clear()
-  return $success()
+  if (cache instanceof FsCache) {
+    cache.lru.clear()
+    return $success()
+  }
+  return $error(418, name)
 }
 async function* _json(input: string) {
   let step = 0
@@ -455,10 +461,7 @@ const $html = async (mode: Store['mode'], input: string) => {
   head ??= `<title>${name}</title>`
   const html = concat(html0, head, html1!, attrs, html2!, app, html3!)
   const init = $html.init ??= {
-    status, headers: {
-      server, [TYPE]: types.html,
-      'content-security-policy': `default-src 'self';img-src * data: blob:;style-src 'self' 'unsafe-inline';`,
-    }
+    status, headers: { server, [CSP]: CSP_VALUE, [TYPE]: types.html }
   }
   init.status = status
   return new Response(html, init)
@@ -481,35 +484,18 @@ export const $error = (status: number, name: string, title?: string) => {
     <center>${name}</center>
   </body>
 </html>`, {
-    status, headers: { server, [TYPE]: `${types.html};charset=UTF-8` }
+    status, headers: { server, [CSP]: CSP_VALUE, [TYPE]: `${types.html};charset=UTF-8` }
   })
 }
 
 let args: string[] | undefined
 {
-  let browser: NonNullable<typeof config.browsers>[string] | undefined
-  if (config.browsers != null && config.defaultBrowser != null) {
-    browser = getOwn(config.browsers, config.defaultBrowser)
-  }
-  switch (platform) {
-    case 'win32': {
-      if (browser == null) { break }
-      const $args = [...browser.args]
-      const i = indexOf($args, '%1')
-      if (!(i > 0)) { break }
-      args = $args; args[i] = '$1'
-    } break
-    case 'linux': {
-      args = ['open', '$1']
-    } break
-  }
-  if (args == null) {
-    error('获取默认浏览器失败', browser)
-    switch (platform) {
-      case 'win32': args = ['explorer', '$1']; break
-    }
-  } else if (browser != null) {
+  const browser = getBrowser()
+  args = getBrowserArgs(platform, browser)
+  if (browser != null) {
     log('浏览器:', browser.name)
+  } else {
+    error('获取默认浏览器失败')
   }
 }
 export const open = args != null ? (url: string) => new Promise<number | null>(ok => {
@@ -594,7 +580,7 @@ export const main = (port = 6702, hostname = '127.0.0.1') => {
       serverInst = serve({
         port, hostname,
         /**
-         * @hono/node-server@1.19.11 在
+         * `@hono/node-server@1.19.11` 在
          * 「轻量 Response + 复用 init / init.headers 普通对象 + body 长度不同」
          * 的场景下会出现 Content-Length 与实际 body 不匹配的回归问题
          * <https://github.com/honojs/node-server/pull/309>
