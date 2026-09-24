@@ -1,13 +1,15 @@
-#[macro_use]
-extern crate mashup;
 use json::{object, JsonValue};
 use std::collections::BTreeMap as Map;
 use std::io;
 use std::ops::Deref;
-use windows_sys::core::{GUID, PWSTR};
+use windows_sys::core::PWSTR;
 use windows_sys::Win32::System::Com;
 use windows_sys::Win32::UI::Shell;
 use winreg::{enums as e, RegKey};
+
+// Auto-generate `KNOWN_FOLDER_ID_LIST` and `known_folder_id()` from every
+// `FOLDERID_*` constant shipped by `windows-sys`.
+reg_utils_macros::known_folder_ids!();
 
 static HKCU: RegKey = RegKey::predef(e::HKEY_CURRENT_USER);
 static HKCR: RegKey = RegKey::predef(e::HKEY_CLASSES_ROOT);
@@ -114,24 +116,6 @@ pub fn get_installed_software() -> Map<String, SoftwareInfo> {
         .filter_map(Result::ok)
         .collect()
 }
-
-macro_rules! known_folder_id {
-    [$($x:ident),+ $(,)?] => (
-        #[allow(unused)]
-        static KNOWN_FOLDER_ID_LIST: &[&'static str] = &[$(stringify!($x)),+];
-        fn known_folder_id(input: &str) -> Option<&GUID> {
-            Some(match input {
-                $(stringify!($x) => {
-                    mashup!{ m[$x] = FOLDERID_ $x; }
-                    &m! { Shell::$x }
-                })+
-                _ => return None
-            })
-        }
-    );
-}
-
-known_folder_id![Desktop, Documents, SendTo, StartMenu, Startup];
 
 unsafe fn len<T: Copy + Default + std::cmp::PartialEq>(ptr: *const T) -> usize {
     if ptr.is_null() {
