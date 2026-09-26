@@ -9,7 +9,7 @@ use winreg::{enums as e, RegKey};
 
 // Auto-generate `KNOWN_FOLDER_ID_LIST` and `known_folder_id()` from every
 // `FOLDERID_*` constant shipped by `windows-sys`.
-reg_utils_macros::known_folder_ids!();
+reg_utils_macros::known_folder_ids!(KNOWN_FOLDER_ID_LIST, known_folder_id);
 
 static HKCU: RegKey = RegKey::predef(e::HKEY_CURRENT_USER);
 static HKCR: RegKey = RegKey::predef(e::HKEY_CLASSES_ROOT);

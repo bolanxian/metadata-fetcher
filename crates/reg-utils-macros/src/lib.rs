@@ -10,154 +10,137 @@
 //! compile time, so the list always matches the `windows-sys` version
 //! the consuming crate actually builds against.
 
-use proc_macro::TokenStream;
-use proc_macro2::Span;
+use proc_macro::TokenStream as RawTokenStream;
+use proc_macro2::{Ident, Span, TokenStream, TokenTree};
 use quote::quote;
-use std::path::PathBuf;
-
-/// Read the resolved `windows-sys` version out of the consuming crate's
-/// `Cargo.lock`.
-fn windows_sys_version() -> Option<String> {
-    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").ok()?;
-    let lock_path = PathBuf::from(manifest_dir).join("Cargo.lock");
-    let content = std::fs::read_to_string(&lock_path).ok()?;
-
-    let needle = "name = \"windows-sys\"";
-    let idx = content.find(needle)?;
-    let after = &content[idx + needle.len()..];
-    let vneedle = "version = \"";
-    let vidx = after.find(vneedle)?;
-    let rest = &after[vidx + vneedle.len()..];
-    let end = rest.find('"')?;
-    Some(rest[..end].to_string())
-}
+use std::collections::BTreeSet as Set;
+use std::path::{Path, PathBuf};
+const NAME: &'static str = "KnownFolderId";
 
 /// Locate `windows-sys`'s `Shell/mod.rs` inside the cargo registry.
-fn find_shell_mod() -> Option<PathBuf> {
-    let cargo_home = std::env::var("CARGO_HOME")
+fn find_shell_mod() -> Set<String> {
+    std::env::var("CARGO_MANIFEST_DIR")
         .ok()
-        .map(PathBuf::from)
-        .or_else(|| std::env::var("HOME").ok().map(|h| PathBuf::from(h).join(".cargo")))?;
-
-    let registry_src = cargo_home.join("registry").join("src");
-    if !registry_src.exists() {
-        return None;
-    }
-
-    let version = windows_sys_version();
-
-    // Walk every index hash directory under registry/src.
-    let index_dirs = std::fs::read_dir(&registry_src).ok()?;
-    let mut fallback: Option<PathBuf> = None;
-
-    for index_dir in index_dirs.flatten() {
-        let entries = match std::fs::read_dir(index_dir.path()) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        for entry in entries.flatten() {
-            let name = entry.file_name().to_string_lossy().into_owned();
-            if !name.starts_with("windows-sys-") {
-                continue;
+        .iter()
+        .map(|manifest_dir| PathBuf::from(manifest_dir).join("target"))
+        .filter_map(|path| std::fs::read_dir(path).ok())
+        .flatten()
+        .filter_map(Result::ok)
+        .map(|entry| entry.path().join("deps"))
+        .filter_map(|path| std::fs::read_dir(path).ok())
+        .flatten()
+        .filter_map(Result::ok)
+        .filter_map(|entry| {
+            let name = entry.file_name();
+            let name = name.to_string_lossy();
+            if name.starts_with("windows_sys-") && name.ends_with(".d") {
+                return Some(entry);
             }
-            let mod_path = entry
-                .path()
-                .join("src")
-                .join("Windows")
-                .join("Win32")
-                .join("UI")
-                .join("Shell")
-                .join("mod.rs");
-            if !mod_path.exists() {
-                continue;
-            }
-            match &version {
-                Some(v) if name == format!("windows-sys-{}", v) => return Some(mod_path),
-                _ => {
-                    if fallback.is_none() {
-                        fallback = Some(mod_path);
+            None
+        })
+        .filter_map(|entry| std::fs::read_to_string(&entry.path()).ok())
+        .flat_map(|content| {
+            const PREFIX: &'static str = "windows-sys-";
+            const SUFFIX: &'static str = "/src/Windows/Win32/UI/Shell/mod.rs";
+            content
+                .replace('\\', "/")
+                .split("\n\n")
+                .flat_map(|line| line.split(' ').skip(1))
+                .filter_map(|path| {
+                    if path.ends_with(SUFFIX) {
+                        let end = path.len() - SUFFIX.len();
+                        if let Some(i) = path[..end].rfind('/') {
+                            if path[i + 1..].starts_with(PREFIX) {
+                                return Some(String::from(path));
+                            }
+                        }
                     }
-                }
-            }
-        }
-    }
-
-    fallback
+                    None
+                })
+                .collect::<Set<_>>()
+        })
+        .collect()
 }
 
-/// Extract every `FOLDERID_<Name>` identifier from the Shell module source.
-fn extract_folder_ids(content: &str) -> Vec<String> {
-    let mut ids = Vec::new();
-    let bytes = content.as_bytes();
-    let prefix = b"FOLDERID_";
-    let mut i = 0;
-    while i + prefix.len() <= bytes.len() {
-        if &bytes[i..i + prefix.len()] == prefix {
-            let start = i;
-            i += prefix.len();
-            while i < bytes.len() && (bytes[i].is_ascii_alphanumeric() || bytes[i] == b'_') {
-                i += 1;
+/// Extract every `<prefix><name>` identifier from the Shell module source.
+fn extract_name<P: AsRef<Path>>(path: P, prefix: &str) -> Option<Set<String>> {
+    let Ok(content) = std::fs::read_to_string(AsRef::as_ref(&path)) else {
+        return None;
+    };
+    let result: Set<_> = content
+        .split(prefix)
+        .skip(1)
+        .filter_map(|content| {
+            let name: String = content
+                .chars()
+                .take_while(|c| matches!(c, '0'..='9' | 'A'..='Z' | '_' | 'a'..='z'))
+                .collect();
+            if name.len() > 0 {
+                return Some(name);
             }
-            ids.push(content[start..i].to_string());
-        } else {
-            i += 1;
-        }
-    }
-    ids.sort();
-    ids.dedup();
-    ids
+            None
+        })
+        .collect();
+    Some(result)
+}
+fn extract_name_set(path_set: &Set<String>, prefix: &str) -> Set<String> {
+    path_set
+        .iter()
+        .filter_map(|path| extract_name(&path, prefix))
+        .flatten()
+        .collect()
 }
 
 /// `known_folder_ids!()` — generate the folder list and lookup function.
 #[proc_macro]
-pub fn known_folder_ids(_input: TokenStream) -> TokenStream {
-    let shell_mod = find_shell_mod().unwrap_or_else(|| {
-        panic!(
-            "reg-utils-macros: could not locate windows-sys Shell mod.rs in the cargo registry; \
-             make sure `windows-sys` is a dependency and has been fetched by cargo"
-        )
-    });
+pub fn known_folder_ids(input: RawTokenStream) -> RawTokenStream {
+    let input: Box<[_]> = TokenStream::from(input).into_iter().collect();
+    match &input[1] {
+        TokenTree::Punct(punct) if punct.as_char() == ',' => (),
+        token => panic!("[{NAME}] expected `,`, found `{:?}`", token),
+    };
+    let (list_name, func_name) = match (&input[0], &input[2]) {
+        (TokenTree::Ident(ident1), TokenTree::Ident(ident2)) => (ident1, ident2),
+        token => panic!("[{NAME}] expected Ident, found `{:?}`", token),
+    };
 
-    let content = std::fs::read_to_string(&shell_mod).unwrap_or_else(|e| {
-        panic!(
-            "reg-utils-macros: failed to read {}: {}",
-            shell_mod.display(),
-            e
-        )
-    });
-
-    let ids = extract_folder_ids(&content);
-    if ids.is_empty() {
-        panic!(
-            "reg-utils-macros: no FOLDERID_* constants found in {}",
-            shell_mod.display()
-        );
+    const PREFIX: &'static str = "FOLDERID_";
+    let path_set = find_shell_mod();
+    for path in &path_set {
+        eprintln!("[{NAME}] found {path}");
     }
 
-    // User-facing name: strip the `FOLDERID_` prefix.
-    let names: Vec<&str> = ids
-        .iter()
-        .map(|s| s.strip_prefix("FOLDERID_").unwrap_or(s))
+    let mut ids: Box<[_]> = extract_name_set(&path_set, " FOLDERID_")
+        .into_iter()
         .collect();
+    match ids.len() {
+        0 => panic!("[{NAME}] no {PREFIX}* constants found"),
+        i => eprintln!("[{NAME}] {PREFIX}* constants found {i}"),
+    }
+    ids.sort();
+
+    // User-facing name
+    let names: Box<[&str]> = ids.iter().map(AsRef::as_ref).collect();
 
     // Fully qualified constant path, e.g. `::windows_sys::Win32::UI::Shell::FOLDERID_Desktop`.
-    let const_paths: Vec<proc_macro2::TokenStream> = ids
+    let idents: Box<[_]> = ids
         .iter()
-        .map(|s| {
-            let ident = proc_macro2::Ident::new(s, Span::call_site());
-            quote! { ::windows_sys::Win32::UI::Shell::#ident }
-        })
+        .map(|s| format!("{PREFIX}{}", s))
+        .map(|s| Ident::new(&s, Span::call_site()))
+        .map(TokenTree::from)
+        .map(TokenStream::from)
         .collect();
 
     let expanded = quote! {
         /// All known-folder names supported by `known_folder_id`, sorted.
-        static KNOWN_FOLDER_ID_LIST: &[&'static str] = &[ #(#names),* ];
+        static #list_name: &[&'static str] = &[ #(#names),* ];
 
         /// Map a known-folder name (without the `FOLDERID_` prefix) to its
         /// `GUID`, as exported by `windows-sys`.
-        fn known_folder_id(input: &str) -> Option<&'static ::windows_sys::core::GUID> {
+        fn #func_name(input: &str) -> Option<&'static ::windows_sys::core::GUID> {
+            use ::windows_sys::Win32::UI::Shell;
             match input {
-                #( #names => Some(&#const_paths), )*
+                #( #names => Some(&Shell::#idents), )*
                 _ => None,
             }
         }
