@@ -95,13 +95,13 @@ fn extract_name_set(path_set: &Set<String>, prefix: &str) -> Set<String> {
 #[proc_macro]
 pub fn known_folder_ids(input: RawTokenStream) -> RawTokenStream {
     let input: Box<[_]> = TokenStream::from(input).into_iter().collect();
-    match &input[1] {
-        TokenTree::Punct(punct) if punct.as_char() == ',' => (),
-        token => panic!("[{NAME}] expected `,`, found `{:?}`", token),
-    };
-    let (list_name, func_name) = match (&input[0], &input[2]) {
-        (TokenTree::Ident(ident1), TokenTree::Ident(ident2)) => (ident1, ident2),
-        token => panic!("[{NAME}] expected Ident, found `{:?}`", token),
+    let (list_name, func_name) = match input.as_array::<3>() {
+        Some([TokenTree::Ident(ident1), TokenTree::Punct(punct), TokenTree::Ident(ident2)])
+            if punct.as_char() == ',' =>
+        {
+            (ident1, ident2)
+        }
+        _ => panic!("[{NAME}] expected 2 arguments"),
     };
 
     const PREFIX: &'static str = "FOLDERID_";

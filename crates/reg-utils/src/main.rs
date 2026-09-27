@@ -1,8 +1,7 @@
 use json::{object, JsonValue};
 use std::collections::BTreeMap as Map;
 use std::io;
-use std::ops::Deref;
-use windows_sys::core::PWSTR;
+use windows_sys::core::{GUID, HRESULT, PWSTR};
 use windows_sys::Win32::System::Com;
 use windows_sys::Win32::UI::Shell;
 use winreg::{enums as e, RegKey};
@@ -129,24 +128,36 @@ unsafe fn len<T: Copy + Default + std::cmp::PartialEq>(ptr: *const T) -> usize {
     i
 }
 
-fn known_folder(input: &str) -> Option<String> {
-    use std::ffi::OsString;
-    use std::os::windows::ffi::OsStringExt;
-    use std::ptr::null_mut;
-
-    let rfid = known_folder_id(input)?;
-    let path = {
+struct KnownFolderPath {
+    hr: HRESULT,
+    path: PWSTR,
+}
+impl KnownFolderPath {
+    fn new(rfid: &GUID) -> Self {
+        use std::ptr::null_mut;
         let mut path: PWSTR = null_mut();
         let hr = unsafe { Shell::SHGetKnownFolderPath(rfid, 0, null_mut(), &mut path) };
-        if hr < 0 || path.is_null() {
+        Self { hr, path }
+    }
+    fn into_string(&self) -> Option<String> {
+        use std::ffi::OsString;
+        use std::os::windows::ffi::OsStringExt;
+
+        let path = self.path;
+        if self.hr < 0 || path.is_null() {
             return None;
         }
-        path
-    };
-    let wide = unsafe { std::slice::from_raw_parts(path, len(path)) };
-    let result = OsString::from_wide(wide).into_string().ok();
-    unsafe { Com::CoTaskMemFree(path as *mut _) };
-    result
+        let wide = unsafe { std::slice::from_raw_parts(path, len(path)) };
+        OsString::from_wide(wide).into_string().ok()
+    }
+}
+impl Drop for KnownFolderPath {
+    fn drop(&mut self) {
+        let path = self.path;
+        if !path.is_null() {
+            unsafe { Com::CoTaskMemFree(path as *mut _) };
+        }
+    }
 }
 
 fn help_known_folder<D: std::fmt::Display>(arg0: D) -> ! {
@@ -214,15 +225,17 @@ pub fn main() -> io::Result<()> {
             shortcut.create_lnk(save_path).map_err(io::Error::other)?;
         }
         "known-folder" => {
-            let Some(path) = args
-                .get(2)
-                .as_ref()
-                .map(Deref::deref)
-                .map(Deref::deref)
-                .map(known_folder)
-                .flatten()
-            else {
+            let Some(arg2) = args.get(2) else {
                 help_known_folder(&args[0]);
+            };
+            let Some(rfid) = known_folder_id(arg2) else {
+                eprintln!("Unknown `known-folder-id`: {}", arg2);
+                std::process::exit(-1);
+            };
+            let data = KnownFolderPath::new(rfid);
+            let Some(path) = data.into_string() else {
+                eprintln!("None `known-folder-id`: {}", arg2);
+                std::process::exit(-1);
             };
             println!("{}", path);
         }
