@@ -100,6 +100,9 @@ const handle = (str: string) => {
       case 'create_lnk': timeout(() => {
         call($emit, null, new Event('tray:create-lnk'))
       }, 0); break
+      case 'create_sendto': timeout(() => {
+        call($emit, null, new Event('tray:create-sendto'))
+      }, 0); break
       case 'show': timeout(showConsole, 0); break
       case 'hide': timeout(hideConsole, 0); break
       case 'exit': timeout(exit, 0, 0); break

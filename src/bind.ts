@@ -5,7 +5,10 @@ export { default as $array } from 'bind:Array'
 import type { SpawnOptions } from 'node:child_process'
 import { test, replace } from 'bind:utils'
 import { toString } from 'bind:Number'
-import { fromCharCode, codePointAt, charCodeAt, indexOf, padStart, slice, toUpperCase } from 'bind:String'
+import {
+  fromCharCode, charCodeAt, codePointAt, indexOf,
+  padStart, toUpperCase, slice, replaceAll
+} from 'bind:String'
 import { freeze } from 'bind:Object'
 import * as cheerio from 'cheerio'
 const TARGET = import.meta.env.TARGET
@@ -81,6 +84,19 @@ const escapeMap = {
 export const escapeAttrApos = createEscaper(/['&<>\xA0]/g, escapeMap)
 export const escapeAttr = createEscaper(/["&<>\xA0]/g, escapeMap)
 export const escapeText = createEscaper(/[&<>\xA0]/g, escapeMap)
+
+export const escapeBatch = (str: string) => {
+  str = replace(/[\r\n]+/g, str, ' ')
+  str = replaceAll(str, '"', '\\"')
+  return str
+}
+export const escapeBatchWithDelimiter = (str: string) => {
+  if (!test(/^[-=\w]*$/, str)) {
+    str = `"${escapeBatch(str)}"`
+  }
+  return str
+}
+
 export const htmlToText = import.meta.env.TARGET != 'client' ? (html: string, pre = false) => {
   if (!pre) { html = replace(/\r?\n/g, html, '') }
   const _ = cheerio.load(`<div>${html}</div>`, null, false)(':root')

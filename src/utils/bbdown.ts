@@ -1,9 +1,9 @@
 
-import { pipeTo, test, on } from 'bind:utils'
-import { replaceAll } from 'bind:String'
+import { pipeTo, on } from 'bind:utils'
 import { seal, assign } from 'bind:Object'
 import { join } from 'bind:Array'
 import { defaultUserAgent as userAgent } from '@/meta-fetch/mod'
+import { escapeBatchWithDelimiter as escape } from '@/bind'
 const { error } = console
 
 const $command = 'bbdown'
@@ -86,12 +86,6 @@ export function* xargs(opts: BBDownOptions): Generator<string, void, void> {
   yield userAgent
 }
 
-export const escape = (str: string) => {
-  if (!test(/^[-=\w]*$/, str)) {
-    str = `"${replaceAll(str, '"', '\\"')}"`
-  }
-  return str
-}
 export const echo = (id: string, opts: BBDownOptions) => {
   let ret = [$command, escape(id)]
   for (let arg of xargs(opts)) {

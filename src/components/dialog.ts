@@ -42,11 +42,6 @@ export const Dialog = defineComponent(TARGET != 'client' ? {
       data.title = `打开${displayType}`
     })
     watchEffect(() => {
-      let type: 'file' | 'directory'
-      switch (props.guid![0]) {
-        case 'D': type = 'directory'; break
-        default: type = 'file'
-      }
       const init: Record<string, string> = {
         __proto__: null!,
         mode: data.illustMode ? 'illust' : null!,
@@ -57,7 +52,7 @@ export const Dialog = defineComponent(TARGET != 'client' ? {
       for (const key in init) {
         if (init[key] == null) { delete init[key] }
       }
-      data.href = `./.${type}?${new URLSearchParams(init)}`
+      data.href = `./.file?${new URLSearchParams(init)}`
     })
 
     const $rowAttrs = { style: 'margin-bottom:24px' }

@@ -88,12 +88,11 @@ fn tray_init_inner(
             ui.separator();
             ui.submenu("附件", |ui| {
                 ui.item("创建桌面快捷方式", "create_lnk");
+                ui.item("创建发送到", "create_sendto");
             });
             ui.separator();
-            ui.submenu("控制台", |ui| {
-                ui.item("显示(&S)", "show");
-                ui.item("隐藏(&H)", "hide");
-            });
+            ui.item("显示控制台(&S)", "show");
+            ui.item("隐藏控制台(&H)", "hide");
             ui.separator();
             ui.item("退出", "exit");
         },

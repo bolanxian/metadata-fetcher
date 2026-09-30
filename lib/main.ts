@@ -6,6 +6,7 @@ export let [, , task, ...args]: [any, any, string | ImportMeta, ...string[]]
     : [, , import.meta]
 
 import { resolve } from 'node:path'
+import { writeFile } from 'node:fs/promises'
 import process, { argv, env, exit } from 'node:process'
 
 const $MAIN = import('@/main.ssr')
@@ -35,25 +36,44 @@ if (task === 'start') {
     setConsoleOutputCP(65001)
     setTitle(name)
     step = 1
-    const { main, open, $, isLocalHostOrigin, $success, $error } = await import('./server.ts')
-    const { ready, regUtils, $string: { trim } } = await $MAIN
+    const { basename, main, open, $, isLocalHostOrigin, $success, $error } = await import('./server.ts')
+    const { ready, escapeBatch, regUtils, $string: { trim, replaceAll } } = await $MAIN
     await ready
     const port = env['MF_PORT'], hostname = env['MF_HOST']
-    const { url } = await main(port != null ? +port : void 0, hostname)!
+    const { url, origin } = await main(port != null ? +port : void 0, hostname)!
     const icon = './dist/favicon.ico'
     const onClick = () => { open?.(url) }
     await init(name, icon, onClick)
+    const notifyCreated = (name: string, exitCode: number, text: string) => {
+      const status = exitCode == 0 ? '成功' : `失败(退出代码：${exitCode})`
+      notification(text, `创建${name}${status}`)
+    }
     addEventListener('tray:create-lnk', async e => {
       const desktopPath = trim(await (await regUtils(['known-folder', 'Desktop'])).stdout)
-
       const targetPath = resolve('./run.bat')
       const iconPath = resolve(icon)
       const savePath = resolve(desktopPath || '.', `${name}.lnk`)
       const data = JSON.stringify({ targetPath, iconPath, savePath })
-
       const exitCode = await (await regUtils(['shortcut', data])).exitCode
-      const status = exitCode == 0 ? '成功' : `失败(退出代码：${exitCode})`
-      notification(savePath, `创建快捷方式${status}`)
+      notifyCreated('快捷方式', exitCode, savePath)
+    })
+    addEventListener('tray:create-sendto', async e => {
+      const sendToPath = trim(await (await regUtils(['known-folder', 'SendTo'])).stdout)
+      const batchPath = resolve('./__cache__/_sendto.bat')
+      await writeFile(batchPath, replaceAll(`\
+chcp 65001
+curl -X PUT --data %1 ^
+  -H "content-type: text/plain" ^
+  -H "origin: ${escapeBatch(origin)}" ^
+  -H "sec-x-${basename}: true" ^
+  "${escapeBatch(url)}.open-file"
+if not %ERRORLEVEL% == 0 ( pause )
+`, '\n', '\r\n'))
+      const iconPath = resolve(icon)
+      const savePath = resolve(sendToPath || '.', `${name}.lnk`)
+      const data = JSON.stringify({ targetPath: batchPath, iconPath, savePath })
+      const exitCode = await (await regUtils(['shortcut', data])).exitCode
+      notifyCreated('发送到', exitCode, savePath)
     })
     $['reset-tray'] = async ({ remoteAddr, request }) => {
       const { headers } = request
