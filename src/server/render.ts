@@ -1,16 +1,19 @@
 
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
-import { trim, slice, replaceAll, startsWith } from 'bind:String'
-import { getOwn } from 'bind:utils'
+import { trim, concat, slice, replaceAll, startsWith } from 'bind:String'
+import { assert, getOwn, split } from 'bind:utils'
 import { join, onlyFirst32, escapeJson, escapeText, escapeAttr, escapeAttrApos } from '@/bind'
 import metaName from 'meta:name'
 import metaItemprop from 'meta:itemprop'
 import metaProperty from 'meta:property'
 import { config } from '@/config'
 import App, { type Store, Data, createStore, createData, prefetchStore } from '@/components/app.vue'
-import { name } from './core.ts'
+import { name, server, CSP, CSP_VALUE, TYPE, types } from './core'
 const { stringify } = JSON
+
+let html0: string, html1: string, html2: string, html3: string
+let renderInit: ResponseInit
 
 const urlKeys = ['shortUrl', 'url', 'relatedUrl']
 function* xbuildMeta({ mode, parsed, [Data]: data, config }: Store): Generator<string, void, unknown> {
@@ -62,9 +65,20 @@ data-content-escaped="${escapeJson(parsed.title)}">`
   })
 }
 
-export const renderToHtml = async (mode: Store['mode'], input: string): Promise<{
-  status: number, head: string, attrs: string, app: string, context: {} | null
-}> => {
+export const initHtml = (rawHtml: string) => {
+  const html = split(/<title>.*?<\/title>|(?=><!--#app-->)|<!--#app-->/, rawHtml)
+  html[0] = `\
+  ${trim(html[0]!)}
+  
+  <script defer src="./.check-version"></script>
+  <link rel="icon" type="${types.svg}" href="./.favicon">
+  <link rel="search" type="${types.osdx}" href="./.opensearch" title="${name}">
+`
+  assert?.<Record<0 | 1 | 2 | 3, string>>(html)
+  void ([html0, html1, html2, html3] = html)
+}
+
+export const renderToHtml = async (mode: Store['mode'], input: string) => {
   let status: number | undefined
   input = trim(input)
   const store = createStore(mode, input)
@@ -75,13 +89,14 @@ export const renderToHtml = async (mode: Store['mode'], input: string): Promise<
   }
   const attrs = ` data-store='${escapeAttrApos(stringify(store, void 0, 2))}'`
   const head = join(xbuildMeta(store), '\n')
-  let html = '', context: {} | null = null
+  let rendered = ''
   if (config.ssr) {
     const app = createSSRApp(App, { store })
+    const context = {}
     app.config.errorHandler = (err, instance, info) => {
       status = 500; reportError(err)
     }
-    html = await renderToString(app, context = {})
+    rendered = await renderToString(app, context)
   }
   if (status == null) {
     if (mode === 'default') {
@@ -91,5 +106,11 @@ export const renderToHtml = async (mode: Store['mode'], input: string): Promise<
     }
     status ??= 200
   }
-  return { status, head, attrs, app: html, context }
+
+  const html = concat(html0, head, html1, attrs, html2, rendered, html3)
+  renderInit ??= {
+    status, headers: { server, [CSP]: CSP_VALUE, [TYPE]: types.html }
+  }
+  renderInit.status = status
+  return new Response(html, renderInit)
 }

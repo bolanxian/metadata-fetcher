@@ -37,7 +37,7 @@ if (task === 'start') {
     setTitle(name)
     step = 1
     const { escapeBatch, regUtils, loadServe, $string: { trim, replaceAll } } = await $MAIN
-    const { basename, init: initServe, serve, open, $, isLocalHostOrigin, $success, $error } = await loadServe()
+    const { basename, init: initServe, serve, open } = await loadServe()
     await initServe()
     const port = env['MF_PORT'], hostname = env['MF_HOST']
     const { url, origin } = await serve(port != null ? +port : void 0, hostname)!
@@ -75,15 +75,12 @@ if not %ERRORLEVEL% == 0 ( pause )
       const exitCode = await (await regUtils(['shortcut', data])).exitCode
       notifyCreated('发送到', exitCode, savePath)
     })
-    $['reset-tray'] = async ({ remoteAddr, request }) => {
-      const { headers } = request
-      if (!(request.method === 'POST' && isLocalHostOrigin(remoteAddr, headers))) {
-        return $error(403, name)
-      }
+    addEventListener('server:reset-tray', e => {
+      const ok = (e as CustomEvent).detail
       deinit()
-      await init(name, icon, onClick)
-      return $success()
-    }
+      ok(init(name, icon, onClick))
+      e.preventDefault()
+    })
     hideConsole()
     notification('已启动', name)
   } catch (err) {

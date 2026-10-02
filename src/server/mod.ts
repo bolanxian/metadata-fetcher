@@ -1,49 +1,30 @@
 
 export * from './core'
 
-import { extname } from 'node:path/posix'
-import { stat, readFile, opendir, open as openFileHandle } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
-import { STATUS_CODES } from 'node:http'
-
+import { resolve, extname } from 'node:path/posix'
+import { readFile } from 'node:fs/promises'
 import { call } from 'bind:core'
-import { assert, getOwn, $then, encodeText as encode, test, match, split } from 'bind:utils'
-import { trim, concat, startsWith, slice, includes, lastIndexOf, replaceAll } from 'bind:String'
-import { map } from 'bind:Array'
-
+import { $then, split } from 'bind:utils'
+import { startsWith, slice, includes, replaceAll } from 'bind:String'
 import { load as cheerioLoad } from 'cheerio'
-import { LRUCache } from 'lru-cache'
 
-import { getCpu, getCpuUsage, getMemoryUsage, getOs, getRuntime, getPm } from '@/utils/info'
-import { illustId, illustName } from '@/utils/illust-name'
 import { handleRequest as handleRequestBbdown } from '@/utils/bbdown'
 import { default as checkVersion } from '@/utils/check-version.js?raw'
-import { render, renderBatch } from '@/render'
-import { config, readConfig, writeConfig } from '@/config'
-import { S, P, createBatchParams } from '@/components/app.vue'
+import { parseToStreamJson } from '@/utils/stream-json'
+import { S } from '@/components/app.vue'
 import { ready } from '@/init'
-import { join, regUtils } from '@/bind'
-import {
-  FsCache, cache, redirect,
-  discoverMap, discoverHttpMap,
-  discoverGlobalRegExp,
-  getDiscoverGlobalRegExp,
-  xresolve, resolve, xparse,
-} from '@/meta-fetch/mod'
-import {
-  name, basename, hostbase, pathbase,
-  loadNodeServer,
-  type Server, type LocalAddr,
-  url, serverInst, allowOrigin, initCore,
-  server, CSP, CSP_VALUE, TYPE, types, $,
-  isLocalHost, isLocalHostOrigin, isNavigateDocument,
-  afterListen,
-} from './core'
-import { renderToHtml } from './render'
-const { stringify } = JSON, { error } = console
+import { join } from '@/bind'
 
-import type { SortedMap } from '@/utils/sorted-map'
-import type { Store } from '@/components/app.vue'
+import {
+  name, hostbase, pathbase, loadNodeServer, afterListen,
+  type Server, type LocalAddr, serverInst, allowOrigin,
+  initCore, server, TYPE, types, $, isLocalHostOrigin,
+  $redirect, $error,
+} from './core'
+import { fileMap } from './file'
+import { initHtml, renderToHtml } from './render'
+import.meta.glob(['./*'], { eager: true })
+
 import type { AddressInfo as NodeAddr } from 'node:net'
 declare const { ReadableStream }: typeof import('node:stream/web')
 await ready
@@ -54,8 +35,6 @@ switch (`${typeof Deno}:${typeof Bun}`) {
   case 'object:undefined': runtime = 'deno'; break
   case 'undefined:object': runtime = 'bun'; break
 }
-
-let html0: string, html1: string, html2: string, html3: string
 
 const $clone = Response.prototype.clone
 const defineStaticFile = (name: string, type: string, data: BodyInit) => {
@@ -72,17 +51,7 @@ const defineStaticFile = (name: string, type: string, data: BodyInit) => {
 export const init = async () => {
   initCore()
   const rawHtml = await readFile('./dist/index.html', { encoding: 'utf8' })
-  const _html = split(/<title>.*?<\/title>|(?=><!--#app-->)|<!--#app-->/, rawHtml)
-  _html[0] = `\
-${trim(_html[0]!)}
-
-<script defer src="./.check-version"></script>
-<link rel="icon" type="${types.svg}" href="./.favicon">
-<link rel="search" type="${types.osdx}" href="./.opensearch" title="${name}">
-`
-  assert?.<Record<0 | 1 | 2 | 3, string>>(_html)
-  void ([html0, html1, html2, html3] = _html)
-
+  initHtml(rawHtml)
   const $ = cheerioLoad(rawHtml)
   for (const el of $('link[rel="@app-asset"]')) {
     const href = $(el).attr('href')!
@@ -94,202 +63,6 @@ ${trim(_html[0]!)}
   defineStaticFile('check-version', types.js, checkVersion)
 }
 
-$['opensearch'] = (ctx) => {
-  return new Response(`\
-<?xml version="1.0" encoding="UTF-8"?>
-<OpenSearchDescription xmlns="http://a9.com/-/spec/opensearch/1.1/">
-  <ShortName>${name}</ShortName>
-  <Description>获取元数据</Description>
-  <InputEncoding>UTF-8</InputEncoding>
-  <Image type="${types.svg}">${url}.favicon</Image>
-  <Url type="${types.html}" template="${url}.search?.={searchTerms}"/>
-  <Url type="${types.suggest}" template="${url}.suggest?.={searchTerms}"/>
-  <Url type="${types.trending}" template="${url}.suggest"/>
-  <Url type="${types.osdx}" rel="self" template="${url}.opensearch"/>
-</OpenSearchDescription>
-`, {
-    headers: { server, [TYPE]: types.osdx }
-  })
-}
-const searchAsRedirect = async (url: string, base?: string | URL) => {
-  const target = await redirect(url)
-  if (target == null) { return $html('default', url) }
-  return $redirect(new URL(`./.search?.=${encodeURIComponent(target)}`, base).href)
-}
-$['search'] = ({ url }) => {
-  const input = trim(url.searchParams.get('.') ?? '')
-  if (input === '') { return $redirect(new URL('./', url).href) }
-  const resolved = resolve(input)
-  let id = resolved?.id
-  if (id != null) {
-    if (test(P, id)) {
-      return $redirect(new URL(`./${encodeURIComponent(id)}`, url).href)
-    }
-    if (id[0] === '@') {
-      return searchAsRedirect(resolved!.url, url)
-    }
-  }
-  return $html('default', input)
-}
-$['suggest'] = ({ url, remoteAddr, request: { headers } }) => {
-  const _input = url.searchParams.get('.')
-  const input = trim(_input ?? '')
-  if (!input) {
-    let list: string[] | undefined
-    if (isLocalHost(remoteAddr, headers)) {
-      list = [...cache.keys()]
-    }
-    const data = stringify([_input, list ?? []])
-    return new Response(data, {
-      headers: { server, [TYPE]: types.trending }
-    })
-  }
-  const list = [...xresolve(input)], ids = []
-  for (const { displayId } of list) {
-    if (test(P, displayId)) { ids[ids.length] = displayId }
-  }
-  for (const { shortUrl } of list) {
-    if (shortUrl) { ids[ids.length] = shortUrl }
-  }
-  for (const { url } of list) {
-    ids[ids.length] = url
-  }
-  return new Response(stringify([_input, ids]), {
-    headers: { server, [TYPE]: types.suggest }
-  })
-}
-
-type FileMapKey = `${'F' | 'D'}-${string}`
-type GetIter = (path: string) => AsyncIterableIterator<string>
-const fileMap = new LRUCache<FileMapKey, string>({ max: 10 })
-function* matchId(data: string) {
-  for (const id of match(getDiscoverGlobalRegExp(), data) ?? []) {
-    let newId = resolve(id)?.id
-    if (newId != null) { yield newId }
-  }
-}
-function* matchIllust(line: string) {
-  const id = illustId(line)
-  if (id != null) { yield id }
-}
-async function* xmatcher(getIter: GetIter, mode: string | null, path: string) {
-  try {
-    yield encode('\r\nchcp 65001\r\npause\r\n\r\n')
-    if (mode === 'illust') {
-      for await (const line of getIter(path)) {
-        const name = await illustName(line)
-        if (name == null) { continue }
-        yield encode(`ren "${line}" "${name}"\r\n`)
-      }
-    } else {
-      for await (const line of getIter(path)) {
-        let name = line, ext = '', i = lastIndexOf(line, '.')
-        if (i > 0) { name = slice(line, 0, i); ext = slice(line, i) }
-        let id; for (id of matchId(name)) { break }
-        if (id == null) { continue }
-        let result; for await (result of renderBatch([id], 'name')) { break }
-        name = result?.error === null ? result.value : `[${id}]`
-        yield encode(`ren "${line}" "${name}${ext}"\r\n`)
-        if (result?.error != null) {
-          yield encode(`rem "${result.error}"\r\n`)
-        }
-      }
-    }
-    yield encode('\r\n:end\r\npause\r\n')
-  } catch (e) {
-    reportError(e)
-    yield encode(':error\r\n')
-  }
-}
-$['file'] = async (ctx) => {
-  const { remoteAddr, request: { headers } } = ctx
-  if (!(isLocalHost(remoteAddr, headers) && isNavigateDocument(headers))) {
-    return $error(403, name)
-  }
-  const params = ctx.url.searchParams
-  const guid = params.get('guid') ?? ''
-  let getIter: GetIter
-  switch (slice(guid, 0, 2)) {
-    case 'F-': getIter = genFile; break
-    case 'D-': getIter = genDirectory; break
-    default: return $error(400, name)
-  }
-  const path = fileMap.get(guid as any)
-  if (path == null) { return $error(404, name) }
-
-  const mode = params.get('mode')
-  if (params.get('output') === 'batch') {
-    const body: ReadableStream = ReadableStream.from(xmatcher(getIter, mode, path)) as any
-    return new Response(body, {
-      headers: {
-        server, [TYPE]: `${types.txt};charset=UTF-8`,
-        'content-disposition': `inline; filename="rename.bat"; filename*=UTF-8''rename.bat`,
-      }
-    })
-  }
-  let matchFn = matchId
-  if (mode === 'illust') {
-    matchFn = matchIllust
-  }
-  const set = new Set<string>(); let i = 0
-  loop: for await (const data of getIter(path)) {
-    for (let id of matchFn(data)) {
-      set.add(id)
-      if (128 < ++i) {
-        set.add('!truncate')
-        break loop
-      }
-    }
-  }
-  const batch = params.get('batch') ?? '.id'
-  const location = new URL(`./.batch?${createBatchParams(batch, set)}`, ctx.url).href
-  return $redirect(location)
-}
-const genFile: GetIter = async function* (path) {
-  const MAX_SIZE = 16 * 1024 * 1024
-  const fileHandle = await openFileHandle(path, 'r');
-  try {
-    const stat = await fileHandle.stat()
-    if (stat.size > MAX_SIZE) { return }
-    const data = await fileHandle.readFile({ encoding: 'utf-8' })
-    for (const line of split(S, data)) { yield line }
-  } finally {
-    await fileHandle.close()
-  }
-}
-const genDirectory: GetIter = async function* (path) {
-  const dir = await opendir(path)
-  try {
-    for await (let dirent of dir) {
-      yield dirent.name
-    }
-  } finally {
-    await dir.close()
-  }
-}
-$['open-file'] = async ({ remoteAddr, request }) => {
-  const { method, headers } = request
-  if (!(
-    method === 'PUT' &&
-    isLocalHostOrigin(remoteAddr, headers) &&
-    headers.get(`sec-x-${basename}`) === 'true'
-  )) {
-    return $error(403, name)
-  }
-  const path = trim(await request.text())
-  const stats = await stat(path)
-  let type: Parameters<typeof openFile>[0]
-  if (stats.isDirectory()) {
-    type = 'directory'
-  } else if (stats.isFile()) {
-    type = 'file'
-  } else {
-    return $error(403, name)
-  }
-  openFile(type, path)
-  return $success()
-}
-
 let bbdownCwd: string
 $['bbdown'] = ({ request, remoteAddr }) => {
   const { headers } = request
@@ -299,142 +72,18 @@ $['bbdown'] = ({ request, remoteAddr }) => {
   if (headers.get('upgrade') !== 'websocket') {
     return $error(426, name)
   }
-  bbdownCwd ??= fileURLToPath(import.meta.resolve('../__download__/'))
+  bbdownCwd ??= resolve('./__download__/')
   return handleRequestBbdown(request, bbdownCwd) ?? $error(400, name)
 }
-$['info'] = ({ remoteAddr, request: { headers } }) => {
-  if (!isLocalHost(remoteAddr, headers)) {
-    return $error(403, name)
-  }
-  if (headers.get('accept') === 'text/event-stream') {
-    let timer: ReturnType<typeof setTimeout>
-    return new Response(new ReadableStream({
-      start(controller) {
-        controller.enqueue(encode(`\
-event: info
-data: ${stringify({ remoteAddr, cpu: getCpu(), os: getOs(), runtime: getRuntime(), pm: getPm() })}
 
-`))
-        const fn = () => {
-          controller.enqueue(encode(`\
-event: usage
-data: ${stringify({ cpu: getCpuUsage(), memory: getMemoryUsage() })}
-
-`))
-        }
-        timer = setInterval(fn, 500)
-        fn()
-      },
-      cancel(reason) {
-        clearInterval(timer)
-      }
-    }) as any as ReadableStream, {
-      headers: { server, [TYPE]: 'text/event-stream' }
-    })
-  }
-  const data = {
-    mapper(this: SortedMap<any, any>, reg: RegExp) {
-      return `${this.getScore(reg) ?? null}:${reg.source}`
-    }
-  }
-  return new Response(stringify({
-    remoteAddr, cpu: getCpu(),
-    cpuUsage: getCpuUsage(),
-    memoryUsage: getMemoryUsage(),
-    os: getOs(), runtime: getRuntime(), pm: getPm(),
-    routeList: Object.keys($),
-    discoverGlobalRegExp: discoverGlobalRegExp?.source ?? null,
-    sortedRegList: map([...discoverMap.keys()], data.mapper, discoverMap),
-    sortedHttpRegList: map([...discoverHttpMap.keys()], data.mapper, discoverHttpMap),
-  }), {
-    headers: { server, [TYPE]: types.json }
-  })
-}
-let softwarePromise: Promise<string>
-$['software'] = async ({ remoteAddr, request: { headers } }) => {
-  if (!isLocalHost(remoteAddr, headers)) {
-    return $error(403, name)
-  }
-  softwarePromise ??= $then(regUtils(['software']), $ => $.stdout)
-  return new Response(await softwarePromise, {
-    headers: { server, [TYPE]: types.json }
-  })
-}
-$['config'] = async ({ request, remoteAddr }) => {
-  const { headers } = request
-  if (request.method === 'POST') {
-    if (!isLocalHostOrigin(remoteAddr, headers)) {
-      return $error(403, name)
-    }
-    const $config: typeof config = { ...config, ...await request.json() }
-    $config.browsers = config.browsers
-    await writeConfig($config)
-    return $success()
-  }
-  const $config = { ...await readConfig() }
-  if (!isLocalHost(remoteAddr, headers)) {
-    $config.browsers = null
-    $config.defaultBrowser = null
-  }
-  return new Response(stringify($config), {
-    headers: { server, [TYPE]: types.json }
-  })
-}
-$['clear-lru'] = ({ remoteAddr, request }) => {
-  const { headers } = request
-  if (!(request.method === 'POST' && isLocalHostOrigin(remoteAddr, headers))) {
-    return $error(403, name)
-  }
-  if (cache instanceof FsCache) {
-    cache.lru.clear()
-    return $success()
-  }
-  return $error(418, name)
-}
-async function* _json(input: string) {
-  let step = 0
-  try {
-    const [, resolved, redirected, , parsedPromise] = xparse(input)
-    yield encode(`{
-  "resolved":${stringify(resolved ?? null)}`)
-    step = 1
-    yield encode(`,
-  "redirected":${stringify(await redirected ?? null)}`)
-    step = 2
-    const parsed = await parsedPromise
-    yield encode(`,
-  "parsed":${stringify(parsed ?? null)}`)
-    step = 3
-    yield encode(`,
-  "rended":${stringify(parsed != null ? render(parsed) : null)}
-}`)
-  } catch (e: any) {
-    error(e)
-    yield encode(`${step > 0 ? ',' : '{'}
-  "error":${stringify({ step, message: e.message ?? 'unknown error' })}
-}`)
-  }
-}
 $['json'] = ({ url }) => {
-  return new Response(ReadableStream.from(_json(url.searchParams.get('.') ?? '')) as any as ReadableStream, {
+  const input = url.searchParams.get('.') ?? ''
+  const body: ReadableStream = ReadableStream.from(parseToStreamJson(input)) as any
+  return new Response(body, {
     headers: { server, [TYPE]: types.json }
   })
 }
-const $dialog = (guid: string) => {
-  const path = fileMap.get(guid as any)
-  if (path == null) { return $error(404, name) }
-  return $html(`dialog:${guid}`, path)
-}
-$['id'] = ({ 0: input, url }) => {
-  const params = createBatchParams(input, url.searchParams.getAll('id'))
-  const location = new URL(`./.batch?.from=legacy&${params}`, url).href
-  return $redirect(location)
-}
-$['list'] = $['name'] = ({ 0: input, url }) => {
-  const params = createBatchParams(slice(input, 1), url.searchParams.getAll('id'))
-  const location = new URL(`./.batch?.from=legacy&${params}`, url).href
-  return $redirect(location)
-}
+
 function* xbatch(params: Iterable<[string, string]>) {
   for (const [name, value] of params) {
     if (!name || name[0] === '.') { continue }
@@ -446,40 +95,9 @@ $['batch'] = ({ url }) => {
   const params = url.searchParams
   const type = params.get('.type')
   if (type != null) {
-    return $html(`batch:${type}`, join(xbatch(params), ' '))
+    return renderToHtml(`batch:${type}`, join(xbatch(params), ' '))
   }
   return $error(400, name)
-}
-const $html = async (mode: Store['mode'], input: string) => {
-  let { status, head, attrs, app } = await renderToHtml(mode, input)
-  head ??= `<title>${name}</title>`
-  const html = concat(html0, head, html1!, attrs, html2!, app, html3!)
-  const init = $html.init ??= {
-    status, headers: { server, [CSP]: CSP_VALUE, [TYPE]: types.html }
-  }
-  init.status = status
-  return new Response(html, init)
-}
-$html.init = null! as ResponseInit
-export const $redirect = (location: string, status = 302) => new Response(null, { status, headers: { server, location } })
-export const $success = () => new Response(null, { status: 204, headers: { server } })
-
-export const $error = (status: number, name: string, title?: string) => {
-  title ??= `${status} ${getOwn(STATUS_CODES, status) ?? 'Unknown'}`
-  return new Response(`\
-<!DOCTYPE html>
-<html>
-  <head>
-    <title>${title}</title>
-  </head>
-  <body>
-    <center><h1>${title}</h1></center>
-    <hr>
-    <center>${name}</center>
-  </body>
-</html>`, {
-    status, headers: { server, [CSP]: CSP_VALUE, [TYPE]: `${types.html};charset=UTF-8` }
-  })
 }
 
 const fetch = (request: Request, remoteAddr: string) => {
@@ -505,7 +123,10 @@ const fetch = (request: Request, remoteAddr: string) => {
         }
       } break
       case '!': {
-        return $dialog(slice(path, 1))
+        const guid = slice(path, 1)
+        const file = fileMap.get(guid as any)
+        if (file == null) { return $error(404, name) }
+        return renderToHtml(`dialog:${guid}`, file)
       }
       default: {
         switch (path) {
@@ -520,7 +141,7 @@ const fetch = (request: Request, remoteAddr: string) => {
           const search = replaceAll(url.search, '?', '%3F')
           return $redirect(`${base}${nextPath}${search}`)
         }
-        return $html('default', decodeURIComponent(path))
+        return renderToHtml('default', decodeURIComponent(path))
       }
     }
   } else {
@@ -537,7 +158,7 @@ const fetch = (request: Request, remoteAddr: string) => {
   return $error(404, name)
 }
 
-const onError = (e: any) => { error(e); return $error(500, name) }
+const onError = (e: any) => { reportError(e); return $error(500, name) }
 export const serve = (port = 6702, hostname = '127.0.0.1') => {
   if (serverInst != null) { throw null }
   let server: Server
@@ -587,26 +208,5 @@ export const serve = (port = 6702, hostname = '127.0.0.1') => {
   }
   if (localAddr != null) {
     return afterListen(server!, localAddr)
-  }
-}
-
-const openFile = (type: 'file' | 'directory', path: string) => {
-  if (url == null || open == null) { return }
-  const uuid = crypto.randomUUID()
-  let guid: FileMapKey
-  switch (type) {
-    case 'file': guid = `F-${uuid}`; break
-    case 'directory': guid = `D-${uuid}`; break
-    default: return
-  }
-  fileMap.set(guid, path)
-  open(`${url}!${guid}`)
-}
-if (typeof addEventListener == 'function') {
-  for (const type of ['file', 'directory'] as const) {
-    addEventListener(`tray:open:${type}`, e => {
-      const path = (e as CustomEvent<string>).detail
-      openFile(type, path)
-    })
   }
 }

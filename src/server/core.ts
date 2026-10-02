@@ -7,8 +7,9 @@ export const loadNodeServer = () => import('@/deps/dep-node-server')
 
 import { platform } from 'node:process'
 import { spawn } from 'node:child_process'
+import { STATUS_CODES } from 'node:http'
 
-import { split } from 'bind:utils'
+import { getOwn, split } from 'bind:utils'
 import { trim } from 'bind:String'
 import { freeze } from 'bind:Object'
 import { indexOf } from 'bind:Array'
@@ -45,7 +46,7 @@ export const types = {
 
 export const localAddr: Record<string, null> = { __proto__: null }
 export const allowOrigin: Record<string, null> = { __proto__: null }
-export let open: ((url: string) => Promise<number | null>) | undefined
+let openInner: ((url: string) => Promise<number | null>) | null | undefined
 export const initCore = () => {
   for (const addr of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
     localAddr[addr] = null
@@ -60,20 +61,21 @@ export const initCore = () => {
 
   const browser = getBrowser()
   const args = getBrowserArgs(platform, browser)
-  if (browser != null) {
+  if (browser != null && args != null) {
     log('浏览器:', browser.name)
   } else {
     error('获取默认浏览器失败')
   }
-  open = args != null ? (url: string) => new Promise<number | null>(ok => {
+  openInner = args != null ? (url: string) => new Promise<number | null>(ok => {
     const [command, ...$args] = args
     const i = indexOf($args, '$1')
     if (!(i >= 0)) { throw new TypeError('Not found: "$1"', { cause: args }) }
     $args[i] = url
     const process = spawn(command!, $args, { stdio: 'inherit', shell: false })
     process.on('exit', ok)
-  }) : void 0
+  }) : null
 }
+export const open = (url: string) => openInner?.(url)
 
 export type RouteCtx = { request: Request, remoteAddr: string, url: URL, 0: string }
 export type RouteFn = (ctx: RouteCtx) => Promise<Response> | Response
@@ -89,6 +91,26 @@ export const isLocalHostOrigin = (remoteAddr: string, headers: Headers) => {
 }
 export const isNavigateDocument = (headers: Headers) => {
   return headers.get('Sec-Fetch-Mode') === 'navigate' && headers.get('Sec-Fetch-Dest') === 'document'
+}
+
+export const $redirect = (location: string, status = 302) => new Response(null, { status, headers: { server, location } })
+export const $success = () => new Response(null, { status: 204, headers: { server } })
+export const $error = (status: number, name: string, title?: string) => {
+  title ??= `${status} ${getOwn(STATUS_CODES, status) ?? 'Unknown'}`
+  return new Response(`\
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>${title}</title>
+  </head>
+  <body>
+    <center><h1>${title}</h1></center>
+    <hr>
+    <center>${name}</center>
+  </body>
+</html>`, {
+    status, headers: { server, [CSP]: CSP_VALUE, [TYPE]: `${types.html};charset=UTF-8` }
+  })
 }
 
 export const afterListen = async (server: typeof serverInst, localAddr: typeof localAddrPromise) => {
