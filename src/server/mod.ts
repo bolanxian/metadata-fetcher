@@ -1,75 +1,52 @@
 
-export const basename = 'metadata-fetcher'
-const hostbase = `${basename}.`
-const pathbase = `/${basename}/`
-import { platform } from 'node:process'
-import { spawn } from 'node:child_process'
+export * from './core'
+
 import { extname } from 'node:path/posix'
 import { stat, readFile, opendir, open as openFileHandle } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { STATUS_CODES } from 'node:http'
+
+import { call } from 'bind:core'
+import { assert, getOwn, $then, encodeText as encode, test, match, split } from 'bind:utils'
+import { trim, concat, startsWith, slice, includes, lastIndexOf, replaceAll } from 'bind:String'
+import { map } from 'bind:Array'
+
+import { load as cheerioLoad } from 'cheerio'
+import { LRUCache } from 'lru-cache'
+
+import { getCpu, getCpuUsage, getMemoryUsage, getOs, getRuntime, getPm } from '@/utils/info'
+import { illustId, illustName } from '@/utils/illust-name'
+import { handleRequest as handleRequestBbdown } from '@/utils/bbdown'
+import { default as checkVersion } from '@/utils/check-version.js?raw'
+import { render, renderBatch } from '@/render'
+import { config, readConfig, writeConfig } from '@/config'
+import { S, P, createBatchParams } from '@/components/app.vue'
+import { ready } from '@/init'
+import { join, regUtils } from '@/bind'
 import {
-  name, ready, regUtils, cheerioLoad, LRUCache, $string, $array,
-  call, getOwn, $then, encodeText as encode, join,
-  test, match, split,
   FsCache, cache, redirect,
   discoverMap, discoverHttpMap,
   discoverGlobalRegExp,
   getDiscoverGlobalRegExp,
   xresolve, resolve, xparse,
-  config, readConfig, writeConfig,
-  getBrowser, getBrowserArgs,
-  render, renderBatch,
-  S, P, createBatchParams,
-  handleRequestBbdown,
-  illustId, illustName,
-  checkVersion, renderToHtml,
+} from '@/meta-fetch/mod'
+import {
+  name, basename, hostbase, pathbase,
   loadNodeServer,
-} from '@/main.ssr'
-import { getCpu, getCpuUsage, getMemoryUsage, getOs, getRuntime, getPm } from './info.ts'
+  type Server, type LocalAddr,
+  url, serverInst, allowOrigin, initCore,
+  server, CSP, CSP_VALUE, TYPE, types, $,
+  isLocalHost, isLocalHostOrigin, isNavigateDocument,
+  afterListen,
+} from './core'
+import { renderToHtml } from './render'
+const { stringify } = JSON, { error } = console
+
 import type { SortedMap } from '@/utils/sorted-map'
 import type { Store } from '@/components/app.vue'
-import type { ServerType as NodeServer } from '@hono/node-server'
 import type { AddressInfo as NodeAddr } from 'node:net'
 declare const { ReadableStream }: typeof import('node:stream/web')
 await ready
-
-type RouteCtx = { request: Request, remoteAddr: string, url: URL, 0: string }
-type RouteFn = (ctx: RouteCtx) => Promise<Response> | Response
-export const $: Record<string, RouteFn> = { __proto__: null! }
-export const isLocalHost = (remoteAddr: string, headers: Headers) => {
-  return remoteAddr in localAddr && host === headers.get('host')
-}
-export const isOrigin = (headers: Headers) => {
-  return origin === headers.get('origin')
-}
-export const isLocalHostOrigin = (remoteAddr: string, headers: Headers) => {
-  return remoteAddr in localAddr && host === headers.get('host') && origin === headers.get('origin')
-}
-export const isNavigateDocument = (headers: Headers) => {
-  return headers.get('Sec-Fetch-Mode') === 'navigate' && headers.get('Sec-Fetch-Dest') === 'document'
-}
-
-const { stringify } = JSON, { log, error } = console
-const { trim, concat, startsWith, slice, includes, lastIndexOf, replaceAll } = $string
-const { indexOf, map } = $array
-const server = navigator.userAgent
-const CSP = 'content-security-policy'
-const CSP_VALUE = `default-src 'self';img-src * data: blob:;style-src 'self' 'unsafe-inline';`
-const TYPE = 'content-type'
-const types = {
-  __proto__: null!,
-  css: 'text/css',
-  html: 'text/html',
-  js: 'text/javascript',
-  json: 'application/json',
-  txt: 'text/plain',
-  svg: 'image/svg+xml',
-  woff2: 'font/woff2',
-  osdx: 'application/opensearchdescription+xml',
-  suggest: 'application/x-suggestions+json',
-  trending: 'application/x-trending+json',
-} as const
 
 let runtime = 'unknown'
 switch (`${typeof Deno}:${typeof Bun}`) {
@@ -78,29 +55,7 @@ switch (`${typeof Deno}:${typeof Bun}`) {
   case 'undefined:object': runtime = 'bun'; break
 }
 
-const localAddr: Record<string, null> = { __proto__: null }
-for (const addr of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
-  localAddr[addr] = null
-}
-Object.freeze(localAddr)
-
-const allowOrigin: Record<string, null> = { __proto__: null }
-const _allowOrigin = trim(config.allowOrigin)
-for (const origin of _allowOrigin ? split(S, _allowOrigin) : []) {
-  if (!origin) { continue }
-  allowOrigin[origin] = null
-}
-
-const rawHtml = await readFile('./dist/index.html', { encoding: 'utf8' })
-const _html = split(/<title>.*?<\/title>|(?=><!--#app-->)|<!--#app-->/, rawHtml)
-_html[0] = `\
-${trim(_html[0]!)}
-
-<script defer src="./.check-version"></script>
-<link rel="icon" type="${types.svg}" href="./.favicon">
-<link rel="search" type="${types.osdx}" href="./.opensearch" title="${name}">
-`
-const [html0, html1, html2, html3] = _html
+let html0: string, html1: string, html2: string, html3: string
 
 const $clone = Response.prototype.clone
 const defineStaticFile = (name: string, type: string, data: BodyInit) => {
@@ -113,7 +68,21 @@ const defineStaticFile = (name: string, type: string, data: BodyInit) => {
   })
   $[name] = (ctx) => call($clone, resp)
 }
-{
+
+export const init = async () => {
+  initCore()
+  const rawHtml = await readFile('./dist/index.html', { encoding: 'utf8' })
+  const _html = split(/<title>.*?<\/title>|(?=><!--#app-->)|<!--#app-->/, rawHtml)
+  _html[0] = `\
+${trim(_html[0]!)}
+
+<script defer src="./.check-version"></script>
+<link rel="icon" type="${types.svg}" href="./.favicon">
+<link rel="search" type="${types.osdx}" href="./.opensearch" title="${name}">
+`
+  assert?.<Record<0 | 1 | 2 | 3, string>>(_html)
+  void ([html0, html1, html2, html3] = _html)
+
   const $ = cheerioLoad(rawHtml)
   for (const el of $('link[rel="@app-asset"]')) {
     const href = $(el).attr('href')!
@@ -121,9 +90,9 @@ const defineStaticFile = (name: string, type: string, data: BodyInit) => {
     const data = await readFile(`./dist/${href}`)
     defineStaticFile(slice(href, 1), types[ext as keyof typeof types] ?? '', data)
   }
+  defineStaticFile('favicon', types.svg, await readFile('./dist/favicon.svg'))
+  defineStaticFile('check-version', types.js, checkVersion)
 }
-defineStaticFile('favicon', types.svg, await readFile('./dist/favicon.svg'))
-defineStaticFile('check-version', types.js, checkVersion)
 
 $['opensearch'] = (ctx) => {
   return new Response(`\
@@ -513,25 +482,6 @@ export const $error = (status: number, name: string, title?: string) => {
   })
 }
 
-let args: string[] | undefined
-{
-  const browser = getBrowser()
-  args = getBrowserArgs(platform, browser)
-  if (browser != null) {
-    log('浏览器:', browser.name)
-  } else {
-    error('获取默认浏览器失败')
-  }
-}
-export const open = args != null ? (url: string) => new Promise<number | null>(ok => {
-  const [command, ...$args] = args
-  const i = indexOf($args, '$1')
-  if (!(i >= 0)) { throw new TypeError('Not found: "$1"', { cause: args }) }
-  $args[i] = url
-  const process = spawn(command!, $args, { stdio: 'inherit', shell: false })
-  process.on('exit', ok)
-}) : null
-
 const fetch = (request: Request, remoteAddr: string) => {
   const _origin = request.headers.get('origin')
   if (!(_origin == null || _origin in allowOrigin)) {
@@ -586,23 +536,15 @@ const fetch = (request: Request, remoteAddr: string) => {
   }
   return $error(404, name)
 }
-const afterListen = async (server: typeof serverInst, localAddr: typeof localAddrPromise) => {
-  let { hostname, port } = await localAddr
-  if (hostname === '0.0.0.0') { hostname = '127.0.0.1' }
-  // 高危操作专用 host / origin
-  host = `${hostbase}localhost:${port}`
-  origin = `http://${host}`
-  url = `${origin}/`
-  allowOrigin[origin] = null
-  log(`Listening on ${url}`)
-  return { server, hostname, port, host, origin, url }
-}
+
 const onError = (e: any) => { error(e); return $error(500, name) }
-export const main = (port = 6702, hostname = '127.0.0.1') => {
+export const serve = (port = 6702, hostname = '127.0.0.1') => {
   if (serverInst != null) { throw null }
+  let server: Server
+  let localAddr: Promise<LocalAddr>
   switch (runtime) {
-    default: localAddrPromise = $then(loadNodeServer(), ({ serve }) => new Promise((ok) => {
-      serverInst = serve({
+    default: localAddr = $then(loadNodeServer(), ({ serve }) => new Promise((ok) => {
+      server = serve({
         port, hostname,
         /**
          * `@hono/node-server@1.19.11` 在
@@ -618,8 +560,8 @@ export const main = (port = 6702, hostname = '127.0.0.1') => {
       }, ({ address, port }) => ok({ hostname: address, port }))
     }))
       break
-    case 'deno': localAddrPromise = new Promise((onListen) => {
-      serverInst = Deno.serve({
+    case 'deno': localAddr = new Promise((onListen) => {
+      server = Deno.serve({
         port, hostname,
         onListen,
         handler(request, { remoteAddr: { hostname } }) {
@@ -629,8 +571,8 @@ export const main = (port = 6702, hostname = '127.0.0.1') => {
       })
     })
       break
-    case 'bun': localAddrPromise = new Promise((ok) => {
-      serverInst = Bun.serve({
+    case 'bun': localAddr = new Promise((ok) => {
+      server = Bun.serve({
         port, hostname,
         idleTimeout: 45,
         fetch(request) {
@@ -639,12 +581,12 @@ export const main = (port = 6702, hostname = '127.0.0.1') => {
         },
         error: onError
       })
-      setTimeout(ok, 0, serverInst)
+      setTimeout(ok, 0, server)
     })
       break
   }
-  if (localAddrPromise != null) {
-    return afterListen(serverInst, localAddrPromise)
+  if (localAddr != null) {
+    return afterListen(server!, localAddr)
   }
 }
 
@@ -668,7 +610,3 @@ if (typeof addEventListener == 'function') {
     })
   }
 }
-
-export let host: string, origin: string, url: string
-let serverInst: NodeServer | Deno.HttpServer<Deno.NetAddr> | Bun.Server<void>
-let localAddrPromise: Promise<{ hostname: string, port: number }>

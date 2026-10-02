@@ -1,8 +1,9 @@
+
 import { cpus, release, freemem, totalmem } from 'node:os'
 import { platform, arch, versions, env, memoryUsage } from 'node:process'
-import { $string, hasOwn } from '@/main.ssr'
-const { keys, values } = Object
-const { indexOf, lastIndexOf, replaceAll, slice, split, startsWith, toUpperCase } = $string
+import { hasOwn } from 'bind:utils'
+import { indexOf, lastIndexOf, replaceAll, slice, split, startsWith, toUpperCase } from 'bind:String'
+import { keys, values } from 'bind:Object'
 
 const parseVersion = (value: string) => {
   let offset = indexOf(value, ' ')

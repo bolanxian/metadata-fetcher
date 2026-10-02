@@ -36,11 +36,11 @@ if (task === 'start') {
     setConsoleOutputCP(65001)
     setTitle(name)
     step = 1
-    const { basename, main, open, $, isLocalHostOrigin, $success, $error } = await import('./server.ts')
-    const { ready, escapeBatch, regUtils, $string: { trim, replaceAll } } = await $MAIN
-    await ready
+    const { escapeBatch, regUtils, loadServe, $string: { trim, replaceAll } } = await $MAIN
+    const { basename, init: initServe, serve, open, $, isLocalHostOrigin, $success, $error } = await loadServe()
+    await initServe()
     const port = env['MF_PORT'], hostname = env['MF_HOST']
-    const { url, origin } = await main(port != null ? +port : void 0, hostname)!
+    const { url, origin } = await serve(port != null ? +port : void 0, hostname)!
     const icon = './dist/favicon.ico'
     const onClick = () => { open?.(url) }
     await init(name, icon, onClick)
@@ -93,7 +93,6 @@ if not %ERRORLEVEL% == 0 ( pause )
 }
 
 const MAIN = await $MAIN
-await MAIN.ready
 
 if (task === 'fetch') {
   const { xparse, render } = MAIN
@@ -122,9 +121,10 @@ if (task === 'fetch') {
   const [type, ..._args] = args
   for await (const $ of renderBatch(_args, type!)) { log($.error ?? $.value) }
 } else if (task === 'serve' || task == null) {
-  const { main, open } = await import('./server.ts')
+  const { init, serve, open } = await MAIN.loadServe()
+  await init()
   const port = env['MF_PORT'], hostname = env['MF_HOST']
-  const { url } = await main(port != null ? +port : void 0, hostname)!
+  const { url } = await serve(port != null ? +port : void 0, hostname)!
   await open?.(url)
   process.on('uncaughtException', e => error(e))
 } else if (task === 'start') {
