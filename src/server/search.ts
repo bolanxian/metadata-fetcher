@@ -2,7 +2,7 @@
 import { test } from 'bind:utils'
 import { trim } from 'bind:String'
 import { P } from '@/components/app.vue'
-import { cache, redirect, xresolve, resolve } from '@/meta-fetch/mod'
+import { type ResolvedInfo, cache, xresolve, resolve, tryRedirect } from '@/meta-fetch/mod'
 import { name, url, server, TYPE, types, $, isLocalHost, $redirect } from './core'
 import { renderToHtml } from './render'
 const { stringify } = JSON
@@ -24,10 +24,10 @@ $['opensearch'] = (ctx) => {
     headers: { server, [TYPE]: types.osdx }
   })
 }
-const searchAsRedirect = async (url: string, base?: string | URL) => {
-  const target = await redirect(url)
-  if (target == null) { return renderToHtml('default', url) }
-  return $redirect(new URL(`./.search?.=${encodeURIComponent(target)}`, base).href)
+const searchAsRedirect = async (redirected: Promise<ResolvedInfo | null>, input: string, base?: string | URL) => {
+  const id = (await redirected)?.id
+  if (id == null) { return renderToHtml('default', input) }
+  return $redirect(new URL(`./.search?.=${encodeURIComponent(id)}`, base).href)
 }
 $['search'] = ({ url }) => {
   const input = trim(url.searchParams.get('.') ?? '')
@@ -35,11 +35,12 @@ $['search'] = ({ url }) => {
   const resolved = resolve(input)
   let id = resolved?.id
   if (id != null) {
+    const maybeRedirect = tryRedirect(resolved!)
+    if (maybeRedirect != null) {
+      return searchAsRedirect(maybeRedirect, input, url)
+    }
     if (test(P, id)) {
       return $redirect(new URL(`./${encodeURIComponent(id)}`, url).href)
-    }
-    if (id[0] === '@') {
-      return searchAsRedirect(resolved!.url, url)
     }
   }
   return renderToHtml('default', input)

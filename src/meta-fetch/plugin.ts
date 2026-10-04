@@ -1,8 +1,9 @@
 
 import type { DefineComponent, ExtractPropTypes, Prop } from 'vue'
+import { LRUCache } from 'lru-cache'
 import { noop, voidPromise } from '@/bind'
 import { call } from 'bind:core'
-import { type Override, assert, $then } from 'bind:utils'
+import { type Override, assert, $then, hasOwn } from 'bind:utils'
 import { freeze, keys, fromEntries } from 'bind:Object'
 import { from, filter } from 'bind:Array'
 import { get, set } from 'bind:WeakMap'
@@ -21,6 +22,7 @@ export interface Plugin<T extends {} = {}> {
   name: string
   path: string
   resolve(path: string[]): ResolvedInfo | undefined
+  redirect?(info: ResolvedInfo): Promise<string | undefined>
   fetch(cache: BaseCache, info: ResolvedInfo): Promise<T | undefined>
   parse(data: T, info: ResolvedInfo): ParsedInfo | undefined
 }
@@ -62,15 +64,32 @@ export const resolve = (input: string): ResolvedInfo | null => {
   for (const route of xresolve(input)) { return route }
   return null
 }
-export const tryRedirectInner = async (info: ResolvedInfo): Promise<ResolvedInfo | null> => {
-  const url = await redirect(info.url)
-  if (url == null) { return null }
-  const resolved = resolve(new URL(url, info.url).href)
-  return resolved
+
+const redirectCache = new LRUCache<string, Promise<ResolvedInfo | null>>({ max: 20 })
+export const tryRedirectInner = async (info: ResolvedInfo, plugin: Plugin): Promise<ResolvedInfo | null> => {
+  const result = await plugin.redirect!(info)
+  if (result == null) { return null }
+  const resolved = resolve(result)
+  if (resolved == null) { return null }
+  return tryRedirect(resolved) ?? resolved
 }
 export const tryRedirect = (info: ResolvedInfo): Promise<ResolvedInfo | null> | undefined => {
-  if (info.id[0] === '@') { return tryRedirectInner(info) }
+  const plugin: Plugin = get(resolvedToPlugin, info)
+  if (!hasOwn(plugin, 'redirect')) { return }
+  const { id } = info
+  let result = redirectCache.get(id)
+  if (result == null) {
+    result = tryRedirectInner(info, plugin)
+    redirectCache.set(id, result)
+  }
+  return result
 }
+export const isRedirect = (info: ResolvedInfo): boolean => {
+  let plugin: Plugin | undefined = get(resolvedToPlugin, info)
+  if (plugin == null) { plugin = get(resolvedToPlugin, resolve(info.id)) as Plugin }
+  return hasOwn(plugin, 'redirect')
+}
+
 export const parse = async (info: ResolvedInfo): Promise<ResolvedInfo & ParsedInfo | null> => {
   const plugin: Plugin = get(resolvedToPlugin, info)
   const data = await plugin.fetch(cache, info)
@@ -140,13 +159,17 @@ export const getPluginComponent = <T extends {}>(
   plugin: Plugin<T>
 ): Component<T> | undefined => get(pluginToComponent, plugin)
 
+export const defaultRedirect: NonNullable<Plugin['redirect']> = async (info) => {
+  const base = info.url
+  const url = await redirect(base)
+  if (url == null) { return }
+  return new URL(url, base).href
+}
 export const redirectPlugin: Pick<Plugin<{
   plugin: Plugin, data: any, info: ResolvedInfo
 }>, 'fetch' | 'parse'> = {
   async fetch(cache, $info) {
-    const url = await redirect($info.url)
-    if (url == null) { return }
-    const info = resolve(url)
+    const info = await tryRedirect($info)
     if (info == null) { return }
     const plugin: Plugin = get(resolvedToPlugin, info)
     const data = await plugin.fetch(cache, info)

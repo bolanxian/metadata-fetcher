@@ -9,7 +9,7 @@ import { trim, slice, startsWith, replaceAll } from 'bind:String'
 import { nextTick, join, resolveAsHttp } from '@/bind'
 import { type Config, config, writeConfig } from '@/config'
 import { type OnParsed, render as _render, renderBatch } from '@/render'
-import { resolve, xparse, getPluginComponent, getDiscoverGlobalRegExp } from '@/meta-fetch/mod'
+import { resolve, xparse, isRedirect, getPluginComponent, getDiscoverGlobalRegExp } from '@/meta-fetch/mod'
 import type { ResolvedInfo, ParsedInfo } from '@/meta-fetch/mod'
 import ConfigVue from './config.vue'
 import { Dialog } from './dialog'
@@ -112,10 +112,9 @@ export const createData = (store: Store): Data => {
   } else {
     if (!SSR) {
       data.maybeHttp = store.input ? resolveAsHttp(store.input) : null
-      const id = store.resolved?.id
-      if (id != null) {
-        const [plugin] = xparse(id)
-        data.component = plugin != null ? getPluginComponent(plugin) : void 0
+      const [plugin] = xparse(store.input)
+      if (plugin != null) {
+        data.component = getPluginComponent(plugin)
       }
     }
   }
@@ -191,11 +190,13 @@ export default defineComponent({
       } else if (startsWith(name, 'batch:')) {
         location.href = `./.batch?${createBatchParams(slice(name, 6), resolveBatch(trim(store.input)))}`
       } else {
-        const id = resolve(split(S, trim(store.input), 1)[0]!)?.id
-        if (id == null || test(P, id)) {
-          location.href = `./${encodeURIComponent(id ?? '')}`
+        const info = resolve(split(S, trim(store.input), 1)[0]!)
+        if (info == null) {
+          location.href = './'
+        } else if (test(P, info.id) && !isRedirect(info)) {
+          location.href = `./${encodeURIComponent(info.id)}`
         } else {
-          location.href = `./.search?.=${encodeURIComponent(id)}`
+          location.href = `./.search?.=${encodeURIComponent(info.id)}`
         }
       }
     } : null!
@@ -204,8 +205,8 @@ export default defineComponent({
       if (data.mode === 'batch') {
         location.href = `./.batch?${createBatchParams(data.batchType, data.batchResolved)}`
       } else if (store.resolved != null) {
-        const { id } = store.resolved
-        if (test(P, id)) {
+        const info = store.resolved, { id } = info
+        if (test(P, id) && !isRedirect(info)) {
           location.href = `./${encodeURIComponent(id)}`
         } else {
           location.href = `./.search?.=${encodeURIComponent(id)}`

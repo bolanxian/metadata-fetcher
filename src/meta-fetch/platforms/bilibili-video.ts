@@ -5,13 +5,14 @@ import { slice } from 'bind:String'
 import { keys } from 'bind:Object'
 import { $fetch, htmlInit, jsonInit } from '../fetch'
 import { defineDiscover } from '../discover'
-import { definePlugin, redirectPlugin } from '../plugin'
+import { definePlugin, defaultRedirect, redirectPlugin } from '../plugin'
 import * as BV from '@/utils/bv-encode'
 import { fromHTML } from '@/utils/find-json-object'
 import { join, toHttps, htmlToText } from '@/bind'
 import { instantToString } from '@/utils/temporal'
 
 export { REG_AV, REG_BV } from '@/utils/bv-encode'
+export const REG_BGM = /^((?:ep|ss)\d+)$/
 export const REG_B23 = /^(?:b23\.tv|bili2{0,2}3{0,2}\.cn)\/([-\w]+)(?=$|[?#])/
 export const REG_FULL = /^(?:m\.|www\.)?bilibili\.com\/video\/(\w+)\/?(?=$|[?#])/
 export const REG_WL = /^(?:www\.)?bilibili\.com\/list\/watchlater\/?\?(?:\S*?&)??bvid=(\w+)/
@@ -32,6 +33,9 @@ defineDiscover({
     } else if (test(BV.REG_BV, m[1])) {
       id = BV.decode(m[1]) ?? m[1]
     } else if (reg === REG_B23) {
+      if (test(REG_BGM, m[1])) {
+        return `bilibili/bangumi/${m[1]}`
+      }
       return `bilibili/b23/${m[1]}`
     } else {
       return
@@ -45,7 +49,7 @@ defineDiscover({
 defineDiscover({
   name: 'Bilibili Extra',
   discover: [
-    /^@(b23)!([-\w]+)$/,
+    /^(b23)!([-\w]+)$/,
     /^bilibili:\/\/(video)\/(?!0\d)(\d{1,16})$/,
     /^(?!noGlobal)(bv)!([aA][vV](?!0\d)\d{1,16})$/,
     /^(?!noGlobal)(raw)!([bB][vV]1\w{9})$/
@@ -215,9 +219,10 @@ definePlugin({
   path: 'bilibili/b23',
   resolve(path) {
     if (path.length !== 1) { return }
-    const id = `@b23!${path[0]}`
+    const id = `b23!${path[0]}`
     const url = toShortUrl(path[0]!)
     return { id, displayId: id, cacheId: id, shortUrl: '', url }
   },
+  redirect: defaultRedirect,
   ...redirectPlugin
 })

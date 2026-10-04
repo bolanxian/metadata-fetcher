@@ -4,7 +4,7 @@ import { test } from 'bind:utils'
 import { find } from 'bind:Array'
 import { toHttps } from '@/bind'
 import { defineDiscover } from '../discover'
-import { definePlugin, redirectPlugin } from '../plugin'
+import { definePlugin, defaultRedirect, redirectPlugin } from '../plugin'
 import { $fetch, htmlInit } from '../fetch'
 import { REG_INIT, toSpaceUrl } from './bilibili-video'
 import { fromHTML } from '@/utils/find-json-object'
@@ -14,7 +14,7 @@ export const REG_OPUS = /^bili!opus!(\d{18,})$/
 
 defineDiscover({
   name: 'Bilibili article',
-  discover: [REG_CV, /^@cv(\d+)$/],
+  discover: [REG_CV],
   discoverHttp: [
     /^www\.bilibili\.com\/(?:read\/cv|mobile\?id=)(\d+)/
   ],
@@ -38,10 +38,11 @@ definePlugin({
     const id: string = path[0]!
     if (!test(REG_CV, id)) { return }
     return {
-      id: `@${id}`, displayId: id, cacheId: id,
+      id, displayId: id, cacheId: id,
       shortUrl: '', url: `https://www.bilibili.com/read/${id}/`
     }
   },
+  redirect: defaultRedirect,
   ...redirectPlugin
 })
 definePlugin({
