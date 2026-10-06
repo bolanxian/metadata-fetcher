@@ -69,9 +69,7 @@ const redirectCache = new LRUCache<string, Promise<ResolvedInfo | null>>({ max: 
 export const tryRedirectInner = async (info: ResolvedInfo, plugin: Plugin): Promise<ResolvedInfo | null> => {
   const result = await plugin.redirect!(info)
   if (result == null) { return null }
-  const resolved = resolve(result)
-  if (resolved == null) { return null }
-  return tryRedirect(resolved) ?? resolved
+  return resolve(result)
 }
 export const tryRedirect = (info: ResolvedInfo): Promise<ResolvedInfo | null> | undefined => {
   const plugin: Plugin = get(resolvedToPlugin, info)
@@ -99,7 +97,11 @@ export const parse = async (info: ResolvedInfo): Promise<ResolvedInfo & ParsedIn
   return { ...info, ...parsed }
 }
 export const xparse: (input: string, cache?: BaseCache) => [
-  Plugin?, ResolvedInfo?, Promise<ResolvedInfo | null>?, Promise<{} | null>?, Promise<ResolvedInfo & ParsedInfo | null>?
+  plugin?: Plugin,
+  resolved?: ResolvedInfo,
+  redirectedPromise?: Promise<ResolvedInfo | null>,
+  dataPromise?: Promise<{} | null>,
+  parsedPromise?: ReturnType<typeof parse>
 ] = function* (input: string, $cache = cache) {
   if (!(input.length > 2)) { return }
   const resolved = resolve(input)

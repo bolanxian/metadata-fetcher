@@ -8,7 +8,7 @@ import { Schema, h } from 'koishi'
 import { LRUCache } from 'lru-cache'
 import { join } from './bind'
 import type { ResolvedInfo, ParsedInfo } from './meta-fetch/mod'
-import { init, NoCache, xparse } from './meta-fetch/mod'
+import { init, NoCache, resolve, tryRedirect, parse } from './meta-fetch/mod'
 import { config as defaultConfig } from './config'
 import { render, renderLine } from './render'
 const ready = (async () => {
@@ -29,6 +29,8 @@ const locale_zh_Hans = {
     meta: {
       description: '获取元数据', messages: {
         unknown: '未知的输入',
+        too_many_redirects: '重定向过多',
+        redirect_fail: '重定向失败',
         fail: '获取失败'
       }
     },
@@ -38,6 +40,8 @@ const locale_zh_Hans = {
   }
 }
 const UNKNOWN = 'commands.meta.messages.unknown'
+const TOO_MANY_REDIRECTS = 'commands.meta.messages.too_many_redirects'
+const REDIRECT_FAIL = 'commands.meta.messages.redirect_fail'
 const FAIL = 'commands.meta.messages.fail'
 
 declare module 'koishi' {
@@ -63,15 +67,7 @@ const cache: LRUCache<string, ResolvedInfo & ParsedInfo, { context: Context, res
     if (_parsed != null) {
       return { ..._parsed, ...resolved }
     }
-    const [, , redirectedPromise, , parsedPromise] = xparse(resolved.id)
-    if (redirectedPromise != null) {
-      const resolved = await redirectedPromise
-      if (resolved != null) {
-        return await cache.fetch(resolved.cacheId, { context: { context: ctx, resolved } })
-      }
-      return
-    }
-    const parsed = await parsedPromise
+    const parsed = await parse(resolved)
     if (parsed != null) {
       const { title, ownerName, publishDate, thumbnailUrl, relatedUrl, keywords, description } = parsed
       await ctx.database.create(name, {
@@ -81,13 +77,41 @@ const cache: LRUCache<string, ResolvedInfo & ParsedInfo, { context: Context, res
     }
   }
 })
-const empty = Promise.resolve(Object.freeze([] as []))
-const parse = async (ctx: Context, input: string): Promise<readonly [ResolvedInfo?, (ResolvedInfo & (ParsedInfo | {}))?]> => {
-  const [, resolved] = xparse(input)
-  if (resolved == null) { return empty }
-  if (!resolved.cacheId) { return [resolved, resolved] }
-  const parsed = await cache.fetch(resolved.cacheId, { context: { context: ctx, resolved } })
-  return [resolved, parsed]
+
+type RedirectStatus = 'too-many' | 'fail' | null
+const fetchInfo = async (ctx: Context, input: string): Promise<{
+  resolved: ResolvedInfo | null
+  redirectList: ResolvedInfo[]
+  redirectStatus: RedirectStatus
+  parsed: ResolvedInfo & ParsedInfo | undefined
+}> => {
+  let resolved: ResolvedInfo | null
+  const redirectList: ResolvedInfo[] = []
+  let redirectStatus: RedirectStatus = null
+  let parsed: ResolvedInfo & ParsedInfo | undefined
+  redirect: while (true) {
+    resolved = resolve(input)
+    if (resolved == null) { break redirect }
+    if (!resolved.cacheId) { break redirect }
+    const redirectedPromise = tryRedirect(resolved)
+    if (redirectedPromise != null) {
+      const redirected = await redirectedPromise
+      if (redirected != null) {
+        input = redirected.url
+        if (redirectList.length < 5) {
+          redirectList[redirectList.length] = redirected
+          continue redirect
+        }
+        redirectStatus = 'too-many'
+        break redirect
+      }
+      redirectStatus = 'fail'
+      break redirect
+    }
+    parsed = await cache.fetch(resolved.cacheId, { context: { context: ctx, resolved } })
+    break redirect
+  }
+  return { resolved, redirectList, redirectStatus, parsed }
 }
 async function* renderList(
   ctx: Context, session: Session,
@@ -96,13 +120,19 @@ async function* renderList(
   const batch = getOwn(defaultConfig.batch, key)!
   const sep = { separator, _: separator }
   for (const arg of args) {
-    const [resolved, parsed] = await parse(ctx, arg)
+    const { resolved, redirectStatus, parsed } = await fetchInfo(ctx, arg)
     if (resolved == null) {
       yield `${session.text(UNKNOWN)} : ${arg}`
       continue
     }
     if (parsed == null) {
-      yield `${session.text(FAIL)} : ${arg}`
+      let text: string
+      switch (redirectStatus) {
+        case 'too-many': text = session!.text(TOO_MANY_REDIRECTS); break
+        case 'fail': text = session!.text(REDIRECT_FAIL); break
+      }
+      text ??= session!.text(FAIL)
+      yield `${text} : ${arg}`
       continue
     }
     const data = { ...sep, ...resolved, ...parsed }
@@ -117,13 +147,19 @@ export const apply = (ctx: Context, config: Config) => {
   ctx.model.extend(name, fields)
 
   ctx.command('meta <input>').action(async ({ session }, input) => {
-    const [resolved, parsed] = await parse(ctx, input)
+    const { resolved, redirectStatus, parsed } = await fetchInfo(ctx, input)
     if (resolved == null) { return session!.text(UNKNOWN) }
-    if (parsed == null) { return session!.text(FAIL) }
+    if (parsed == null) {
+      switch (redirectStatus) {
+        case 'too-many': return session!.text(TOO_MANY_REDIRECTS)
+        case 'fail': return session!.text(REDIRECT_FAIL)
+      }
+      return session!.text(FAIL)
+    }
     return render(parsed, config.template)
   })
   ctx.command('meta.img <input>').action(async ({ session }, input) => {
-    const [resolved, parsed] = await parse(ctx, input)
+    const { resolved, parsed } = await fetchInfo(ctx, input)
     if (resolved == null) { return session!.text(UNKNOWN) }
     const image = getOwn(parsed!, 'thumbnailUrl')
     if (image == null) { return session!.text(FAIL) }

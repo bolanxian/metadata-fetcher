@@ -92,22 +92,40 @@ if not %ERRORLEVEL% == 0 ( pause )
 const MAIN = await $MAIN
 
 if (task === 'fetch') {
-  const { xparse, render } = MAIN
-  for (const arg of args) {
-    try {
+  const { xparse, render: _render } = MAIN
+  async function* render(arg: string) {
+    let redirectCount = 0
+    let msg: string | null = `输入：${arg}`
+    redirect: while (true) {
       const [, resolved, redirectedPromise, , parsedPromise] = xparse(arg)
-      if (resolved == null) { continue }
-      const pre = `输入：${arg}\n`
+      if (resolved == null) { return }
+      if (msg != null) { yield msg; msg = null }
       if (redirectedPromise != null) {
         const redirected = await redirectedPromise
-        redirected != null
-          ? log(`${pre}跳转：${redirected.url}`)
-          : log(`${pre}跳转失败：${resolved.id}`)
-      } else {
-        const parsed = await parsedPromise
-        parsed != null
-          ? log(render(parsed))
-          : log(`${pre}失败：${resolved.id}`)
+        if (redirected != null) {
+          arg = redirected.url
+          if (redirectCount < 5) {
+            yield `跳转：${arg}`
+            redirectCount++
+            continue redirect
+          }
+          yield `跳转次数过多：${arg}`
+          return
+        }
+        yield `跳转失败：${resolved.id}`
+        return
+      }
+      const parsed = await parsedPromise
+      yield parsed != null
+        ? _render(parsed)
+        : `失败：${resolved.id}`
+      return
+    }
+  }
+  for (const arg of args) {
+    try {
+      for await (const msg of render(arg)) {
+        log(msg)
       }
     } catch (e) {
       error(e)
