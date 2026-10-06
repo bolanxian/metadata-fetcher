@@ -1,10 +1,10 @@
 
 import { test, expect, vi, beforeAll, afterEach } from 'vitest'
 import { join } from '@/bind'
-import { initFetch } from './fetch'
+import { initFetch, redirect } from './fetch'
 import { NoCache } from './cache'
 import { defineDiscover } from './discover'
-import { definePlugin, initCache, resolve, xparse, tryRedirect, redirectPlugin, parse } from './plugin'
+import { definePlugin, initCache, resolve, fetchInfo, xparse, tryRedirect, defaultRedirect, redirectPlugin } from './plugin'
 
 let mockLocation = null
 const mockFetch = vi.fn(async () => ({
@@ -59,18 +59,19 @@ definePlugin({
   }
 })
 
-// A plugin whose id starts with '@' (triggers tryRedirect)
+// A plugin whose redirect (triggers tryRedirect)
 definePlugin({
   name: 'AtPrefixed',
   path: 'atredir',
   resolve(path) {
     if (path.length !== 1) { return }
-    const id = `@at!${path[0]}`
+    const id = `at!${path[0]}`
     return {
       id, displayId: id, cacheId: id,
       shortUrl: '', url: `https://at.example/${path[0]}`
     }
   },
+  redirect: defaultRedirect,
   ...redirectPlugin
 })
 
@@ -104,25 +105,25 @@ test('resolve', () => {
 
 test('parse', async () => {
   const info = resolve('plain:abc')
-  await expect(parse(info)).resolves.toMatchObject({
+  await expect(fetchInfo(info)).resolves.toMatchObject({
     ...info, title: 'Title', keywords: 'a,b'
   })
 })
 
 test('tryRedirect', async () => {
-  //returns undefined when id does not start with "@"
+  // returns undefined when id does not redirect plugin
   let info = resolve('plain:abc')
   expect(tryRedirect(info)).toBeUndefined()
 
-  // resolves the redirect target when id starts with "@"
+  // resolves the redirect target
   mockLocation = 'https://target.example/bar'
   info = resolve('atredir:foo')
-  expect(info.id).toBe('@at!foo')
+  expect(info.id).toBe('at!foo')
   await expect(tryRedirect(info)).resolves.toMatchObject({ id: 'target!bar' })
 
-  //returns null when redirect yields no location
+  // returns null when redirect yields no location
   mockLocation = null
-  info = resolve('atredir:foo')
+  info = resolve('atredir:bar')
   await expect(tryRedirect(info)).resolves.toBeNull()
 })
 
@@ -144,7 +145,7 @@ test('xparse (redirect)', async () => {
   const [plugin, resolved, redirectedPromise, ...rest] = xparse('atredir:foo')
 
   expect(plugin.name).toBe('AtPrefixed')
-  expect(resolved.id).toBe('@at!foo')
+  expect(resolved.id).toBe('at!foo')
   expect(redirectedPromise).toBeInstanceOf(Promise)
   expect(rest).toEqual([])
 
