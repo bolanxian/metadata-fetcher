@@ -1,0 +1,3 @@
+- insert:
+    - id: metadata-fetcher
+      name: dsh-plugin-metadata-fetcher

@@ -1,0 +1,37 @@
+{
+  "name": "dsh-plugin-metadata-fetcher",
+  "version": "0.0.1",
+  "description": "获取元数据 (支持 Bilibili 等)",
+  "author": {
+    "name": "僠儖僲"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bolanxian/metadata-fetcher.git",
+    "directory": "plugin-dsh"
+  },
+  "icon": "favicon.svg",
+  "type": "module",
+  "main": "index.js",
+  "files": [
+    "index.js"
+  ],
+  "keywords": [
+    "chatbot",
+    "deepseek",
+    "plugin",
+    "meta",
+    "metadata",
+    "url"
+  ],
+  "peerDependencies": {
+    "cheerio": "^1.2.0",
+    "@deepseek-ai/cordis": "^4.0.4",
+    "@deepseek-ai/dsh-llm": ">=0.2.0-rc",
+    "@deepseek-ai/schemastery": "^3.18.4",
+    "temporal-polyfill": "^1.0.5"
+  },
+  "dsh": {
+    "bundle": { "patch": "./cordis.yml" }
+  }
+}
