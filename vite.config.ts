@@ -134,8 +134,9 @@ const buildTarget = (): Plugin => {
   map.set('cheerio', `${pre}export let load`)
   map.set('@xterm/xterm', `${pre}export let Terminal`)
   map.set('@xterm/addon-webgl', `${pre}export let WebglAddon`)
+  map.set('popper.js/dist/umd/popper.js', `${pre}export { default } from 'popper.js/dist/esm/popper.js'`)
 
-  let target: 'client' | 'server' | 'pages' | 'koishi'
+  let target: 'client' | 'server' | 'pages' | 'dsh' | 'koishi'
   return {
     name: 'target',
     enforce: 'pre',
@@ -153,8 +154,19 @@ const buildTarget = (): Plugin => {
         map.delete('qrcode')
         config.build!.outDir = '../dist-pages'
         config.build!.assetsDir = 'assets'
+      } else if (target == 'dsh') {
+        config.build!.outDir = '../plugin-dsh'
+        config.build!.lib = {
+          entry: 'main.dsh.ts',
+          formats: ['es'],
+          fileName: () => 'index.js'
+        }
+        external = [
+          '@deepseek-ai/cordis', '@deepseek-ai/schemastery', '@deepseek-ai/dsh-llm',
+          'cheerio', 'temporal-polyfill'
+        ]
       } else if (target == 'koishi') {
-        config.build!.outDir = '../koishi-plugin'
+        config.build!.outDir = '../plugin-koishi'
         config.build!.lib = {
           entry: 'main.koishi.ts',
           formats: ['cjs'],

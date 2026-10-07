@@ -5,11 +5,12 @@
   "author": {
     "name": "僠儖僲"
   },
-  "homepage": "https://github.com/bolanxian/metadata-fetcher/tree/master/koishi-plugin",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bolanxian/metadata-fetcher.git"
+    "url": "git+https://github.com/bolanxian/metadata-fetcher.git",
+    "directory": "plugin-koishi"
   },
+  "icon": "favicon.svg",
   "main": "index.js",
   "files": [
     "index.js"
@@ -24,8 +25,8 @@
   ],
   "peerDependencies": {
     "cheerio": "^1.2.0",
-    "koishi": "^4.18.10",
-    "temporal-polyfill": "^0.3.0"
+    "koishi": "^4.18.11",
+    "temporal-polyfill": "^1.0.5"
   },
   "koishi": {
     "service": {

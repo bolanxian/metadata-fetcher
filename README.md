@@ -65,7 +65,7 @@ deno task tiny:desktop
 可安装为 [Koishi](https://koishi.chat/zh-CN/) 插件
 ```batch
 bun run build:koishi
-cd koishi-plugin && bun pm pack
+cd plugin-koishi && bun pm pack
 
 cd <koishi-desktop>\data\instances\default
 yarn add ./koishi-plugin-metadata-fetcher-<version>.tgz
