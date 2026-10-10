@@ -7,11 +7,12 @@ import { defineDiscover } from '../discover'
 import { definePlugin, redirectPlugin } from '../plugin'
 import { REG_BGM, toShortUrl } from './bilibili-video'
 
+export const REG_BGM_FULL = /^bilibili-bangumi!((?:ep|ss)\d+)$/
 export const toUrl = (id: string) => `https://www.bilibili.com/bangumi/play/${id}`
 
 defineDiscover({
   name: 'Bilibili Bangumi',
-  discover: [REG_BGM],
+  discover: [REG_BGM_FULL],
   discoverHttp: [
     /^www\.bilibili\.com\/bangumi\/play\/((?:ep|ss)(?!0\d)\d+)/
   ],
@@ -22,11 +23,12 @@ definePlugin({
   path: 'bilibili/bangumi',
   resolve(path) {
     if (path.length !== 1) { return }
-    const id: string = path[0]!
-    if (!test(REG_BGM, id)) { return }
+    const shortId: string = path[0]!
+    if (!test(REG_BGM, shortId)) { return }
+    const id = `bilibili-bangumi!${shortId}`
     return {
       id, displayId: id, cacheId: id,
-      shortUrl: toShortUrl(id), url: toUrl(id)
+      shortUrl: toShortUrl(shortId), url: toUrl(shortId)
     }
   },
   async redirect({ url }) {
