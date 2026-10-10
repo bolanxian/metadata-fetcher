@@ -83,8 +83,8 @@ pub fn collect_webbrowser_info() -> Map<String, BrowserInfo> {
 
 pub struct SoftwareInfo {
     pub name: String,
-    pub version: String,
-    pub path: String,
+    pub version: Option<String>,
+    pub path: Option<String>,
 }
 impl From<SoftwareInfo> for JsonValue {
     fn from(info: SoftwareInfo) -> JsonValue {
@@ -97,17 +97,24 @@ impl From<SoftwareInfo> for JsonValue {
 }
 
 pub fn get_installed_software() -> Map<String, SoftwareInfo> {
-    let keys = [HKLM.open_subkey(r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall")];
+    let path = (
+        r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall",
+        r"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+    );
+    let keys = [HKLM.open_subkey(path.0), HKLM.open_subkey(path.1)];
     keys.iter()
         .map(Result::as_ref)
         .filter_map(Result::ok)
         .flat_map(|key: &RegKey| {
             key.enum_keys().filter_map(Result::ok).map(|id: String| {
                 let key = key.open_subkey(&id)?;
+                let name = key
+                    .get_value("DisplayName")
+                    .unwrap_or_else(|_| String::from(&id));
                 let info = SoftwareInfo {
-                    name: key.get_value("DisplayName")?,
-                    version: key.get_value("DisplayVersion")?,
-                    path: key.get_value("InstallLocation")?,
+                    name,
+                    version: key.get_value("DisplayVersion").ok(),
+                    path: key.get_value("InstallLocation").ok(),
                 };
                 io::Result::Ok((id, info))
             })

@@ -197,7 +197,7 @@ definePlugin<{ title: string, since: string, date: string }[]>({
     })
     const startThawing = nextChunjie.add({ months: -3 })
 
-    const diffOpts: Temporal.DifferenceOptions<'day'> = { largestUnit: 'day', smallestUnit: 'day' }
+    const diffOpts: Temporal.RoundingOptionsWithLargestUnit<'day'> = { largestUnit: 'day', smallestUnit: 'day' }
     const dtfOpts: Intl.DateTimeFormatOptions = { dateStyle: 'long' }
     return [
       {

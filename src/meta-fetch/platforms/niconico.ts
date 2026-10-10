@@ -7,7 +7,7 @@ import type { BaseCache } from '../cache'
 import { $fetch, jsonInit } from '../fetch'
 import { defineDiscover } from '../discover'
 import { definePlugin } from '../plugin'
-export const REG_NICO = /^((?:sm|nm|im|td|nc)(?!0\d)\d+)$/
+export const REG_NICO = /^((?:sm|nm|ss|im|td|nc)(?!0\d)\d+)$/
 export type Work = {
   globalId: string
   contentId: number
@@ -31,7 +31,8 @@ export type User = Record<'userId' | 'nickname' | 'description', string>
 
 export const toUrl = (id: string, type = slice(id, 0, 2)): string => {
   switch (type) {
-    case 'sm': case 'nm': return `https://www.nicovideo.jp/watch/${id}`
+    case 'sm': case 'nm': case 'ss':
+      return `https://www.nicovideo.jp/watch/${id}`
     case 'im': return `https://seiga.nicovideo.jp/seiga/${id}`
     case 'td': return `https://3d.nicovideo.jp/works/${id}`
     case 'nc': return `https://commons.nicovideo.jp/works/${id}`
@@ -79,7 +80,7 @@ defineDiscover({
   discover: [REG_NICO],
   discoverHttp: [
     /^nico\.ms\/([a-z]{2}\d+)/,
-    /^www\.nicovideo\.jp\/watch\/([sn]m\d+)/,
+    /^www\.nicovideo\.jp\/(?:watch|shorts)\/((?:sm|nm|ss)\d+)/,
     /^seiga\.nicovideo\.jp\/seiga\/(im\d+)/,
     /^sp\.seiga\.nicovideo\.jp\/seiga\/#!\/(im\d+)/,
     /^3d\.nicovideo\.jp\/works\/(td\d+)/,

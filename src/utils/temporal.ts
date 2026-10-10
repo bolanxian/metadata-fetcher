@@ -14,7 +14,7 @@ export const ready = $then(readyTemporal ?? voidPromise, _ => {
   void ({ toZonedDateTimeISO } = Instant.prototype)
 })
 
-type SmallestUnit = T.ToStringPrecisionOptions['smallestUnit'] & T.TimeUnit
+type SmallestUnit = T.ZonedDateTimeToStringOptions['smallestUnit'] & T.TimeUnit
 const autoSmallestUnitList: SmallestUnit[] = ['nanosecond', 'microsecond', 'millisecond', 'second']
 const autoSmallestUnit = (date: T.ZonedDateTime | T.PlainDateTime | T.PlainTime) => {
   for (const unit of autoSmallestUnitList) {
