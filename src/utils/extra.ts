@@ -8,6 +8,7 @@ import { from } from 'bind:Array'
 import { values } from 'bind:Object'
 import { discoverList, defineDiscover } from '@/meta-fetch/discover'
 import { definePlugin, definePluginComponent } from '@/meta-fetch/plugin'
+import { getSoftware } from './reg-utils'
 const TARGET = import.meta.env.TARGET
 const SSR = TARGET == 'server'
 const CSR = TARGET == 'client'
@@ -177,6 +178,31 @@ SSR || CSR ? definePluginComponent(software, defineComponent({
     ])
   }
 })) : null!
+
+SSR || CSR ? defineDiscover({
+  name: '',
+  discover: [/^(?!noGlobal)(?:\u539F\u795E|proto-god)$/],
+  handle: m => 'extra/proto-god/'
+}) : null!
+SSR || CSR ? definePlugin({
+  name: '', path: 'extra/proto-god',
+  resolve(path) {
+    if (!(path.length === 1 && path[0] === '')) { return }
+    const id = 'proto-god'
+    return { id, displayId: id, cacheId: id, shortUrl: '', url: '' }
+  },
+  async fetch(cache, info) {
+    if (!SSR) { return }
+    const software: Software = parse(await getSoftware())
+    return getOwn(software, '\u539F\u795E')
+  },
+  parse(data, info) {
+    return {
+      title: data.name,
+      description: data.path
+    }
+  }
+}) : null!
 
 defineDiscover({
   name: '',

@@ -35,6 +35,21 @@ definePlugin<[any, any]>({
     }
   },
   async fetch(cache, { id, url }) {
+    const transform = (text: string): any => {
+      const $ = cheerio.load(text, { baseURI: url })
+      const data = fromHTML($, /^\s*var\s+ytInitialData\s*=\s*(?={)/)
+      const contents = data.contents.twoColumnWatchNextResults.results.results.contents
+      if (contents == null) {
+        throw new TypeError('可能是私享视频', { cause: url })
+      }
+      const result = map([
+        'videoPrimaryInfoRenderer',
+        'videoSecondaryInfoRenderer'
+      ], name => find(contents, $ => hasOwn($, name))?.[name])
+      if (result[0] == null || result[1] == null) { return }
+      return result
+    }
+    let result: any
     const text = await cache.tryGet(`${id}.html`, async () => {
       const resp = await $fetch(url, {
         ...htmlInit,
@@ -45,18 +60,15 @@ definePlugin<[any, any]>({
       })
       const { status } = resp
       if (status !== 200) {
-        throw new TypeError(`Request failed with status code ${status}`)
+        throw new TypeError(`Request failed with status code ${status}`, { cause: url })
       }
-      return await resp.text()
+      const text = await resp.text()
+      if (text == null) { return }
+      result = transform(text)
+      if (result != null) { return text }
     })
-    if (text == null) { return }
-    const $ = cheerio.load(text, { baseURI: url })
-    const data = fromHTML($, /^\s*var\s+ytInitialData\s*=\s*(?={)/)
-    const contents = data.contents.twoColumnWatchNextResults.results.results.contents
-    return map([
-      'videoPrimaryInfoRenderer',
-      'videoSecondaryInfoRenderer'
-    ], name => find(contents, $ => hasOwn($, name))[name]) as any
+    if (result != null) { return result }
+    if (text != null) { return transform(text) }
   },
   parse: {
     title(data, info) {

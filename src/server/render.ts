@@ -10,7 +10,7 @@ import metaProperty from 'meta:property'
 import { config } from '@/config'
 import App, { type Store, Data, createStore, createData, prefetchStore } from '@/components/app.vue'
 import { name, server, CSP, CSP_VALUE, TYPE, types } from './core'
-const { stringify } = JSON
+const { stringify } = JSON, { error } = console
 
 let html0: string, html1: string, html2: string, html3: string
 let renderInit: ResponseInit
@@ -84,8 +84,13 @@ export const renderToHtml = async (mode: Store['mode'], input: string) => {
   const store = createStore(mode, input)
   store[Data] = createData(store)
   if (store.input) {
-    try { await prefetchStore(store) }
-    catch (err) { status = 500; reportError(err) }
+    try {
+      await prefetchStore(store)
+    } catch (err: any) {
+      status = 500; error(err)
+      const msg = err?.message
+      store.error = typeof msg === 'string' ? msg : 'Unknown error'
+    }
   }
   const attrs = ` data-store='${escapeAttrApos(stringify(store, void 0, 2))}'`
   const head = join(xbuildMeta(store), '\n')

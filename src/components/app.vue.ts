@@ -1,7 +1,7 @@
 
 import { defineComponent, shallowReactive, toRaw, watch, createVNode as h, onMounted } from 'vue'
 import type { Component, Prop, VNode, ComponentPublicInstance } from 'vue'
-import { Row, Col, Card, Input, Button, Message, Menu, Submenu, MenuItem } from 'view-ui-plus'
+import { Row, Col, Card, Input, Button, Alert, Message, Menu, Submenu, MenuItem } from 'view-ui-plus'
 import { type Override, getOwn, test, split, matchAll } from 'bind:utils'
 import { assign, entries } from 'bind:Object'
 import { from } from 'bind:Array'
@@ -26,6 +26,7 @@ export const Data = Symbol('Data')
 export interface Store {
   mode: 'default' | `batch:${DataBatch['batchType']}` | `dialog:${DataDialog['dialogType']}`
   input: string
+  error: string | null
 
   resolved: ResolvedInfo | null
   data: {} | null
@@ -79,7 +80,7 @@ export const createBatchParams = (type: string, input: string | Iterable<string>
 
 export const createStore = (mode: Store['mode'], input: string): Store => {
   return {
-    mode, input,
+    mode, input, error: null,
     resolved: null, data: null, parsed: null,
     output: '', config, [Data]: null
   }
@@ -305,6 +306,9 @@ export default defineComponent({
             onOnFocus: handleFocus,
             readonly: true
           }) : null,
+          store.error != null
+            ? h(Alert, { type: 'error', showIcon: true, style: 'margin-bottom:0' }, () => [store.error])
+            : null,
           SSR || CSR || (PAGES && !data.disabled)
             ? PAGES || (CSR && !data.disabled)
               ? h(Input, {
