@@ -4,8 +4,9 @@ import { type ComponentPublicInstance, createApp, createSSRApp } from 'vue'
 import { Message } from 'view-ui-plus'
 import { defineProperty, assign } from 'bind:Object'
 import { config } from './config'
-import { ready } from './init'
+import { init, waitVisible } from './init'
 import App, { type Store } from './components/app.vue'
+import { ready as readyTemporal } from '@/utils/temporal'
 const TARGET = import.meta.env.TARGET
 const CSR = TARGET == 'client'
 const tagName = 'metadata-fetcher'
@@ -15,7 +16,8 @@ declare global {
   }
 }
 
-await ready
+await Promise.all([waitVisible(), init(), readyTemporal])
+
 export class MetadataFetcher extends HTMLElement {
   static {
     customElements.define(tagName, this)

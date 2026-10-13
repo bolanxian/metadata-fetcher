@@ -1,9 +1,9 @@
 
-import { $then, encodeText as encode } from 'bind:utils'
+import { encodeText as encode } from 'bind:utils'
 import { map } from 'bind:Array'
 import type { SortedMap } from '@/utils/sorted-map'
 import { getCpu, getCpuUsage, getMemoryUsage, getOs, getRuntime, getPm } from '@/utils/info'
-import { regUtils } from '@/bind'
+import { getSoftware } from '@/utils/reg-utils'
 import { discoverMap, discoverHttpMap, discoverGlobalRegExp } from '@/meta-fetch/mod'
 import { name, server, TYPE, types, $, isLocalHost, $error } from './core'
 const { stringify } = JSON
@@ -56,13 +56,11 @@ data: ${stringify({ cpu: getCpuUsage(), memory: getMemoryUsage() })}
     headers: { server, [TYPE]: types.json }
   })
 }
-let softwarePromise: Promise<string>
 $['software'] = async ({ remoteAddr, request: { headers } }) => {
   if (!isLocalHost(remoteAddr, headers)) {
     return $error(403, name)
   }
-  softwarePromise ??= $then(regUtils(['software']), $ => $.stdout)
-  return new Response(await softwarePromise, {
+  return new Response(await getSoftware(), {
     headers: { server, [TYPE]: types.json }
   })
 }

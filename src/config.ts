@@ -3,7 +3,7 @@ import { getOwn } from 'bind:utils'
 import { seal, assign, keys } from 'bind:Object'
 import { indexOf } from 'bind:Array'
 import { cache } from './meta-fetch/plugin'
-import { regUtils } from './bind'
+import { getBrowser as getBrowserList } from '@/utils/reg-utils'
 const { parse, stringify } = JSON
 const { error } = console
 
@@ -93,7 +93,7 @@ export const init = async () => {
   if (SSR) {
     if (config.browsers == null) {
       try {
-        const data: Pick<Config, 'browsers' | 'defaultBrowser'> = parse(await (await regUtils(['browser'])).stdout)
+        const data = await getBrowserList()
         const browsers: Record<string, Browser> = { __proto__: null! }
         for (const key of keys(data.browsers!)) {
           const { name, args } = data.browsers![key]!

@@ -36,9 +36,9 @@ if (task === 'start') {
     setConsoleOutputCP(65001)
     setTitle(name)
     step = 1
-    const { escapeBatch, regUtils, loadServe, $string: { trim, replaceAll } } = await $MAIN
-    const { basename, init: initServe, serve, open } = await loadServe()
-    await initServe()
+    const { escapeBatch, getKnownFolder, createLnk, loadServe, $string: { replaceAll } } = await $MAIN
+    const { basename, serve, open } = await loadServe()
+
     const port = env['MF_PORT'], hostname = env['MF_HOST']
     const { url, origin } = await serve(port != null ? +port : void 0, hostname)!
     const icon = './dist/favicon.ico'
@@ -49,16 +49,16 @@ if (task === 'start') {
       notification(text, `创建${name}${status}`)
     }
     addEventListener('tray:create-lnk', async e => {
-      const desktopPath = trim(await (await regUtils(['known-folder', 'Desktop'])).stdout)
+      const desktopPath = await getKnownFolder('Desktop')
       const targetPath = resolve('./run.bat')
       const iconPath = resolve(icon)
       const savePath = resolve(desktopPath || '.', `${name}.lnk`)
-      const data = JSON.stringify({ targetPath, iconPath, savePath })
-      const exitCode = await (await regUtils(['shortcut', data])).exitCode
+
+      const exitCode = await createLnk({ targetPath, iconPath, savePath })
       notifyCreated('快捷方式', exitCode, savePath)
     })
     addEventListener('tray:create-sendto', async e => {
-      const sendToPath = trim(await (await regUtils(['known-folder', 'SendTo'])).stdout)
+      const sendToPath = await getKnownFolder('SendTo')
       const batchPath = resolve('./__cache__/_sendto.bat')
       await writeFile(batchPath, replaceAll(`\
 chcp 65001
@@ -71,8 +71,8 @@ if not %ERRORLEVEL% == 0 ( pause )
 `, '\n', '\r\n'))
       const iconPath = resolve(icon)
       const savePath = resolve(sendToPath || '.', `${name}.lnk`)
-      const data = JSON.stringify({ targetPath: batchPath, iconPath, savePath })
-      const exitCode = await (await regUtils(['shortcut', data])).exitCode
+
+      const exitCode = await createLnk({ targetPath: batchPath, iconPath, savePath })
       notifyCreated('发送到', exitCode, savePath)
     })
     addEventListener('server:reset-tray', e => {
@@ -136,8 +136,8 @@ if (task === 'fetch') {
   const [type, ..._args] = args
   for await (const $ of renderBatch(_args, type!)) { log($.error ?? $.value) }
 } else if (task === 'serve' || task == null) {
-  const { init, serve, open } = await MAIN.loadServe()
-  await init()
+  const { serve, open } = await MAIN.loadServe()
+
   const port = env['MF_PORT'], hostname = env['MF_HOST']
   const { url } = await serve(port != null ? +port : void 0, hostname)!
   await open?.(url)

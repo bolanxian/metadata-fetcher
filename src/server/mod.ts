@@ -12,7 +12,6 @@ import { handleRequest as handleRequestBbdown } from '@/utils/bbdown'
 import { default as checkVersion } from '@/utils/check-version.js?raw'
 import { parseToStreamJson } from '@/utils/stream-json'
 import { S } from '@/components/app.vue'
-import { ready } from '@/init'
 import { join } from '@/bind'
 
 import {
@@ -27,7 +26,6 @@ import.meta.glob(['./*'], { eager: true })
 
 import type { AddressInfo as NodeAddr } from 'node:net'
 declare const { ReadableStream }: typeof import('node:stream/web')
-await ready
 
 let runtime = 'unknown'
 switch (`${typeof Deno}:${typeof Bun}`) {
@@ -48,7 +46,8 @@ const defineStaticFile = (name: string, type: string, data: BodyInit) => {
   $[name] = (ctx) => call($clone, resp)
 }
 
-export const init = async () => {
+export let init = async () => {
+  init = null!
   initCore()
   const rawHtml = await readFile('./dist/index.html', { encoding: 'utf8' })
   initHtml(rawHtml)
