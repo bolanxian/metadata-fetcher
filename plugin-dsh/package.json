@@ -14,7 +14,9 @@
   "type": "module",
   "main": "index.js",
   "files": [
-    "index.js"
+    "index.js",
+    "cordis.yml",
+    "favicon.svg"
   ],
   "keywords": [
     "chatbot",

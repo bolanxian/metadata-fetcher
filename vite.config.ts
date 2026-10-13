@@ -136,7 +136,7 @@ const buildTarget = (): Plugin => {
   map.set('@xterm/addon-webgl', `${pre}export let WebglAddon`)
   map.set('popper.js/dist/umd/popper.js', `${pre}export { default } from 'popper.js/dist/esm/popper.js'`)
 
-  let target: 'client' | 'server' | 'pages' | 'dsh' | 'koishi'
+  let target: ImportMetaEnv['TARGET']
   return {
     name: 'target',
     enforce: 'pre',
@@ -161,10 +161,7 @@ const buildTarget = (): Plugin => {
           formats: ['es'],
           fileName: () => 'index.js'
         }
-        external = [
-          '@deepseek-ai/cordis', '@deepseek-ai/schemastery', '@deepseek-ai/dsh-llm',
-          'cheerio', 'temporal-polyfill'
-        ]
+        external = [/^@deepseek-ai\//, 'cheerio', 'temporal-polyfill']
       } else if (target == 'koishi') {
         config.build!.outDir = '../plugin-koishi'
         config.build!.lib = {

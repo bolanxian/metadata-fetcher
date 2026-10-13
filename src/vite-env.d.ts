@@ -31,5 +31,5 @@ declare module 'bind-script/src/utils' {
   export * from 'bind:utils'
 }
 interface ImportMetaEnv {
-  readonly TARGET: 'client' | 'server' | 'pages' | 'koishi'
+  readonly TARGET: 'client' | 'server' | 'pages' | 'dsh' | 'koishi'
 }

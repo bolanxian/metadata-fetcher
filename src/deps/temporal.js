@@ -5,12 +5,12 @@ export let Intl, toTemporalInstant
 export let ready
 if (typeof Temporal === 'object' && Temporal != null) {
   T = Temporal
-} else if (import.meta.env.TARGET == 'dsh') {
-  void ({ Temporal: T, Intl, toTemporalInstant } = await import('temporal-polyfill'))
-} else if (import.meta.env.TARGET == 'koishi') {
-  void ({ Temporal: T, Intl, toTemporalInstant } = require('temporal-polyfill'))
 } else {
-  ready = $then(import('./dep-temporal'), $ => {
+  const TARGET = import.meta.env.TARGET
+  const mod = TARGET == 'dsh' || TARGET == 'koishi'
+    ? import('temporal-polyfill')
+    : import('./dep-temporal')
+  ready = $then(mod, $ => {
     void ({ Temporal: T, Intl, toTemporalInstant } = $)
     globalThis.TemporalPolyfill = T
   })

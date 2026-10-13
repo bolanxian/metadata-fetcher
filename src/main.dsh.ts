@@ -8,9 +8,11 @@ import { LlmAdapter, type GenerateOptions, type LlmModelInfo, type Message, type
 
 import { match } from 'bind:utils'
 import { replaceAll } from 'bind:String'
+import { ready as readyTemporal } from '@/utils/temporal'
 import { resolve, xparse, init, NoCache, getDiscoverGlobalRegExp, } from '@/meta-fetch/mod'
 import { render as _render } from '@/render'
 init({ cache: new NoCache(), fetch })
+await readyTemporal
 
 const appName = 'MetadataFetcher'
 

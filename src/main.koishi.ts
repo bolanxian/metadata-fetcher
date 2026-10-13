@@ -7,12 +7,14 @@ import type { Session, Tables, Context, Field } from 'koishi'
 import { Schema, h } from 'koishi'
 import { LRUCache } from 'lru-cache'
 import { join } from './bind'
+import { ready as readyTemporal } from '@/utils/temporal'
 import type { ResolvedInfo, ParsedInfo } from './meta-fetch/mod'
 import { init, NoCache, resolve, tryRedirect, parse } from './meta-fetch/mod'
 import { config as defaultConfig } from './config'
 import { render, renderLine } from './render'
 const ready = (async () => {
   init({ cache: new NoCache(), fetch })
+  await readyTemporal
 })()
 
 export interface Config {
