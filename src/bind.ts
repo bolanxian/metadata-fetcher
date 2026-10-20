@@ -6,7 +6,7 @@ import { test, replace } from 'bind:utils'
 import { toString } from 'bind:Number'
 import {
   fromCharCode, charCodeAt, codePointAt, indexOf,
-  padStart, toUpperCase, slice, replaceAll
+  padStart, toUpperCase, slice
 } from 'bind:String'
 import { freeze } from 'bind:Object'
 import * as cheerio from 'cheerio'
@@ -33,6 +33,8 @@ export const join = (iter: Iterable<any>, separator = ',') => {
 
 /** [\x21-\x7E] to [\uFF01-\uFF5E] */
 export const charToFullwidth = ($0: string) => fromCharCode(charCodeAt($0, 0) + 0xFEE0)
+export const filename = (str: string) => replace(/[\\/:*?"<>|]/g, str, charToFullwidth)
+
 const REG_NOT_FIRST_32 = /(?<=^.{32}).+$/su
 export const onlyFirst32 = (input: string, ellipsis = '…') => replace(REG_NOT_FIRST_32, input, ellipsis)
 const REG_LAST = /.$/su
@@ -85,8 +87,8 @@ export const escapeAttr = createEscaper(/["&<>\xA0]/g, escapeMap)
 export const escapeText = createEscaper(/[&<>\xA0]/g, escapeMap)
 
 export const escapeBatch = (str: string) => {
-  str = replace(/[\r\n]+/g, str, ' ')
-  str = replaceAll(str, '"', '\\"')
+  str = replace(/[\x00-\x1F]+/g, str, ' ')
+  str = replace(/[%"]/g, str, '$&$&')
   return str
 }
 export const escapeBatchWithDelimiter = (str: string) => {

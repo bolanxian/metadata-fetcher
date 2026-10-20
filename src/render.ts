@@ -1,7 +1,7 @@
 
 import { getOwn, replace } from 'bind:utils'
 import { includes, trim, split, indexOf, slice } from 'bind:String'
-import { charToFullwidth, controlCharToPicture } from './bind'
+import { charToFullwidth, filename, controlCharToPicture } from './bind'
 import { config } from './config'
 import { type ResolvedInfo, type ParsedInfo, resolve, parse, xparse } from '@/meta-fetch/mod'
 const { parse: parseJSON } = JSON
@@ -39,8 +39,8 @@ export const renderLine = (data: Record<string, string>, template: string) => {
       val = getOwn(data, trim(name!))
       if (val != null) {
         for (const arg of args) {
-          const fn: (str: string) => string = getOwn(renderLine, trim(arg))!
-          val = fn(val)
+          const fn = getOwn(transformMap, trim(arg))
+          if (fn != null) { val = fn(val) }
         }
       }
     } else {
@@ -50,8 +50,11 @@ export const renderLine = (data: Record<string, string>, template: string) => {
     return controlCharToPicture(val)
   })
 }
-renderLine.escape = (str: string) => replace(/(?<=^(?=av)|^a(?=v)|^(?=BV)|^B(?=V))./g, str, charToFullwidth)
-renderLine.filename = (str: string) => replace(/[\\/:*?"<>|]/g, str, charToFullwidth)
+const transformMap: Record<string, (str: string) => string> = {
+  __proto__: null!,
+  filename,
+  escape: (str: string) => replace(/(?<=^(?=av)|^a(?=v)|^(?=BV)|^B(?=V))./g, str, charToFullwidth)
+}
 
 export type OnParsed = (parsed: ResolvedInfo & ParsedInfo) => void
 export const renderBatchSingle = (
@@ -76,7 +79,7 @@ export const renderBatchSingleWithParse = async (
   }
   let parsed: ParsedInfo | null | undefined, cause: any
   try { parsed = await parsedPromise } catch (e) { cause = e }
-  if (parsed == null) { return { error: `Not Found : ${resolved.id}`, cause } }
+  if (parsed == null) { return { error: `Unknown : ${resolved.id}`, cause } }
   const data = { ...sep, ...resolved, ...parsed }
   onParsed?.(data)
   return { error: null, value: renderLine(data, template) }

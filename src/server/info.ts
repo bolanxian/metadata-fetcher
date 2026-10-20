@@ -1,9 +1,10 @@
 
 import { encodeText as encode } from 'bind:utils'
+import { keys } from 'bind:Object'
 import { map } from 'bind:Array'
 import type { SortedMap } from '@/utils/sorted-map'
-import { getCpu, getCpuUsage, getMemoryUsage, getOs, getRuntime, getPm } from '@/utils/info'
 import { getSoftware } from '@/utils/reg-utils'
+import { getCpu, getCpuUsage, getMemoryUsage, getOs, getRuntime, getPm } from '@/utils/info'
 import { discoverMap, discoverHttpMap, discoverGlobalRegExp } from '@/meta-fetch/mod'
 import { name, server, TYPE, types, $, isLocalHost, $error } from './core'
 const { stringify } = JSON
@@ -34,7 +35,7 @@ data: ${stringify({ cpu: getCpuUsage(), memory: getMemoryUsage() })}
       cancel(reason) {
         clearInterval(timer)
       }
-    }) as any as ReadableStream, {
+    }), {
       headers: { server, [TYPE]: 'text/event-stream' }
     })
   }
@@ -48,7 +49,7 @@ data: ${stringify({ cpu: getCpuUsage(), memory: getMemoryUsage() })}
     cpuUsage: getCpuUsage(),
     memoryUsage: getMemoryUsage(),
     os: getOs(), runtime: getRuntime(), pm: getPm(),
-    routeList: Object.keys($),
+    routeList: keys($),
     discoverGlobalRegExp: discoverGlobalRegExp?.source ?? null,
     sortedRegList: map([...discoverMap.keys()], data.mapper, discoverMap),
     sortedHttpRegList: map([...discoverHttpMap.keys()], data.mapper, discoverHttpMap),

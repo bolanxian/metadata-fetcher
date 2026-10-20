@@ -1,16 +1,20 @@
 
 export const name = 'Metadata Fetcher'
-export let [, , task, ...args]: [any, any, string | ImportMeta, ...string[]]
-  = import.meta.main || import.meta.filename === argv[1]
-    ? argv as any
-    : [, , import.meta]
 
-import { resolve } from 'node:path'
+import { resolve, relative } from 'node:path'
 import { writeFile } from 'node:fs/promises'
-import process, { argv, env, exit } from 'node:process'
+import process, { cwd, argv, env, exit } from 'node:process'
 
 const $MAIN = import('@/main.ssr')
-const { log, error } = console
+const { log, warn, error } = console
+let [, , task, ...args] = argv
+
+if (!import.meta.main) {
+  warn(`warn: This module (${relative(cwd(), import.meta.filename)}) should be run as the main module`)
+}
+if (env['MF_HOST'] === '0.0.0.0') {
+  warn(`warn: MF_HOST (${env['MF_HOST']}) is a wildcard address`)
+}
 
 if (task === 'start') {
   log(String.raw`
@@ -62,7 +66,7 @@ if (task === 'start') {
       const batchPath = resolve('./__cache__/_sendto.bat')
       await writeFile(batchPath, replaceAll(`\
 chcp 65001
-curl -X PUT --data %1 ^
+curl -X PUT --data "%~dpnx1" ^
   -H "content-type: text/plain" ^
   -H "origin: ${escapeBatch(origin)}" ^
   -H "sec-x-${basename}: true" ^
@@ -181,7 +185,7 @@ StartupNotify=true
     const fileName = resolve(dirName, 'metadata-fetcher.desktop')
     await writeFile(fileName, desktopEntry, options)
   }
-} else if (task !== import.meta) {
+} else {
   error(new RangeError(`unrecognized subcommand '${task}'`))
   exit(1)
 }

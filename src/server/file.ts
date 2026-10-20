@@ -1,11 +1,12 @@
 
 import { stat, opendir, open as openFileHandle } from 'node:fs/promises'
+import { LRUCache } from 'lru-cache'
 import { encodeText as encode, match, split } from 'bind:utils'
 import { trim, slice, lastIndexOf } from 'bind:String'
-import { LRUCache } from 'lru-cache'
-import { illustId, illustName } from '@/utils/illust-name'
-import { renderBatch } from '@/render'
+import { empty, escapeBatch } from '@/bind'
+import { renderBatch, type BatchResult } from '@/render'
 import { S, createBatchParams } from '@/components/app.vue'
+import { illustId, illustName } from '@/utils/illust-name'
 import { getDiscoverGlobalRegExp, resolve } from '@/meta-fetch/mod'
 import {
   name, basename, url, server, TYPE, types, $, open,
@@ -16,38 +17,54 @@ declare const { ReadableStream }: typeof import('node:stream/web')
 
 type FileMapKey = `${'F' | 'D'}-${string}`
 type GetIter = (path: string) => AsyncIterableIterator<string>
-export const fileMap = new LRUCache<FileMapKey, string>({ max: 10 })
-function* matchId(data: string) {
-  for (const id of match(getDiscoverGlobalRegExp(), data) ?? []) {
-    let newId = resolve(id)?.id
-    if (newId != null) { yield newId }
+type Mode = {
+  matchId(line: string): IterableIterator<string>
+  getName(line: string): Promise<{ error: string | null, name: string } | undefined>
+}
+
+const modeDefault: Mode = {
+  *matchId(line) {
+    for (const id of match(getDiscoverGlobalRegExp(), line) ?? empty) {
+      const newId = resolve(id)?.id
+      if (newId != null) { yield newId }
+    }
+  },
+  async getName(line) {
+    let name = line, ext = '', i = lastIndexOf(line, '.')
+    if (i > 0) { name = slice(line, 0, i); ext = slice(line, i) }
+    let id: string | undefined; for (id of modeDefault.matchId(name)) { break }
+    if (id == null) { return }
+    let result: BatchResult | undefined; for await (result of renderBatch([id], 'name')) { break }
+    name = result?.error === null ? result.value : `[${id}]`
+    return { error: result?.error ?? null, name: `${name}${ext}` }
   }
 }
-function* matchIllust(line: string) {
-  const id = illustId(line)
-  if (id != null) { yield id }
+const modeIllust: Mode = {
+  *matchId(line) {
+    const id = illustId(line)
+    if (id != null) { yield id }
+  },
+  getName: illustName
 }
-async function* xmatcher(getIter: GetIter, mode: string | null, path: string) {
+
+export const fileMap = new LRUCache<FileMapKey, string>({ max: 10 })
+const modeMap: Record<string, Mode> = {
+  __proto__: null!,
+  default: modeDefault,
+  illust: modeIllust,
+}
+
+async function* generateBatch(getIter: GetIter, mode: Mode, path: string) {
   try {
+    const { getName } = mode
     yield encode('\r\nchcp 65001\r\npause\r\n\r\n')
-    if (mode === 'illust') {
-      for await (const line of getIter(path)) {
-        const name = await illustName(line)
-        if (name == null) { continue }
-        yield encode(`ren "${line}" "${name}"\r\n`)
-      }
-    } else {
-      for await (const line of getIter(path)) {
-        let name = line, ext = '', i = lastIndexOf(line, '.')
-        if (i > 0) { name = slice(line, 0, i); ext = slice(line, i) }
-        let id; for (id of matchId(name)) { break }
-        if (id == null) { continue }
-        let result; for await (result of renderBatch([id], 'name')) { break }
-        name = result?.error === null ? result.value : `[${id}]`
-        yield encode(`ren "${line}" "${name}${ext}"\r\n`)
-        if (result?.error != null) {
-          yield encode(`rem "${result.error}"\r\n`)
-        }
+    for await (const line of getIter(path)) {
+      const result = await getName(line)
+      if (result == null) { continue }
+      const { error, name } = result
+      yield encode(`ren "${escapeBatch(line)}" "${escapeBatch(name)}"\r\n`)
+      if (error != null) {
+        yield encode(`rem "Error: ${escapeBatch(error)}"\r\n`)
       }
     }
     yield encode('\r\n:end\r\npause\r\n')
@@ -62,6 +79,10 @@ $['file'] = async (ctx) => {
     return $error(403, name)
   }
   const params = ctx.url.searchParams
+
+  const mode = modeMap[params.get('mode') ?? 'default']
+  if (mode == null) { return $error(400, name) }
+
   const guid = params.get('guid') ?? ''
   let getIter: GetIter
   switch (slice(guid, 0, 2)) {
@@ -72,9 +93,8 @@ $['file'] = async (ctx) => {
   const path = fileMap.get(guid as any)
   if (path == null) { return $error(404, name) }
 
-  const mode = params.get('mode')
   if (params.get('output') === 'batch') {
-    const body: ReadableStream = ReadableStream.from(xmatcher(getIter, mode, path)) as any
+    const body: ReadableStream = ReadableStream.from(generateBatch(getIter, mode, path)) as any
     return new Response(body, {
       headers: {
         server, [TYPE]: `${types.txt};charset=UTF-8`,
@@ -82,13 +102,10 @@ $['file'] = async (ctx) => {
       }
     })
   }
-  let matchFn = matchId
-  if (mode === 'illust') {
-    matchFn = matchIllust
-  }
+  const { matchId } = mode
   const set = new Set<string>(); let i = 0
   loop: for await (const data of getIter(path)) {
-    for (let id of matchFn(data)) {
+    for (const id of matchId(data)) {
       set.add(id)
       if (128 < ++i) {
         set.add('!truncate')
@@ -100,6 +117,7 @@ $['file'] = async (ctx) => {
   const location = new URL(`./.batch?${createBatchParams(batch, set)}`, ctx.url).href
   return $redirect(location)
 }
+
 const genFile: GetIter = async function* (path) {
   const MAX_SIZE = 16 * 1024 * 1024
   const fileHandle = await openFileHandle(path, 'r');
@@ -115,13 +133,14 @@ const genFile: GetIter = async function* (path) {
 const genDirectory: GetIter = async function* (path) {
   const dir = await opendir(path)
   try {
-    for await (let dirent of dir) {
+    for await (const dirent of dir) {
       yield dirent.name
     }
   } finally {
     await dir.close()
   }
 }
+
 $['open-file'] = async ({ remoteAddr, request }) => {
   const { method, headers } = request
   if (!(
