@@ -34,7 +34,7 @@ definePlugin<[any, any]>({
       url: `https://${host}/watch?v=${path[0]}`
     }
   },
-  async fetch(cache, { id, url }) {
+  async fetch(cache, { cacheId, url }) {
     const transform = (text: string): any => {
       const $ = cheerio.load(text, { baseURI: url })
       const data = fromHTML($, /^\s*var\s+ytInitialData\s*=\s*(?={)/)
@@ -50,7 +50,7 @@ definePlugin<[any, any]>({
       return result
     }
     let result: any
-    const text = await cache.tryGet(`${id}.html`, async () => {
+    const text = await cache.tryGet(`${cacheId}.html`, async () => {
       const resp = await $fetch(url, {
         ...htmlInit,
         headers: {
@@ -60,6 +60,9 @@ definePlugin<[any, any]>({
       })
       const { status } = resp
       if (status !== 200) {
+        if (status === 302) {
+          throw new TypeError(`Request failed. Please download "${url}" to "${cacheId}.html".`)
+        }
         throw new TypeError(`Request failed with status code ${status}`, { cause: url })
       }
       const text = await resp.text()

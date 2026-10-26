@@ -2,7 +2,7 @@
 import { getOwn } from 'bind:utils'
 import { seal, assign, keys } from 'bind:Object'
 import { indexOf } from 'bind:Array'
-import { cache } from './meta-fetch/plugin'
+import { type Config as MetaFetch, config as metaFetch, cache } from '@/meta-fetch/mod'
 import { getBrowser as getBrowserList } from '@/utils/reg-utils'
 const { parse, stringify } = JSON
 const { error } = console
@@ -26,7 +26,7 @@ export interface Config {
   template: string
   batch: Record<string, { name: string, template: string }>
 
-  nicoUrlType: 'watch' | 'tree'
+  metaFetch: MetaFetch
 }
 export const config: Config = seal({
   __proto__: null!,
@@ -54,7 +54,8 @@ description="简介：\\n"
     name: { name: '文件名', template: '[${ownerName|filename}][${id}]${title|filename}' },
     escape: { name: '', template: '［${displayId|escape}］${title}' },
   },
-  nicoUrlType: 'watch'
+  get metaFetch() { return metaFetch },
+  set metaFetch(data) { assign(metaFetch, data) },
 })
 
 export const readConfig = async () => {
@@ -89,7 +90,13 @@ export const writeConfig = async (_config: Config) => {
 }
 
 export const init = async () => {
-  await readConfig()
+  let needWrite = false
+  try {
+    await readConfig()
+  } catch (e) {
+    error(e)
+    needWrite = true
+  }
   if (SSR) {
     if (config.browsers == null) {
       try {
@@ -105,9 +112,12 @@ export const init = async () => {
         config.browsers = {}
         if (e != null) { error(e) }
       } finally {
-        await writeConfig(config)
+        needWrite = true
       }
     }
+  }
+  if (needWrite) {
+    await writeConfig(config)
   }
 }
 export const getBrowser = (name = config.defaultBrowser): Browser | undefined => {

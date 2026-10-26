@@ -2,13 +2,14 @@
 import { test, match } from 'bind:utils'
 import { join } from '@/bind'
 import { instantToString } from '@/utils/temporal'
+import { config } from '../config'
 import { $fetch, jsonInit } from '../fetch'
 import { defineDiscover } from '../discover'
 import { definePlugin } from '../plugin'
 const SSR = import.meta.env.TARGET == 'server'
 const { now } = Date
-const apiHost = 'www.cdnhth.cc'
 
+export const defaultApiHost = 'www.cdnbea.net'
 export const REG_JM = /^[Jj][Mm]((?!0\d)\d+)$/
 
 defineDiscover({
@@ -60,6 +61,7 @@ const decryptData = (ts: number, encryptedData: Buffer) => {
 const getAlbum = async (id: string) => {
   Buffer ??= (await import('node:buffer')).Buffer
   crypto ??= await import('node:crypto')
+  const apiHost = config.hostOfJmcomic ?? defaultApiHost
 
   const ts = Math.trunc(now() / 1000)
   const token = md5(`${ts}18comicApp`)

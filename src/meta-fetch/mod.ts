@@ -1,5 +1,6 @@
 
 export * from './cache'
+export * from './config'
 export * from './fetch'
 export * from './discover'
 export * from './router'

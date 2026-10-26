@@ -10,7 +10,7 @@ import { REG_INIT, toSpaceUrl } from './bilibili-video'
 import { fromHTML } from '@/utils/find-json-object'
 import { instantToString } from '@/utils/temporal'
 export const REG_CV = /^cv((?!0\d)\d+)$/
-export const REG_OPUS = /^bili!opus!(\d{18,})$/
+export const REG_OPUS = /^bilibili-opus!(\d{18,})$/
 
 defineDiscover({
   name: 'Bilibili article',
@@ -51,16 +51,17 @@ definePlugin({
   resolve(path) {
     if (path.length !== 1) { return }
     const oid = path[0]
-    const id = `bili!opus!${oid}`
+    const id = `bilibili-opus!${oid}`
     if (!test(REG_OPUS, id)) { return }
+    const cacheId = `bili!opus!${oid}`
     return {
-      id, displayId: id, cacheId: id, shortUrl: '',
+      id, displayId: id, cacheId, shortUrl: '',
       url: `https://www.bilibili.com/opus/${oid}`
     }
   },
-  async fetch(cache, { id, url }) {
-    return await cache.json(id, async () => {
-      let text = await cache.get(`${id}.html`)
+  async fetch(cache, { cacheId, url }) {
+    return await cache.json(cacheId, async () => {
+      let text = await cache.get(`${cacheId}.html`)
       if (text == null) {
         const resp = await $fetch(url, htmlInit)
         const { status } = resp
@@ -72,7 +73,7 @@ definePlugin({
       const $ = cheerio.load(text, { baseURI: url })
       const data = fromHTML($, REG_INIT)
       if (data == null && $('title').text() === '\u9A8C\u8BC1\u7801_\u54D4\u54E9\u54D4\u54E9') {
-        throw new TypeError(`Request failed. Please download "${url}" to "${id}.html".`)
+        throw new TypeError(`Request failed. Please download "${url}" to "${cacheId}.html".`)
       }
       return data.detail
     })
