@@ -8,7 +8,7 @@ export type StreamJson = {
   resolved?: ResolvedInfo | null
   redirected?: ResolvedInfo | null
   parsed?: (ResolvedInfo & ParsedInfo) | null
-  rended?: string | null
+  rendered?: string | null
   error: { step: number, message: string } | null
 }
 export async function* parseToStreamJson(input: string) {
@@ -26,7 +26,7 @@ export async function* parseToStreamJson(input: string) {
   "parsed":${stringify(parsed ?? null)}`)
     step = 3
     yield encode(`,
-  "rended":${stringify(parsed != null ? render(parsed) : null)}`)
+  "rendered":${stringify(parsed != null ? render(parsed) : null)}`)
     step = 4
     yield encode(`,
   "error":null

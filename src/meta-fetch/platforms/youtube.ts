@@ -34,8 +34,8 @@ definePlugin<[any, any]>({
       url: `https://${host}/watch?v=${path[0]}`
     }
   },
-  async fetch(cache, { id, url }) {
-    const transform = (text: string): any => {
+  async fetch(cache, { cacheId, url }) {
+    const transform = (text: string): [any, any] | null => {
       const $ = cheerio.load(text, { baseURI: url })
       const data = fromHTML($, /^\s*var\s+ytInitialData\s*=\s*(?={)/)
       const contents = data.contents.twoColumnWatchNextResults.results.results.contents
@@ -45,30 +45,35 @@ definePlugin<[any, any]>({
       const result = map([
         'videoPrimaryInfoRenderer',
         'videoSecondaryInfoRenderer'
-      ], name => find(contents, $ => hasOwn($, name))?.[name])
-      if (result[0] == null || result[1] == null) { return }
+      ], name => find(contents, $ => hasOwn($, name))?.[name]) as [any, any]
+      if (result[0] == null || result[1] == null) { return null }
       return result
     }
-    let result: any
-    const text = await cache.tryGet(`${id}.html`, async () => {
-      const resp = await $fetch(url, {
-        ...htmlInit,
-        headers: {
-          ...htmlInit.headers,
-          'accept-language': 'en-US',
+    let result: [any, any] | null | undefined
+    const text = await cache.tryGet(`${cacheId}.html`, async () => {
+      let text: string
+      try {
+        const resp = await $fetch(url, {
+          ...htmlInit,
+          headers: {
+            ...htmlInit.headers,
+            'accept-language': 'en-US',
+          }
+        })
+        const { status } = resp
+        if (status !== 200) {
+          throw new TypeError(`Request failed with status code ${status}`, { cause: url })
         }
-      })
-      const { status } = resp
-      if (status !== 200) {
-        throw new TypeError(`Request failed with status code ${status}`, { cause: url })
+        text = await resp.text()
+      } catch (cause) {
+        throw new TypeError(`Request failed. Please download "${url}" to "${cacheId}.html".`, { cause })
       }
-      const text = await resp.text()
-      if (text == null) { return }
       result = transform(text)
       if (result != null) { return text }
     })
     if (result != null) { return result }
-    if (text != null) { return transform(text) }
+    if (result === null) { return }
+    if (text != null) { return transform(text) ?? void 0 }
   },
   parse: {
     title(data, info) {

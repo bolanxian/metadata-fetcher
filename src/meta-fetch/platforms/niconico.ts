@@ -2,7 +2,7 @@
 import { test } from 'bind:utils'
 import { slice } from 'bind:String'
 import { htmlToText } from '@/bind'
-import { config } from '@/config'
+import { config } from '../config'
 import type { BaseCache } from '../cache'
 import { $fetch, jsonInit } from '../fetch'
 import { defineDiscover } from '../discover'

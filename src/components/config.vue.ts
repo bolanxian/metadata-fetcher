@@ -93,8 +93,8 @@ export default defineComponent({
             h(Col, $colAttrs1, () => [
               h(Select, {
                 transfer: true,
-                modelValue: config.nicoUrlType,
-                'onUpdate:modelValue'(_: any) { config.nicoUrlType = _ }
+                modelValue: config.metaFetch.nicoUrlType,
+                'onUpdate:modelValue'(_: any) { config.metaFetch.nicoUrlType = _ }
               }, () => [
                 h(Option, { value: 'watch' }, () => ['默认']),
                 h(Option, { value: 'tree' }, () => ['ニコニ･コモンズ'])
