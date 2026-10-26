@@ -3,7 +3,7 @@ import { getOwn, replace } from 'bind:utils'
 import { includes, trim, split, indexOf, slice } from 'bind:String'
 import { charToFullwidth, filename, controlCharToPicture } from './bind'
 import { config } from './config'
-import { type ResolvedInfo, type ParsedInfo, resolve, parse, xparse } from '@/meta-fetch/mod'
+import { type ResolvedInfo, type ParsedInfo, resolve, xparse } from '@/meta-fetch/mod'
 const { parse: parseJSON } = JSON
 
 export type Result<T, E extends {}> = { error: E, cause?: any } | { error: null, value: T }
@@ -68,15 +68,19 @@ export const renderBatchSingle = (
 export const renderBatchSingleWithParse = async (
   arg: string, template: string, sep: Record<string, string>, onParsed?: OnParsed
 ): Promise<BatchResult> => {
-  let [, resolved, redirected, , parsedPromise] = xparse(arg)
-  if (resolved == null) { return { error: `Unknown Input : ${arg}` } }
-  if (redirected != null) {
-    if ((resolved = (await redirected)!) != null) {
-      parsedPromise = parse(resolved)
-    } else {
+  let [, resolved, redirectedPromise, , parsedPromise] = xparse(arg)
+  let redirectCount = 0
+  while (redirectedPromise != null) {
+    const redirected = await redirectedPromise
+    if (redirected == null) {
       return { error: `Redirect Failed : ${arg}` }
     }
+    if (!(++redirectCount <= 5)) {
+      return { error: `Redirect Too Many : ${arg}` }
+    }
+    void ([, resolved, redirectedPromise, , parsedPromise] = xparse(redirected.url))
   }
+  if (resolved == null) { return { error: `Unknown Input : ${arg}` } }
   let parsed: ParsedInfo | null | undefined, cause: any
   try { parsed = await parsedPromise } catch (e) { cause = e }
   if (parsed == null) { return { error: `Unknown : ${resolved.id}`, cause } }

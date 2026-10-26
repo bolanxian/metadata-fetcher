@@ -83,12 +83,12 @@ const cache: LRUCache<string, ResolvedInfo & ParsedInfo, { context: Context, res
 type RedirectStatus = 'too-many' | 'fail' | null
 const fetchInfo = async (ctx: Context, input: string): Promise<{
   resolved: ResolvedInfo | null
-  redirectList: ResolvedInfo[]
+  redirectList: string[]
   redirectStatus: RedirectStatus
   parsed: ResolvedInfo & ParsedInfo | undefined
 }> => {
   let resolved: ResolvedInfo | null
-  const redirectList: ResolvedInfo[] = []
+  const redirectList: string[] = []
   let redirectStatus: RedirectStatus = null
   let parsed: ResolvedInfo & ParsedInfo | undefined
   redirect: while (true) {
@@ -98,17 +98,17 @@ const fetchInfo = async (ctx: Context, input: string): Promise<{
     const redirectedPromise = tryRedirect(resolved)
     if (redirectedPromise != null) {
       const redirected = await redirectedPromise
-      if (redirected != null) {
-        input = redirected.url
-        if (redirectList.length < 5) {
-          redirectList[redirectList.length] = redirected
-          continue redirect
-        }
+      if (redirected == null) {
+        redirectStatus = 'fail'
+        break redirect
+      }
+      input = redirected
+      redirectList[redirectList.length] = redirected
+      if (!(redirectList.length <= 5)) {
         redirectStatus = 'too-many'
         break redirect
       }
-      redirectStatus = 'fail'
-      break redirect
+      continue redirect
     }
     parsed = await cache.fetch(resolved.cacheId, { context: { context: ctx, resolved } })
     break redirect

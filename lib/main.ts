@@ -103,21 +103,20 @@ if (task === 'fetch') {
     redirect: while (true) {
       const [, resolved, redirectedPromise, , parsedPromise] = xparse(arg)
       if (resolved == null) { return }
-      if (msg != null) { yield msg; msg = null }
       if (redirectedPromise != null) {
+        if (msg != null) { yield msg; msg = null }
         const redirected = await redirectedPromise
-        if (redirected != null) {
-          arg = redirected.url
-          if (redirectCount < 5) {
-            yield `跳转：${arg}`
-            redirectCount++
-            continue redirect
-          }
+        if (redirected == null) {
+          yield `跳转失败：${resolved.id}`
+          return
+        }
+        arg = redirected.url
+        if (!(++redirectCount <= 5)) {
           yield `跳转次数过多：${arg}`
           return
         }
-        yield `跳转失败：${resolved.id}`
-        return
+        yield `跳转：${arg}`
+        continue redirect
       }
       const parsed = await parsedPromise
       yield parsed != null

@@ -65,13 +65,13 @@ export const resolve = (input: string): ResolvedInfo | null => {
   return null
 }
 
-const redirectCache = new LRUCache<string, Promise<ResolvedInfo | null>>({ max: 20 })
-export const tryRedirectInner = async (info: ResolvedInfo, plugin: Plugin): Promise<ResolvedInfo | null> => {
+const redirectCache = new LRUCache<string, Promise<string | null>>({ max: 20 })
+export const tryRedirectInner = async (info: ResolvedInfo, plugin: Plugin): Promise<string | null> => {
   const result = await plugin.redirect!(info)
   if (result == null) { return null }
-  return resolve(result)
+  return result
 }
-export const tryRedirect = (info: ResolvedInfo): Promise<ResolvedInfo | null> | undefined => {
+export const tryRedirect = (info: ResolvedInfo): Promise<string | null> | undefined => {
   const plugin: Plugin = get(resolvedToPlugin, info)
   if (!hasOwn(plugin, 'redirect')) { return }
   const { id } = info
@@ -104,14 +104,16 @@ export const xparse: (input: string, cache?: BaseCache) => [
   parsedPromise?: ReturnType<typeof parse>
 ] = function* (input: string, $cache = cache) {
   if (!(input.length > 2)) { return }
-  const resolved = resolve(input)
+  const resolved: ResolvedInfo | null = resolve(input)
   if (resolved == null) { return }
   const plugin: Plugin = get(resolvedToPlugin, resolved)
   yield plugin
   yield resolved
-  const redirectedPromise = tryRedirect(resolved)
-  yield redirectedPromise
-  if (redirectedPromise != null) { return }
+  const maybeRedirected = tryRedirect(resolved)
+  yield maybeRedirected != null ? $then(
+    maybeRedirected, redirected => redirected != null ? resolve(redirected) : null
+  ) satisfies Promise<ResolvedInfo | null> : void 0
+  if (maybeRedirected != null) { return }
   const dataPromise = $then(voidPromise, () => plugin.fetch($cache, resolved))
   yield dataPromise
   const parsedPromise: ReturnType<typeof parse> = $then(dataPromise, data => {
@@ -171,9 +173,11 @@ export const redirectPlugin: Pick<Plugin<{
   plugin: Plugin, data: any, info: ResolvedInfo
 }>, 'fetch' | 'parse'> = {
   async fetch(cache, $info) {
-    const info = await tryRedirect($info)
+    const input = await tryRedirect($info)
+    const info = input != null ? resolve(input) : null
     if (info == null) { return }
     const plugin: Plugin = get(resolvedToPlugin, info)
+    if (hasOwn(plugin, 'redirect')) { return }
     const data = await plugin.fetch(cache, info)
     return { plugin, data, info }
   },
