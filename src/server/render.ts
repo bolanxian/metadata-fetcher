@@ -1,9 +1,10 @@
 
 import { createSSRApp } from 'vue'
 import { renderToString } from 'vue/server-renderer'
-import { trim, concat, slice, replaceAll, startsWith } from 'bind:String'
+import { trim, concat, slice, startsWith } from 'bind:String'
 import { assert, getOwn, split } from 'bind:utils'
-import { join, onlyFirst32, escapeJson, escapeText, escapeAttr, escapeAttrApos } from '@/bind'
+import { join, onlyFirst32, controlCharToSpace } from '@/bind'
+import { escapeJson, escapeText, escapeAttr, escapeAttrApos } from '@/bind'
 import metaName from 'meta:name'
 import metaItemprop from 'meta:itemprop'
 import metaProperty from 'meta:property'
@@ -18,29 +19,30 @@ let renderInit: ResponseInit
 const urlKeys = ['shortUrl', 'url', 'relatedUrl']
 function* xbuildMeta({ mode, parsed, [Data]: data, config }: Store): Generator<string, void, unknown> {
   if (mode === 'default' && parsed != null) {
-    let { description } = parsed
+    let { title, description } = parsed
+    title = controlCharToSpace(title)
     if (description != null) {
       description = onlyFirst32(description)
-      description = replaceAll(description, '\n', ' ')
+      description = controlCharToSpace(description)
     }
-    yield `<title>${escapeText(parsed.title)} - ${name}</title>`
+    yield `<title>${escapeText(title)} - ${name}</title>`
     yield `<meta \
-name="title" content="${escapeAttr(parsed.title)}" \
-data-content-escaped="${escapeJson(parsed.title)}">`
+name="title" content="${escapeAttr(title)}" \
+data-content-escaped="${escapeJson(title)}">`
     yield* metaName({
       author: parsed.ownerName,
       description,
       keywords: parsed.keywords,
     })
     yield* metaItemprop({
-      name: parsed.title,
+      name: title,
       image: parsed.thumbnailUrl,
       description,
     })
     yield* metaProperty({
       'og:type': 'website',
       'og:site_name': name,
-      'og:title': parsed.title,
+      'og:title': title,
       'og:url': parsed.url,
       'og:image': parsed.thumbnailUrl,
       'og:description': description,

@@ -7,7 +7,7 @@ import { split } from 'bind:String'
 import type { Session, Tables, Context, Field, Fragment } from 'koishi'
 import { Schema, h } from 'koishi'
 import { LRUCache } from 'lru-cache'
-import { empty, join, onlyFirst32 } from '@/bind'
+import { empty, join, onlyFirst32, controlCharToSpace } from '@/bind'
 import { ready as readyTemporal } from '@/utils/temporal'
 import type { Config as MetaFetchConfig, ResolvedInfo, ParsedInfo } from '@/meta-fetch/mod'
 import { init, config as metaFetchConfig, NoCache, resolve, tryRedirect, parse } from '@/meta-fetch/mod'
@@ -43,10 +43,11 @@ const locale_zh_Hans = {
   commands: {
     meta: {
       description: '获取元数据', messages: {
+        unsupported_platform: '不支持的平台',
         unknown: '未知的输入',
         too_many_redirects: '重定向过多',
         redirect_fail: '重定向失败',
-        fail: '获取失败'
+        fail: '获取失败',
       }
     },
     'meta.card': { description: '生成卡片消息' },
@@ -55,6 +56,7 @@ const locale_zh_Hans = {
     'meta.name': { description: '生成文件名' }
   }
 }
+const UNSUPPORTED_PLATFORM = 'commands.meta.messages.unsupported_platform'
 const UNKNOWN = 'commands.meta.messages.unknown'
 const TOO_MANY_REDIRECTS = 'commands.meta.messages.too_many_redirects'
 const REDIRECT_FAIL = 'commands.meta.messages.redirect_fail'
@@ -99,11 +101,13 @@ const fetchInfo = async (ctx: Context, input: string): Promise<{
   resolved: ResolvedInfo | null
   redirectList: string[]
   redirectStatus: RedirectStatus
+  lastRedirect: string | null
   parsed: ResolvedInfo & ParsedInfo | undefined
 }> => {
   let resolved: ResolvedInfo | null
   const redirectList: string[] = []
   let redirectStatus: RedirectStatus = null
+  let lastRedirect: string | null = null
   let parsed: ResolvedInfo & ParsedInfo | undefined
   redirect: while (true) {
     resolved = resolve(input)
@@ -117,6 +121,7 @@ const fetchInfo = async (ctx: Context, input: string): Promise<{
         break redirect
       }
       input = redirected
+      lastRedirect = redirected
       redirectList[redirectList.length] = redirected
       if (!(redirectList.length <= 5)) {
         redirectStatus = 'too-many'
@@ -127,28 +132,28 @@ const fetchInfo = async (ctx: Context, input: string): Promise<{
     parsed = await cache.fetch(resolved.cacheId, { context: { context: ctx, resolved } })
     break redirect
   }
-  return { resolved, redirectList, redirectStatus, parsed }
+  return { resolved, redirectList, redirectStatus, lastRedirect, parsed }
 }
 async function* renderList(
   ctx: Context, session: Session,
   separator: string, args: string[], key: string
-) {
+): AsyncGenerator<string, void, void> {
   const batch = getOwn(defaultConfig.batch, key)!
   const sep = { separator, _: separator }
   for (const arg of args) {
-    const { resolved, redirectStatus, parsed } = await fetchInfo(ctx, arg)
+    const { resolved, redirectStatus, lastRedirect, parsed } = await fetchInfo(ctx, arg)
     if (resolved == null) {
-      yield `${session.text(UNKNOWN)} : ${arg}`
+      yield `${session.text(UNKNOWN)}: ${lastRedirect ?? arg}`
       continue
     }
     if (parsed == null) {
-      let text: string
+      let msg: string
       switch (redirectStatus) {
-        case 'too-many': text = session!.text(TOO_MANY_REDIRECTS); break
-        case 'fail': text = session!.text(REDIRECT_FAIL); break
+        case 'too-many': msg = session!.text(TOO_MANY_REDIRECTS); break
+        case 'fail': msg = session!.text(REDIRECT_FAIL); break
+        default: msg = session!.text(FAIL); break
       }
-      text ??= session!.text(FAIL)
-      yield `${text} : ${arg}`
+      yield `${msg}: ${lastRedirect ?? arg}`
       continue
     }
     const data = { ...sep, ...resolved, ...parsed }
@@ -184,6 +189,7 @@ export const apply = (ctx: Context, config: Config) => {
   metaFetchConfig.hostOfJmcomic = config.hostOfJmcomic || null
 
   config.qqCard && ctx.middleware(async (session, next) => {
+    if (session.bot.platform !== 'onebot') { return next() }
     try {
       const { elements } = session
       const url = findJsonCard(elements ?? empty)
@@ -200,16 +206,20 @@ export const apply = (ctx: Context, config: Config) => {
   })
 
   ctx.command('meta <input>').action(async ({ session }, input): Result => {
-    const { resolved, redirectStatus, parsed } = await fetchInfo(ctx, input)
-    if (resolved == null) { return [session!.text(UNKNOWN)] }
-    if (parsed == null) {
+    const { resolved, redirectStatus, lastRedirect, parsed } = await fetchInfo(ctx, input)
+    let msg: string | undefined
+    if (resolved == null) {
+      msg = session!.text(UNKNOWN)
+    } else if (parsed == null) {
       switch (redirectStatus) {
-        case 'too-many': return [session!.text(TOO_MANY_REDIRECTS)]
-        case 'fail': return [session!.text(REDIRECT_FAIL)]
+        case 'too-many': msg = session!.text(TOO_MANY_REDIRECTS); break
+        case 'fail': msg = session!.text(REDIRECT_FAIL); break
+        default: msg = session!.text(FAIL); break
       }
-      return [session!.text(FAIL)]
+    } else {
+      return [render(parsed, join(config.template, '\n'))]
     }
-    return [render(parsed, join(config.template, '\n'))]
+    return [`${msg}${lastRedirect != null ? `: ${lastRedirect}` : ''}`]
   })
   ctx.command('meta.img <input>').action(async ({ session }, input): Result => {
     const { parsed } = await fetchInfo(ctx, input)
@@ -224,24 +234,32 @@ export const apply = (ctx: Context, config: Config) => {
     .option('thumb', '-c <thumbnailUrl:string>')
     // .option('music', '-m')
     .action(async ({ session, options }, input): Result => {
+      const { bot } = session!
+      if (bot.platform !== 'onebot') {
+        return [session!.text(UNSUPPORTED_PLATFORM), ' ', bot.platform!]
+      }
       const { parsed } = await fetchInfo(ctx, input)
       if (parsed == null) { return [session!.text(UNKNOWN)] }
+      const { url } = parsed
+      let title: string = options?.title ?? parsed.title
+      title = onlyFirst32(title)
+      title = controlCharToSpace(title)
+      let content: string = options?.desc ?? parsed.description ?? parsed.url
+      content = onlyFirst32(content)
+      content = controlCharToSpace(content)
       return h('onebot:music', {
-        type: 'custom',
-        url: parsed.url,
-        audio: parsed.url,
-        title: onlyFirst32(options?.title ?? parsed.title),
+        type: 'custom', url, audio: url, title, content,
         image: options?.thumb ?? parsed.thumbnailUrl ?? '',
-        content: onlyFirst32(options?.desc ?? parsed.description ?? parsed.url)
       })
     })
   for (const command of ['list', 'name']) {
     ctx.command(`meta.${command} [...args]`).action(async ({ session }, ...args): Result => {
-      const ret = []
-      for await (const arg of renderList(ctx, session!, config.separator, args, command)) {
-        ret[ret.length] = arg
+      let result = ''
+      for await (const line of renderList(ctx, session!, config.separator, args, command)) {
+        result += line
+        result += '\n'
       }
-      return [join(ret, '\n')]
+      return [result]
     })
   }
 

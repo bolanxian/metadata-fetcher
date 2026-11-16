@@ -40,6 +40,7 @@ export const onlyFirst32 = (input: string, ellipsis = '…') => replace(REG_NOT_
 const REG_LAST = /.$/su
 export const removeLast = (input: string) => replace(REG_LAST, input, '')
 
+export const controlCharToSpace = (str: string) => replace(/[\x00-\x1F\x7F]+/g, str, ' ')
 export const controlCharToPicture = (str: string) => replace(/[\x00-\x1F\x7F]/g, str, $0 => {
   return $0 === '\x7F' ? '\u2421' : fromCharCode(charCodeAt($0, 0) + 0x2400)
 })
@@ -87,7 +88,7 @@ export const escapeAttr = createEscaper(/["&<>\xA0]/g, escapeMap)
 export const escapeText = createEscaper(/[&<>\xA0]/g, escapeMap)
 
 export const escapeBatch = (str: string) => {
-  str = replace(/[\x00-\x1F]+/g, str, ' ')
+  str = controlCharToSpace(str)
   str = replace(/[%"]/g, str, '$&$&')
   return str
 }
