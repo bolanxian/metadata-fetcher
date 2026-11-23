@@ -1,10 +1,10 @@
 
 import { LRUCache } from 'lru-cache'
-import { empty } from '@/bind'
+import { noop, empty } from '@/bind'
 import { test } from 'bind:utils'
 import { indexOf, slice } from 'bind:String'
 import { keys } from 'bind:Array'
-type FS = typeof import('node:fs/promises')
+type FS = Pick<typeof import('node:fs/promises'), 'readFile' | 'writeFile'>
 const { parse, stringify } = JSON
 
 export const REG_INVALID = /[\x00-\x1F\x7F\\/:*?"<>|]/
@@ -54,9 +54,13 @@ export class FsCache extends BaseCache {
       //error.name !== 'AlreadyExists'
       if (error.code !== 'EEXIST') { throw error }
     }
-    return new this(fs, prefix)
+    return new this(fs, prefix, 200)
   }
-  constructor(fs: FS, prefix: string) {
+  static memory() {
+    const fs: Record<keyof FS, any> = { readFile: noop, writeFile: noop }
+    return new this(fs, '', 50)
+  }
+  constructor(fs: FS, prefix: string, max: number) {
     super()
     this.#readFile = fs.readFile
     this.#writeFile = fs.writeFile
@@ -81,7 +85,7 @@ export class FsCache extends BaseCache {
         return data
       }
     }
-    this.#lru = new LRUCache({ max: 200, fetchMethod })
+    this.#lru = new LRUCache({ max, fetchMethod })
   }
   async get(name: string) {
     name = resolveName(name)

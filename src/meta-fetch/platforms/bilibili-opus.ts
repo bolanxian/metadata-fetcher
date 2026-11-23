@@ -1,8 +1,7 @@
 
 import * as cheerio from 'cheerio'
 import { test } from 'bind:utils'
-import { find } from 'bind:Array'
-import { toHttps } from '@/bind'
+import { empty, toHttps } from '@/bind'
 import { defineDiscover } from '../discover'
 import { definePlugin, defaultRedirect, redirectPlugin } from '../plugin'
 import { $fetch, htmlInit } from '../fetch'
@@ -79,14 +78,18 @@ definePlugin({
     })
   },
   parse(detail, info) {
+    const { modules } = detail
     let relatedUrl = detail.type === 1
       ? `https://www.bilibili.com/read/cv${detail.basic.rid_str}`
       : `https://t.bilibili.com/${detail.id_str}`
     let content = '', thumb: string | undefined
-    const title = find(detail.modules, m => m.module_type === 'MODULE_TYPE_TITLE')?.module_title.text ?? ''
-    const author = find(detail.modules, m => m.module_type === 'MODULE_TYPE_AUTHOR').module_author
-    const { paragraphs } = find(detail.modules, m => m.module_type === 'MODULE_TYPE_CONTENT').module_content
-    for (const p of paragraphs) {
+    const title = findModule(modules, 'MODULE_TYPE_TITLE')?.module_title.text ?? ''
+    const author = findModule(modules, 'MODULE_TYPE_AUTHOR').module_author
+    const paragraphs = findModule(modules, 'MODULE_TYPE_CONTENT')?.module_content.paragraphs
+    if (paragraphs == null) {
+      content += findModule(modules, 'MODULE_TYPE_BLOCKED').module_blocked.hint_message
+    }
+    for (const p of paragraphs ?? empty) {
       switch (p.para_type) {
         case 1: for (const node of p.text.nodes) {
           switch (node.type) {
@@ -114,3 +117,11 @@ definePlugin({
     }
   }
 })
+
+const findModule = (modules: any, type: string): any => {
+  for (const m of modules) {
+    if (m.module_type === type) {
+      return m
+    }
+  }
+}

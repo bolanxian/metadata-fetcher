@@ -7,47 +7,44 @@ import Schema from '@deepseek-ai/schemastery'
 import { LlmAdapter, type GenerateOptions, type LlmModelInfo, type Message, type StreamChunk } from '@deepseek-ai/dsh-llm'
 
 import { match } from 'bind:utils'
-import { replaceAll } from 'bind:String'
+import { split, replaceAll } from 'bind:String'
 import { ready as readyTemporal } from '@/utils/temporal'
-import { resolve, xparse, init, NoCache, getDiscoverGlobalRegExp, } from '@/meta-fetch/mod'
-import { render as _render } from '@/render'
-init({ cache: new NoCache(), fetch })
+import { resolve, xparse, init, FsCache, getDiscoverGlobalRegExp } from '@/meta-fetch/mod'
+import { render as _render, renderBatch } from '@/render'
+init({ cache: FsCache.memory(), fetch })
 await readyTemporal
 
 const appName = 'MetadataFetcher'
 
-export interface Config {
-  /** 模型选择器中的提供者 */
-  provider: string
-  /** 模型选择器中的模型名 */
-  model: string
-}
+export interface Config { }
 
-export const Config: Schema<Config> = Schema.object({
-  provider: Schema.string().default(appName).description('模型选择器中的提供者'),
-  model: Schema.string().default(appName).description('模型选择器中的模型名'),
-})
+export const Config: Schema<Config> = Schema.object({})
 
 class MetadataFetcher extends LlmAdapter {
   constructor(public config: Config) {
     super()
   }
   override async listModels(provider: string): Promise<readonly LlmModelInfo[]> {
-    const name = this.config.model
-    return [{ provider, id: name, name }]
+    return [
+      { provider, id: 'metadata', name: '元数据' },
+      { provider, id: 'metadata-list', name: '借物表' },
+      { provider, id: 'metadata-name', name: '文件名' },
+    ]
   }
   stream(options: GenerateOptions): AsyncIterable<StreamChunk> {
     let msg = lastUserMsg(options)
-    let streamFn = stream
-    if (msg == null) {
-      msg = lastUserMsg(options, 'dsh-session-title-llm' as any)
-      if (msg == null) {
-        return echo('(空输入)')
+    if (msg != null) {
+      const [, key] = split(options.model, '-')
+      if (key != null) {
+        return streamList(getText(msg), key)
       }
-      streamFn = streamTitle
+      return stream(getText(msg))
     }
-    const text = getText(msg)
-    return streamFn(text)
+    msg = lastUserMsg(options, 'dsh-session-title-llm' as any)
+    if (msg != null) {
+      return streamTitle(getText(msg))
+    }
+    return echo('(空输入)')
   }
 }
 
@@ -103,7 +100,7 @@ async function* render(arg: string) {
 
 async function* echo(text: string): AsyncGenerator<StreamChunk> {
   yield { type: 'block-start', index: 0, blockType: 'text' }
-  yield { type: 'block-end', index: 0, block: { type: 'text', text }, }
+  yield { type: 'block-end', index: 0, block: { type: 'text', text } }
   yield { type: 'usage', usage: { inputTokens: 0, outputTokens: 0 } }
   yield { type: 'finish', reason: { kind: 'stop' } }
 }
@@ -116,7 +113,7 @@ async function* streamTitle(text: string): AsyncGenerator<StreamChunk> {
   const result = firstId != null ? `${firstId} 等 ${count} 项` : '未知'
 
   yield { type: 'block-start', index: 0, blockType: 'text' }
-  yield { type: 'block-end', index: 0, block: { type: 'text', text: result }, }
+  yield { type: 'block-end', index: 0, block: { type: 'text', text: result } }
   yield { type: 'usage', usage: { inputTokens: 0, outputTokens: 0 } }
   yield { type: 'finish', reason: { kind: 'stop' } }
 }
@@ -142,8 +139,28 @@ async function* stream(text: string): AsyncGenerator<StreamChunk> {
   yield { type: 'usage', usage: { inputTokens: 0, outputTokens: 0 } }
   yield { type: 'finish', reason: { kind: 'stop' } }
 }
+async function* streamList(text: string, key: string): AsyncGenerator<StreamChunk> {
+  yield { type: 'block-start', index: 0, blockType: 'text' }
+  let result = ''
+  try {
+    for await (const line of renderBatch(match(getDiscoverGlobalRegExp(), text) ?? [], key)) {
+      const msg = `${line.error ?? line.value}  \n`
+      result += msg
+      yield { type: 'text-delta', index: 0, text: msg }
+    }
+  } catch (error: any) {
+    const msg = `错误：${error?.message}  \n`
+    result += msg
+    yield { type: 'text-delta', index: 0, text: msg }
+    console.error(error)
+  }
+  result ||= '未知的输入'
+  yield { type: 'block-end', index: 0, block: { type: 'text', text: result } }
+  yield { type: 'usage', usage: { inputTokens: 0, outputTokens: 0 } }
+  yield { type: 'finish', reason: { kind: 'stop' } }
+}
 
 export function apply(ctx: Context, config: Config) {
   const adapter = new MetadataFetcher(config)
-  ctx.llm.registerAdapter([config.provider], adapter)
+  ctx.llm.registerAdapter([appName], adapter)
 }
